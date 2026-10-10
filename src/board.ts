@@ -11,7 +11,8 @@ import { DIFFICULTY, LENGTH, type HeroView, type Town } from "./town.ts"
 import { buildSkin } from "./skin.ts"
 import { loadPicks, reconcile, type Check } from "./reconcile.ts"
 
-export const outDir = join(root, ".local", "town")
+// DD_TOWN_OUT lets the tests build elsewhere, so they never touch the live board or its picks
+export const outDir = process.env.DD_TOWN_OUT ?? join(root, ".local", "town")
 const BOARD = process.env.NICEBOARD ?? join(homedir(), ".claude/skills/Niceboard/Tools/Board.ts")
 const y = (s: string) => JSON.stringify(s) // a JSON string is a valid YAML scalar, quotes and colons included
 const RULE_FOOD = [0, 8, 12, 16] // RULE: food and torches by expedition length

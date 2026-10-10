@@ -16,6 +16,9 @@ let profile = ""
 try { profile = profileDir() } catch {}
 const has = !!profile && existsSync(profile)
 const fake = join(root, ".dd-runtime", "test-profile")
+// every board a test builds lands here, never in .local/town where the live board and its picks live
+const townOut = join(root, ".dd-runtime", "test-town")
+process.env.DD_TOWN_OUT = townOut
 
 function copyProfile(): string {
   rmSync(fake, { recursive: true, force: true })
@@ -56,7 +59,7 @@ describe.skipIf(!has)("on the local save", () => {
 
   test("A1: a town build never writes to the profile", async () => {
     const before = readdirSync(profile).map((f) => statSync(join(profile, f)).mtimeMs)
-    const proc = Bun.spawnSync(["bun", "src/cli.ts", "town"], { cwd: root })
+    const proc = Bun.spawnSync(["bun", "src/cli.ts", "town"], { cwd: root, env: { ...process.env } })
     expect(proc.exitCode).toBe(0)
     const after = readdirSync(profile).map((f) => statSync(join(profile, f)).mtimeMs)
     expect(after).toEqual(before)
@@ -66,7 +69,7 @@ describe.skipIf(!has)("on the local save", () => {
     const dir = copyProfile()
     const proc = Bun.spawnSync(["bun", "src/cli.ts", "town"], { cwd: root, env: { ...process.env, DD_PROFILE: dir } })
     expect(proc.exitCode).toBe(0)
-    const md = await Bun.file(join(root, ".local", "town", "town.md")).text()
+    const md = await Bun.file(join(townOut, "town.md")).text()
     // the advisor's own boundary: variants in a walked dungeon level with a witnessed attack
     const t = await town(await readSave(dir))
     const knownNames = new Set<string>(), unknownNames = new Set<string>()
@@ -98,7 +101,7 @@ describe.skipIf(!has)("on the local save", () => {
   test("C8: a save taken mid-expedition is refused in character, and no board is written", async () => {
     const dir = copyProfile()
     await setInRaid(dir, true)
-    const board = join(root, ".local", "town", "town.md")
+    const board = join(townOut, "town.md")
     const before = existsSync(board) ? statSync(board).mtimeMs : 0
     const proc = Bun.spawnSync(["bun", "src/cli.ts", "town"], { cwd: root, env: { ...process.env, DD_PROFILE: dir } })
     expect(proc.stdout.toString()).toContain("You are not back yet")
@@ -172,7 +175,7 @@ describe.skipIf(!has)("on the local save", () => {
   test("C18: answers sent from the page come back as a checked list on the next board", async () => {
     const dir = copyProfile()
     const port = 4392
-    const out = join(root, ".local", "town")
+    const out = join(townOut)
     rmSync(join(out, "picks.json"), { force: true })
     const w = Bun.spawn(["bun", "src/cli.ts", "watch", `--port=${port}`], { cwd: root, env: { ...process.env, DD_PROFILE: dir }, stdout: "pipe" })
     try {
@@ -201,11 +204,11 @@ describe.skipIf(!has)("on the local save", () => {
     const proc = Bun.spawnSync(["bun", "src/cli.ts", "town"], { cwd: root, env: { ...process.env, DD_PROFILE: dir } })
     expect(proc.exitCode).toBe(0)
     // what a reader sees: the board's markdown without its block fences
-    const md = (await Bun.file(join(root, ".local", "town", "town.md")).text()).replace(/^```.*$/gm, "").replace(/^\s*image: .*$/gm, "")
+    const md = (await Bun.file(join(townOut, "town.md")).text()).replace(/^```.*$/gm, "").replace(/^\s*image: .*$/gm, "")
     const meta = [/persist/i, /\.json/, /`/, /\bRULE\b/, /\bfiles?\b/i, /\bsav(e|ed|es)\b(?! them)/i, /\bboard\b/i, /\bgame\b/i, /\bsteam\b/i, /\bcode\b/i, /\b[a-z_]+\.[a-z_]+\b/]
     expect(meta.flatMap((re) => md.match(new RegExp(`.{0,30}${re.source}.{0,10}`, re.flags)) ?? [])).toEqual([])
     // the sources still exist, off the board (C14)
-    expect(await Bun.file(join(root, ".local", "town", "sources.md")).text()).toContain("`persist.estate.json` wallet")
+    expect(await Bun.file(join(townOut, "sources.md")).text()).toContain("`persist.estate.json` wallet")
   })
 
   test("C20: this week's town event is read, its bonus recruits offered, and its prices and closed doors applied", async () => {
