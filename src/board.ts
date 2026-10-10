@@ -281,19 +281,16 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     const len = Math.max(1, Math.min(3, q.length))
     L.push("## Provisions for the road {wide}", "")
     L.push(`What to buy at the Provisioner for the ${q.dungeonName}. The counts are my habit for a ${LENGTH[len]?.toLowerCase()} expedition, nothing more; I ask for bandages and antivenom only where foes you know there have already bled or poisoned you.`, "")
-    L.push("```board-stickies")
-    for (const pv of t.event?.provisions ?? []) {
-      const what = pv.item === "provision" ? "Food" : "Torches, shovels and the rest"
-      const change = pv.cost ? `cost ${pv.cost <= -1 ? "nothing" : `${Math.round(-pv.cost * 100)}% less`}` : `come in ${Math.round(-pv.amount * 100)}% smaller lots`
-      L.push(`- title: ${y(`${what} ${change} this week`)}`, "  kind: idea", `  body: ${y(`The ${t.event!.title}. Buy accordingly.`)}`)
-    }
+    // one table, not a sticky per item (Soushi, 2026-10-10): what to buy, how many, at what price
+    L.push("| Buy | How many (my habit) | Each | Cost | Why |", "|---|---|---|---|---|")
     for (const i of roadItems) {
-      const why = i.id === "bandage" ? ` Foes you know there whose attacks have bled you: ${q.bleeders.join(", ")}.` : i.id === "antivenom" ? ` Foes you know there whose attacks have blighted you: ${q.blighters.join(", ")}.` : ""
-      L.push(`- title: ${y(`${i.label}: ${i.count} ${HABIT}, ${coin(i.count * i.price)}`)}`, `  kind: ${why ? "model" : "works"}`, `  body: ${y(`${t.supply[i.id] ?? ""} ${coin(i.price)} each.${why}`)}`)
+      const why = i.id === "bandage" ? `known there to bleed you: ${q.bleeders.join(", ")}` : i.id === "antivenom" ? `known there to poison you: ${q.blighters.join(", ")}` : (t.supply[i.id] ?? "").replace(/\|/g, "/")
+      L.push(`| ${i.label} | ${i.count} | ${coin(i.price)} | ${coin(i.count * i.price)} | ${why} |`)
     }
-    L.push(`- title: ${y(`The road costs ${coin(reserve)} in all`)}`, `  kind: ${gold >= reserve ? "works" : "risk"}`, `  body: ${y(gold >= reserve ? "Already set aside in the coffers above." : `You have ${coin(gold)}. Buy food and torches first; they keep the party alive and the light up.`)}`)
-    if (q.length >= 2) L.push(`- title: ${y("Firewood comes with a medium or long expedition")}`, "  kind: idea", `  body: ${y(t.supply.firewood ?? "")}`)
-    L.push("```", "")
+    L.push(`| **In all** | | | **${coin(reserve)}** | ${gold >= reserve ? `set aside in the coffers; ${coin(gold - reserve)} left over` : `you have ${coin(gold)}: buy food and torches first`} |`, "")
+    const notes = (t.event?.provisions ?? []).map((pv) => `${pv.item === "provision" ? "Food" : "Torches, shovels and the rest"} ${pv.cost ? `cost ${pv.cost <= -1 ? "nothing" : `${Math.round(-pv.cost * 100)}% less`}` : `come in ${Math.round(-pv.amount * 100)}% smaller lots`} this week, for the ${t.event!.title}.`)
+    if (q.length >= 2) notes.push("Firewood comes with a medium or long road; no need to buy it.")
+    if (notes.length) L.push(notes.join(" "), "")
   }
 
   // guild and blacksmith
