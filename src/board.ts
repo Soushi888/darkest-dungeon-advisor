@@ -291,7 +291,8 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     }
     L.push(`| **In all** | | | **${coin(reserve)}** | ${gold >= reserve ? `set aside in the coffers; ${coin(gold - reserve)} left over` : `you have ${coin(gold)}: buy food and torches first`} |`, "")
     const notes = (t.event?.provisions ?? []).map((pv) => `${pv.item === "provision" ? "Food" : "Torches, shovels and the rest"} ${pv.cost ? `cost ${pv.cost <= -1 ? "nothing" : `${Math.round(-pv.cost * 100)}% less`}` : `come in ${Math.round(-pv.amount * 100)}% smaller lots`} this week, for the ${t.event!.title}.`)
-    if (q.length >= 2) notes.push("Firewood comes with a medium or long road; no need to buy it.")
+    // firewood's price in the item list is 0: it is taken, not bought. The count the camp needs is the game's to show
+    if (q.length >= 2) notes.push(`This road has a camp: take firewood from the Provisioner before you leave; it costs ${coin(opts.prices?.get("firewood") ?? 0)}.`)
     if (notes.length) L.push(notes.join(" "), "")
   }
 
