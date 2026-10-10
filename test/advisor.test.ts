@@ -10,7 +10,7 @@ import { readSave } from "../src/read.ts"
 import { town } from "../src/town.ts"
 import { profileDir, root } from "../src/paths.ts"
 import { boardOptions, mergePicks, parseAnswers, reconcile } from "../src/reconcile.ts"
-import { road, source } from "../src/board.ts"
+import { road, source, weekSoFar } from "../src/board.ts"
 import { supplyPrices } from "../src/game.ts"
 import { advise } from "../src/advise.ts"
 
@@ -314,5 +314,35 @@ describe.skipIf(!has)("on the local save", () => {
     // and the voice test holds on the farewell too
     const seen = md.replace(/^```.*$/gm, "")
     expect([/persist/i, /\.json/, /`/, /\bRULE\b/, /\bsav(e|ed|es)\b/i, /\bgame\b/i].filter((re) => re.test(seen)).map(String)).toEqual([])
+  })
+
+  test("C25: the Treatment Ward is offered only by my habit, priced by whether the quirk has set in, one card per free seat", async () => {
+    const t = await town(await readSave(copyProfile()))
+    const a = await advise(t)
+    const ward = t.activities.find((x) => x.activity === "treatment")!
+    const inParty = new Set(a.best?.seats.map((x) => x.hero.guid))
+    for (const tr of a.treat) {
+      expect(tr.hero.busy).toBe("")
+      expect(tr.quirk.positive || tr.quirk.disease).toBe(false)
+      expect(tr.hero.level > 0 || inParty.has(tr.hero.guid)).toBe(true)
+      expect(tr.cost).toBe(tr.quirk.locked ? ward.lockedQuirkCost ?? ward.cost : ward.cost)
+    }
+    const md = source(t, a, { foresight: false, answers: {}, prices: await supplyPrices() }).board
+    const cards = a.treat.filter((tr) => md.includes(`Treat ${tr.hero.name}'s ${tr.quirk.name}?`)).length
+    expect(cards).toBeLessThanOrEqual(Math.max(0, ward.slots - ward.used))
+    if (a.treat.length > cards) expect(md).toContain(`The ${ward.name} is full this week`)
+  })
+
+  test("C26: what was done this week comes from the saves, against the Hamlet as the week found it", async () => {
+    const t = await town(await readSave(copyProfile()))
+    const [first, ...rest] = t.heroes
+    const start = { week: t.week, heroes: [...rest.map((h) => ({ guid: h.guid, name: h.name })), { guid: -7, name: "Ghost" }], bought: [...t.bought].filter((b) => b.endsWith(":0")), gold: (t.wallet.gold ?? 0) + 500 }
+    const lines = weekSoFar(t, start).join("\n")
+    expect(lines).toContain(`Joined the roster: ${first!.name}`)
+    expect(lines).toContain("Gone from the roster: Ghost")
+    expect(lines).toContain("500 gold spent")
+    expect(lines).not.toMatch(/:0\b|\b0 step/)
+    // another week's baseline says nothing but who is in the buildings
+    expect(weekSoFar(t, { ...start, week: t.week - 1 }).every((l) => l.startsWith("In the buildings"))).toBe(true)
   })
 })

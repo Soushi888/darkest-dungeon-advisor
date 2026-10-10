@@ -2,7 +2,7 @@
 name: darkest-dungeon-advisor
 principal_stated_goal: "J'aimerais qu'on étudie l'idée de faire un projet darkest-dungeon-advisor, comme on a fait pour factorio. C'est un jeu asser complexe et de l'aide stratégique entre deux quêtes serait utile!"
 phase: climbing
-progress: 21/24 claims, 4/4 anti-claims (counted by checkbox grep, never typed)
+progress: 23/26 claims, 4/4 anti-claims (counted by checkbox grep, never typed)
 frozen: false
 ---
 
@@ -52,6 +52,8 @@ Soushi comes back from an expedition, saves, and opens the town board. A village
 - [x] **C22: The road is paid for first.** The chosen expedition's provisions (food, torches, shovels by length, bandages and antivenom where known foes bleed or blight; counts are RULE) are priced from `inventory/base.supply.inventory.items.darkest` with the week's event applied, shown as a reserve in the coffers, and every spending lean on the board (relief, ward, training) draws only on the gold left after it; when the coffers cannot pay for the road the board says by how much and leans on spending nothing. Asked by Soushi on 2026-10-10 after a week that left 418 gold for provisions. *Evidence: test "C22" (prices match the file; at four gold levels the leans never spend into the reserve).*
 - [x] **C23: A live session is watched by the agent, not reported by Soushi.** `bun run live` prints one line per board send and per game save (town or dungeon); CLAUDE.md "Live session" says what the agent does on each, and that the live board is restarted on current `main` after every change. *Evidence: `bun run live` printed its LIVE line on the real profile; the Monitor tool armed on it during the 2026-10-10 session.*
 - [x] **C24: The farewell.** On the first save after the party leaves (`persist.raid.json` present, keyed by its raid id and start time in `.local/town/farewell.key`), the board becomes the Caretaker's last word: the party front to back against what he proposed (`.local/town/proposal.json`, written with each town board) and against the week's other picks, what the packs hold against his habit, the foes known there and whether the packs answer their bleeding or poison, when he would turn back (RULE), and a send-off. Asked by Soushi on 2026-10-10. *Evidence: test "C24" on the dungeon save captured on 2026-10-10 (party order, once per expedition, voice).*
+- [x] **C25: The Treatment Ward is advised, by habit.** One quirk per hero, in RULE order: a quirk that keeps the party's loot (`keep_loot` in the quirk library), then one that bars a place of relief (an activity's `not_have_quirks`), then one that turns against the next road (its dungeon in the quirk's id); quirks the ward cannot touch (`can_modify_in_activity` false) are skipped and nothing else is ranked. A locked quirk is priced from `permanent_negative_quirk_cost_upgrades`, the week's event applied. Cards only for free seats, the party first; the rest wait on one note. A level 0 thief outside the party is offered for dismissal instead. Asked by Soushi on 2026-10-10 after Fecamp stole the Cove's loot. *Evidence: test "C25".*
+- [x] **C26: The board follows what was actually done this week.** The week's first board keeps the Hamlet as it found it (`.local/town/week-start.json`); every later board opens with "This week so far": heroes in buildings, who joined or left the roster, what was bought, gold spent, read from the saves whether or not anything was sent from the page. Asked by Soushi on 2026-10-10. *Evidence: test "C26"; week 10 showed four heroes placed and two recruits who were never on a card.*
 
 ## Anti-claims
 
@@ -71,6 +73,7 @@ Soushi comes back from an expedition, saves, and opens the town board. A village
 - 2026-10-10, Soushi: the save is decoded by **our own TypeScript reader** (card 5).
 - 2026-10-10, Soushi: the save folder is **watched** (card 6). His note, clarified: the board stays live through every town save and does not reload during an expedition (C16).
 - 2026-10-10, Soushi: the repository is **public** on GitHub (card 7).
+- 2026-10-10, Soushi: the Treatment Ward joins the advice, cure first and dismiss second (C25); the board reflects what was actually done in game, sent or not (C26).
 - 2026-10-10, Soushi: once the expedition starts, the board shows a final state: the verdict on the choices, a last recommendation and good luck (C24).
 - 2026-10-10, Soushi: gold strategy: the road's provisions are reserved before any other spending (C22).
 - 2026-10-10, Soushi: in a live session the agent watches board sends and game saves itself, as a standing workflow of this project (C23); the same is to be offered for factorio-advisor, optional there first.
@@ -88,7 +91,7 @@ Soushi comes back from an expedition, saves, and opens the town board. A village
 - C15's calls are on a board waiting for Soushi: `.local/brainstorms/town-board-layout-brainstorm-2026-10-10.html` (which in-game screen to echo, a roster column, compiler extension or project template), to answer after a few returns with the current board.
 - The town board's own layout, beyond the skin: which in-game screens it echoes (the roster column, the building panels, the estate map) and whether that needs a Niceboard compiler extension or a template of its own.
 - The in-dungeon call (Soushi's note on card 4): a later, opt-in way to ask the Caretaker mid-expedition. It reverses the current Out of Scope line, so it needs its own design pass, including how it treats the knowledge boundary.
-- Which negative quirks are worth the Sanitarium's gold: the board offers rest and disease treatment, not quirk treatment, until there is a grounded way to rank quirks.
+- Quirks beyond C25's three habits (thief, barred from relief, against the next road) are not ranked: the quirk library's buffs would ground a fuller ranking.
 
 ## Test Strategy
 

@@ -2,7 +2,7 @@
 // Figures come from the Town (save + game files). Thresholds marked RULE are the Caretaker's own judgement,
 // stated as such on the board, never presented as the game's numbers (ISA A2).
 import { heroClass, quirks } from "./game.ts"
-import type { Activity, HeroView, Quest, Town, Upgrade } from "./town.ts"
+import type { Activity, HeroView, Quest, QuirkView, Town, Upgrade } from "./town.ts"
 
 export const RULE = {
   restAbove: 45, // RULE: stress at which I want a hero relieved before going out again
@@ -23,8 +23,11 @@ export interface Advice {
   dismiss: { hero: HeroView; why: string }[]; recruits: { hero: HeroView; why: string }[]
   buys: Upgrade[]; blocked: Upgrade[]; heirlooms: Upgrade[]
   trinkets: { trinket: string; to: string; why: string }[]
+  treat: Treat[]
   spend: number
 }
+/** A quirk worth the Treatment Ward by my habit (C25): one per hero, the worst by the order in RULE_TREAT. */
+export interface Treat { hero: HeroView; quirk: QuirkView; why: string; cost: number; inParty: boolean }
 
 const negatives = (h: HeroView) => h.quirks.filter((q) => !q.positive && !q.disease)
 const diseases = (h: HeroView) => h.quirks.filter((q) => q.disease)
@@ -158,7 +161,34 @@ export async function advise(t: Town): Promise<Advice> {
     return who ? [{ trinket: tr.name, to: who.hero.name, why: tr.classes.length ? `only a ${who.hero.clsName} may wear it` : "anyone may wear it" }] : []
   })
 
-  return { relief, disease, afflicted, ready, parties, best, dismiss, recruits, buys, blocked, heirlooms, trinkets, spend: t.wallet.gold ?? 0 }
+  // the Treatment Ward (C25), by my habit (RULE): a quirk that steals the party's loot first, then one that shuts a hero out of
+  // a place of relief, then one that turns against the road the party takes next. Others I do not rank, so I do not name them.
+  // Heroes I would rather let go (level 0, outside the party) are left to Who stays, who goes.
+  const ward = t.activities.find((x) => x.activity === "treatment")
+  const barring = new Set(t.activities.filter((x) => x.heal > 0).flatMap((x) => x.barred))
+  const treat: Treat[] = []
+  for (const h of free) {
+    const inPartyNow = inParty.has(h.guid)
+    if (!ward || (h.level === 0 && !inPartyNow)) continue
+    const bad = h.quirks.filter((q) => !q.positive && !q.disease && q.treatable)
+    const road = best ? (await quirkFit(h, best.quest)).notes.filter((n) => n.startsWith("−")).map((n) => n.slice(2)) : []
+    const pick: [QuirkView | undefined, string][] = [
+      [bad.find((q) => q.thief), "they keep for themselves what the party finds"],
+      [bad.find((q) => barring.has(q.id)), "it shuts them out of a place of relief"],
+      [bad.find((q) => road.includes(q.name)), `it turns against them on the road to the ${best?.quest.dungeonName}`],
+    ]
+    const hit = pick.find(([q]) => q)
+    if (!hit) continue
+    const q = hit[0]!
+    treat.push({ hero: h, quirk: q, why: hit[1], cost: q.locked ? ward.lockedQuirkCost ?? ward.cost : ward.cost, inParty: inPartyNow })
+  }
+  treat.sort((x, y) => Number(y.inParty) - Number(x.inParty) || y.hero.level - x.hero.level)
+  // a thief I would not pay to cure is a thief I would let go, if they are not needed on the road
+  for (const h of free.filter((h) => h.level === 0 && !inParty.has(h.guid) && h.quirks.some((q) => q.thief && !q.positive))) {
+    if (!dismiss.some((d) => d.hero.guid === h.guid)) dismiss.push({ hero: h, why: `level 0, and ${h.quirks.find((q) => q.thief)!.name}: they keep for themselves what the party finds` })
+  }
+
+  return { relief, disease, afflicted, ready, parties, best, dismiss, recruits, buys, blocked, heirlooms, trinkets, treat, spend: t.wallet.gold ?? 0 }
 }
 
 /** Seats a party Soushi named, front to back, and says what is wrong with it rather than refusing it. */

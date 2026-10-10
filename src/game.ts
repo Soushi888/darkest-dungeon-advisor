@@ -53,12 +53,12 @@ export async function describeQuirk(id: string): Promise<string> {
 }
 
 // ---------- quirks ----------
-export interface Quirk { id: string; positive: boolean; disease: boolean; classification: string; curioTag: string; keepLoot: boolean }
+export interface Quirk { id: string; positive: boolean; disease: boolean; classification: string; curioTag: string; keepLoot: boolean; treatable: boolean }
 let quirkLib: Map<string, Quirk> | undefined
 export async function quirks(): Promise<Map<string, Quirk>> {
   if (quirkLib) return quirkLib
   const lib = await json(P.quirks)
-  quirkLib = new Map(lib.quirks.map((q: any) => [q.id, { id: q.id, positive: q.is_positive, disease: q.is_disease, classification: q.classification, curioTag: q.curio_tag, keepLoot: q.keep_loot }]))
+  quirkLib = new Map(lib.quirks.map((q: any) => [q.id, { id: q.id, positive: q.is_positive, disease: q.is_disease, classification: q.classification, curioTag: q.curio_tag, keepLoot: q.keep_loot, treatable: q.can_modify_in_activity !== false }]))
   return quirkLib
 }
 

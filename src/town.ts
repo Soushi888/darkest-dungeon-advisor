@@ -9,14 +9,14 @@ import {
 
 const raw = (h: any) => h.hero_file_data?.raw_data ?? h
 
-export interface QuirkView { id: string; name: string; positive: boolean; disease: boolean; locked: boolean; description: string }
+export interface QuirkView { id: string; name: string; positive: boolean; disease: boolean; locked: boolean; description: string; thief: boolean; treatable: boolean }
 export interface HeroView {
   guid: number; name: string; cls: string; clsName: string; level: number; xp: number; stress: number
   affliction: string; busy: string; quirks: QuirkView[]; skills: { id: string; name: string; level: number }[]
   weapon: number; armour: number; trinkets: string[]; dungeons: string[]; portrait: string
   from?: string // the town event that brought a recruit
 }
-export interface Activity { building: string; activity: string; name: string; locked: boolean; baseCost: number; cost: number; heal: number; cure: number; slots: number; used: number; barred: string[] }
+export interface Activity { building: string; activity: string; name: string; locked: boolean; baseCost: number; cost: number; lockedQuirkCost?: number; heal: number; cure: number; slots: number; used: number; barred: string[] }
 export interface Quest { unknownTypes: string[]; bleeders: string[]; blighters: string[]; walked: boolean; idx: number; dungeon: string; dungeonName: string; type: string; difficulty: number; length: number; plot: boolean; rewards: string[]; known: string[]; unknownCount: number; types: string[] }
 export interface Upgrade { hero?: string; toLevel?: number; where?: string; tree: string; label: string; code: string; cost: Cost[]; affordable: boolean; blockedBy: string }
 export interface Town {
@@ -58,7 +58,7 @@ async function heroView(guid: number, h: any, thr: number[], busy: Map<number, s
   const qs: QuirkView[] = []
   for (const [id, q] of Object.entries<any>(r.quirks ?? {})) {
     const d = lib.get(id)
-    qs.push({ id, name: await nameOf("quirk", id), positive: !!d?.positive, disease: !!d?.disease, locked: !!q.is_locked, description: await describeQuirk(id) })
+    qs.push({ id, name: await nameOf("quirk", id), positive: !!d?.positive, disease: !!d?.disease, locked: !!q.is_locked, description: await describeQuirk(id), thief: !!d?.keepLoot, treatable: d?.treatable !== false })
   }
   const skills = []
   for (const [id, lvl] of Object.entries<any>(r.skills?.selected_combat_skills ?? {})) skills.push({ id, name: await nameOf("skill", id, r.heroClass), level: Number(lvl) })
@@ -97,13 +97,15 @@ export async function town(save: Save): Promise<Town> {
       const slotTree = b === "sanitarium" ? "sanitarium.slots" : `${b}.${a.id}`
       const costList = d.cost_upgrades ?? d.negative_quirk_cost_upgrades ?? d.disease_quirk_cost_upgrades
       const cost = costList ? applied(costList, tree, bought) as any : undefined
+      // a locked quirk costs the Treatment Ward more: its own list, permanent_negative_quirk_cost_upgrades (C25)
+      const lockedCost = d.permanent_negative_quirk_cost_upgrades ? (applied(d.permanent_negative_quirk_cost_upgrades, tree, bought) as any)?.cost_currency?.amount : undefined
       const heal = d.stress_upgrades ? applied(d.stress_upgrades, tree, bought) as any : undefined
       const slot = d.slot_upgrades ? applied(d.slot_upgrades, slotTree, bought) as any : { number_of_slots: 0 }
       const cure = d.affliction_cure_upgrades ? (applied(d.affliction_cure_upgrades, tree, bought) as any).chance ?? 0 : 0
       const barred = (d.requirements ?? []).filter((r: any) => r.type === "not_have_quirks").flatMap((r: any) => r.data.quirk_library_names)
       activities.push({
         building: b, activity: a.id, name: await nameOf("activity", a.id), locked: false,
-        baseCost: cost?.cost_currency?.amount ?? 0, cost: cost?.cost_currency?.amount ?? 0,
+        baseCost: cost?.cost_currency?.amount ?? 0, cost: cost?.cost_currency?.amount ?? 0, lockedQuirkCost: lockedCost,
         heal: heal?.heal_high ?? 0, cure, slots: slot.number_of_slots ?? 0, used, barred,
       })
     }
@@ -129,8 +131,8 @@ export async function town(save: Save): Promise<Town> {
     for (const d of def?.data ?? []) {
       const act = activities.find((a) => a.activity === d.string_data)
       if (d.type === "activity_lock" && act) { act.locked = true; lines.push(fmt(d.type, act.name)) }
-      else if (d.type === "activity_cost_change" && act) { act.cost = Math.round(act.baseCost * (1 + d.number_data)); lines.push(fmt(d.type, act.name, pct(d.number_data))) }
-      else if (d.type === "free_activity" && act) { act.cost = 0; if (!s.get(`town_event_info_${id}`)) lines.push(fmt(d.type, act.name)) }
+      else if (d.type === "activity_cost_change" && act) { act.cost = Math.round(act.baseCost * (1 + d.number_data)); if (act.lockedQuirkCost) act.lockedQuirkCost = Math.round(act.lockedQuirkCost * (1 + d.number_data)); lines.push(fmt(d.type, act.name, pct(d.number_data))) }
+      else if (d.type === "free_activity" && act) { act.cost = 0; if (act.lockedQuirkCost !== undefined) act.lockedQuirkCost = 0; if (!s.get(`town_event_info_${id}`)) lines.push(fmt(d.type, act.name)) }
       else if (d.type === "provision_item_type_cost_change") { provisions.push({ item: d.string_data, cost: d.number_data, amount: 0 }); lines.push(fmt(d.type, ITEM[d.string_data] ?? d.string_data, pct(d.number_data))) }
       else if (d.type === "provision_item_type_amount_change") { provisions.push({ item: d.string_data, cost: 0, amount: d.number_data }); lines.push(fmt(d.type, ITEM[d.string_data] ?? d.string_data, pct(d.number_data))) }
       else if (d.type === "idle_resolve_level") lines.push(fmt(d.type, await nameOf("class", d.string_data), d.number_data))

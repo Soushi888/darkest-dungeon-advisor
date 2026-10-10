@@ -74,12 +74,12 @@ export function reconcile(p: Picks | undefined, t: Town): Check[] {
       if (pick === "Leave them be") add(q, pick, h.busy ? "contrary" : "done", h.busy ? `${h.name} is at the ${h.busy}` : `${h.name} is in no building`)
       else add(q, pick, h.busy === pick ? "done" : h.busy ? "contrary" : "pending", h.busy ? `${h.name} is at the ${h.busy}` : `${h.name} is in no building yet`)
     } else if ((m = q.match(/^Treat (.+?)'s .+\?$/))) {
+      // the Medical Ward for a disease, the Treatment Ward for a quirk (C25): the pick names the place
       const h = hero(m[1]!)
-      const ward = t.activities.find((a) => a.activity === "disease_treatment")?.name ?? ""
+      const wards = t.activities.filter((a) => a.activity === "disease_treatment" || a.activity === "treatment").map((a) => a.name)
       if (!h) { add(q, pick, "contrary", `${m[1]} is no longer on the roster`); continue }
-      const there = !!ward && h.busy === ward
-      if (pick === "Medical Ward") add(q, pick, there ? "done" : h.busy ? "contrary" : "pending", h.busy ? `${h.name} is at the ${h.busy}` : `${h.name} is in no building yet`)
-      else add(q, pick, there ? "contrary" : "done", there ? `${h.name} is in the ${ward}` : `${h.name} is not in the ward`)
+      if (wards.includes(pick)) add(q, pick, h.busy === pick ? "done" : h.busy ? "contrary" : "pending", h.busy ? `${h.name} is at the ${h.busy}` : `${h.name} is in no building yet`)
+      else { const there = wards.includes(h.busy); add(q, pick, there ? "contrary" : "done", there ? `${h.name} is in the ${h.busy}` : `${h.name} is not in a ward`) }
     } else if ((m = q.match(/^Dismiss (.+)\?$/))) {
       const gone = !hero(m[1]!)
       if (pick === "Dismiss") add(q, pick, gone ? "done" : "pending", gone ? `${m[1]} has left the roster` : `${m[1]} is still on the roster`)
