@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test"
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { decode } from "../src/dson.ts"
-import { monster, dungeonMonsters, nameOf } from "../src/game.ts"
+import { monster, dungeonMonsters, nameOf, heroClass } from "../src/game.ts"
 import { names } from "../src/names.ts"
 import { readSave } from "../src/read.ts"
 import { town } from "../src/town.ts"
@@ -12,7 +12,7 @@ import { profileDir, root } from "../src/paths.ts"
 import { boardOptions, mergePicks, parseAnswers, reconcile } from "../src/reconcile.ts"
 import { road, source, weekSoFar } from "../src/board.ts"
 import { supplyPrices } from "../src/game.ts"
-import { advise, readiness } from "../src/advise.ts"
+import { advise, readiness, seatParty, RULE } from "../src/advise.ts"
 
 let profile = ""
 try { profile = profileDir() } catch {}
@@ -425,4 +425,25 @@ describe.skipIf(!has)("on the local save", () => {
       expect(JSON.parse(store.get("ddCards")!)).toEqual(cards.map((c) => c.q))
     } finally { w.kill() }
   }, 30_000)
+
+  test("C30: a healer is judged by how much the heal restores, cast from where they stand", async () => {
+    const t = await town(await readSave(copyProfile()))
+    // the class files: a Vestal's Divine Grace makes a healer, a Crusader's Battle Heal does not
+    expect((await heroClass("vestal")).skills.get("divine_grace")!.healAvg).toBeGreaterThanOrEqual(RULE.realHeal)
+    expect((await heroClass("crusader")).skills.get("battle_heal")!.healAvg).toBeLessThan(RULE.realHeal)
+    const a = await advise(t)
+    for (const p of a.parties) {
+      expect(p.healer).toBe(!!p.heal && p.heal.avg >= RULE.realHeal)
+      if (p.heal) { const seat = p.seats.find((s) => s.hero.name === p.heal!.by)!; expect(seat.skills).toContain(p.heal.skill) }
+    }
+    // the four that left for the Weald on 2026-10-10 had only Battle Heal, and now read so
+    const crusader = t.heroes.find((h) => h.cls === "crusader" && h.skills.some((s) => s.id === "battle_heal"))
+    if (crusader && a.parties[0]) {
+      const p = await seatParty([crusader, ...t.heroes.filter((h) => !["vestal", "occultist", "crusader"].includes(h.cls)).slice(0, 3)], a.parties[0].quest)
+      if (p.heal?.skill === "Battle Heal") {
+        expect(p.healer).toBe(false)
+        expect(readiness(t, p, 0).checks.find((c) => c.label === "A healer goes with them")!.met).toBe(false)
+      }
+    }
+  })
 })

@@ -23,6 +23,7 @@ export const RULE = {
   restAbove: 45, // RULE: stress at which I want a hero relieved before going out again
   sendBelow: 45, // RULE: I only send heroes below this stress
   dismissNegatives: 3, // RULE: a level 0 hero with this many negative quirks is a candidate to let go
+  realHeal: 4, // RULE: a heal restoring this many hit points on average, at its first level, makes a healer; less is a light heal (Soushi, 2026-10-10)
   greenParty: 3, // RULE: when this many of the four are level 0, a longer road counts against itself
   greenPerStep: 6, // RULE: how much, per step beyond a short road
   goldPerPoint: 500, // RULE: every 500 gold the road leaves in the coffers counts for one point, up to goldCap
@@ -36,7 +37,9 @@ const DUNGEON_TOKEN: Record<string, string[]> = { weald: ["weald"], cove: ["cove
 
 export interface Relief { hero: HeroView; why: string[]; options: { activity: Activity; note: string }[] }
 export interface Seat { hero: HeroView; rank: number; skills: string[]; notes: string[] }
-export interface Party { quest: Quest; seats: Seat[]; score: number; healer: boolean; stunner: boolean; notes: string[]; left?: number; green?: boolean }
+/** The strongest heal on another hero the four can cast from where they stand (C30). */
+export interface Heal { by: string; skill: string; avg: number }
+export interface Party { quest: Quest; seats: Seat[]; score: number; healer: boolean; heal?: Heal; stunner: boolean; notes: string[]; left?: number; green?: boolean }
 export interface Advice {
   relief: Relief[]; disease: HeroView[]; afflicted: HeroView[]
   ready: HeroView[]; parties: Party[]; best?: Party
@@ -82,7 +85,8 @@ async function bestParty(pool: HeroView[], q: Quest): Promise<Party | undefined>
   // which ranks each hero can fight from: at least two of their equipped skills launch there
   const ranksFor = (h: HeroView) => [1, 2, 3, 4].filter((r) => h.skills.filter((s) => info.get(h.guid)!.skills.get(s.id)?.launch.includes(r)).length >= 2)
   const usable = (h: HeroView, r: number) => h.skills.filter((s) => info.get(h.guid)!.skills.get(s.id)?.launch.includes(r)).map((s) => s.name)
-  const heals = (h: HeroView) => h.skills.some((s) => { const k = info.get(h.guid)!.skills.get(s.id); return k?.heal && k.targetsAllies })
+  // the best heal on an ally each hero can cast from rank r, by the hit points it restores
+  const healAt = (h: HeroView, r: number): Heal | undefined => h.skills.map((s) => ({ s, k: info.get(h.guid)!.skills.get(s.id) })).filter(({ k }) => k?.heal && k.targetsAllies && k.launch.includes(r)).map(({ s, k }) => ({ by: h.name, skill: s.name, avg: k!.healAvg })).sort((x, y) => y.avg - x.avg)[0]
   const stuns = (h: HeroView) => h.skills.some((s) => info.get(h.guid)!.skills.get(s.id)?.stun)
 
   let best: Party | undefined
@@ -92,7 +96,8 @@ async function bestParty(pool: HeroView[], q: Quest): Promise<Party | undefined>
     // try every order; rank 1 is the front
     for (const order of permutations(four)) {
       if (!order.every((h, i) => ranksFor(h).includes(i + 1))) continue
-      const healer = order.some(heals), stunner = order.some(stuns)
+      const heal = order.map((h, i) => healAt(h, i + 1)).filter((x): x is Heal => !!x).sort((x, y) => y.avg - x.avg)[0]
+      const healer = !!heal && heal.avg >= RULE.realHeal, stunner = order.some(stuns)
       let score = 0
       order.forEach((h, i) => {
         const r = i + 1, cls = info.get(h.guid)!
@@ -104,19 +109,21 @@ async function bestParty(pool: HeroView[], q: Quest): Promise<Party | undefined>
         score += (r <= 2 ? 1 : -1) * (cls.hp - 25) / 3
         score += h.level * 3 - h.stress / 10 + fit.get(h.guid)!.score
       })
-      if (healer) score += 6
+      // a true healer is what brings a party home; a light heal helps, but does not stand in for one
+      if (healer) score += 8
+      else if (heal) score += 2
       if (stunner) score += 3
       if (new Set(order.map((h) => h.cls)).size < 4) score -= 2
       if (!best || score > best.score) {
         best = {
-          quest: q, score, healer, stunner, notes: [],
+          quest: q, score, healer, heal, stunner, notes: [],
           seats: order.map((h, i) => ({ hero: h, rank: i + 1, skills: usable(h, i + 1), notes: fit.get(h.guid)!.notes })),
         }
       }
     }
   }
   if (best) {
-    if (!best.healer) best.notes.push("no healer in this four")
+    if (!best.healer) best.notes.push(best.heal ? `only a light heal in this four: ${best.heal.by}'s ${best.heal.skill}` : "no healer in this four")
     if (!best.stunner) best.notes.push("no stun in this four")
   }
   return best
@@ -224,12 +231,12 @@ export async function advise(t: Town): Promise<Advice> {
 export async function seatParty(order: HeroView[], q: Quest): Promise<Party> {
   const seats: Seat[] = []
   const notes: string[] = []
-  let healer = false, stunner = false
+  let stunner = false, heal: Heal | undefined
   for (const [i, h] of order.entries()) {
     const cls = await heroClass(h.cls)
     const r = i + 1
     const usable = h.skills.filter((s) => cls.skills.get(s.id)?.launch.includes(r))
-    if (h.skills.some((s) => { const k = cls.skills.get(s.id); return k?.heal && k.targetsAllies })) healer = true
+    for (const s of h.skills) { const k = cls.skills.get(s.id); if (k?.heal && k.targetsAllies && k.launch.includes(r) && (!heal || k.healAvg > heal.avg)) heal = { by: h.name, skill: s.name, avg: k.healAvg } }
     if (h.skills.some((s) => cls.skills.get(s.id)?.stun)) stunner = true
     const fit = await quirkFit(h, q)
     const warn = [
@@ -240,9 +247,10 @@ export async function seatParty(order: HeroView[], q: Quest): Promise<Party> {
     if (warn.length) notes.push(`${h.name}: ${warn.join(", ")}`)
     seats.push({ hero: h, rank: r, skills: usable.map((s) => s.name), notes: fit.notes })
   }
-  if (!healer) notes.push("no healer in this four")
+  const healer = !!heal && heal.avg >= RULE.realHeal
+  if (!healer) notes.push(heal ? `only a light heal in this four: ${heal.by}'s ${heal.skill}` : "no healer in this four")
   if (!stunner) notes.push("no stun in this four")
-  return { quest: q, seats, score: 0, healer, stunner, notes }
+  return { quest: q, seats, score: 0, healer, heal, stunner, notes }
 }
 
 /** How ready a party is for its road, by my conditions for sending one (C28). Not odds of success: nothing in the save
@@ -258,7 +266,7 @@ export function readiness(t: Town, p: Party, reserve: number): Readiness {
     { label: "The road is paid for", met: gold >= reserve, why: gold >= reserve ? `the provisions cost ${n(reserve)} of your ${n(gold)} gold` : `the provisions cost ${n(reserve)} and you have ${n(gold)}` },
     { label: "Rested", met: !tired.length, why: tired.length ? `${tired.join(", ")} at ${RULE.sendBelow} stress or more` : `all four under ${RULE.sendBelow} stress` },
     { label: "Sound in mind and body", met: !unfit.length, why: unfit.length ? `${unfit.join(", ")} afflicted, ill or still in a building` : "nobody afflicted, ill or held in town" },
-    { label: "A healer goes with them", met: p.healer, why: p.healer ? "someone can mend the others" : "nobody in the four heals another" },
+    { label: "A healer goes with them", met: p.healer, why: p.healer ? `${p.heal!.by}'s ${p.heal!.skill}, about ${p.heal!.avg} hit points a cast` : p.heal ? `only ${p.heal.by}'s ${p.heal.skill}, about ${p.heal.avg} hit points a cast: a light heal, not a healer` : "nobody in the four heals another from where they stand" },
     { label: "A stun goes with them", met: p.stunner, why: p.stunner ? "someone can stop a foe's turn" : "nobody in the four can stun" },
     { label: "Every rank can fight", met: !short.length, why: short.length ? `${short.join(", ")} with fewer than two skills that reach from their rank` : "each has at least two skills that reach from their rank" },
     { label: "A road you have walked", met: p.quest.walked, why: p.quest.walked ? `${p.quest.known.length} foes there you know` : "you have never walked it" },

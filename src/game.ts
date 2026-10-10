@@ -72,7 +72,7 @@ export function levelOf(xp: number, thr: number[]): number {
 }
 
 // ---------- hero classes ----------
-export interface Skill { id: string; launch: number[]; targetsAllies: boolean; heal: boolean; stun: boolean; type: string }
+export interface Skill { id: string; launch: number[]; targetsAllies: boolean; heal: boolean; healAvg: number; stun: boolean; type: string }
 export interface HeroClass { id: string; skills: Map<string, Skill>; tags: string[]; hp: number }
 const classCache = new Map<string, HeroClass>()
 export async function heroClass(id: string): Promise<HeroClass> {
@@ -87,6 +87,8 @@ export async function heroClass(id: string): Promise<HeroClass> {
     const target = line.match(/\.target (\S*)/)?.[1] ?? ""
     skills.set(sid, {
       id: sid, launch, targetsAllies: target.startsWith("@"), heal: /\.heal \d/.test(line),
+      // the hit points a heal restores at its first level, the mean of the file's .heal range (C30)
+      healAvg: ((m) => (m ? (Number(m[1]) + Number(m[2])) / 2 : 0))(line.match(/\.heal (\d+) (\d+)/)),
       stun: /\.effect[^\n]*Stun/i.test(line), type: line.match(/\.type "([^"]+)"/)?.[1] ?? "support",
     })
   }

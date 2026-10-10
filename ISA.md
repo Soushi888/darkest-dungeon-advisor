@@ -2,7 +2,7 @@
 name: darkest-dungeon-advisor
 principal_stated_goal: "J'aimerais qu'on étudie l'idée de faire un projet darkest-dungeon-advisor, comme on a fait pour factorio. C'est un jeu asser complexe et de l'aide stratégique entre deux quêtes serait utile!"
 phase: climbing
-progress: 26/29 claims, 4/4 anti-claims (counted by checkbox grep, never typed)
+progress: 27/30 claims, 4/4 anti-claims (counted by checkbox grep, never typed)
 frozen: false
 ---
 
@@ -57,6 +57,7 @@ Soushi comes back from an expedition, saves, and opens the town board. A village
 - [x] **C27: The road is chosen with its cost and the party's experience in mind.** Two RULE habits join the party score (Soushi, 2026-10-10): the gold the road leaves after its provisions counts for a point per 500 up to 4, and a road the coffers cannot provision counts 20 against itself; when three or more of the four are level 0, every step beyond a short road counts 6 against it. The expedition card's lean says how much the road leaves and when a green party is kept short. *Evidence: test "C27"; on week 10 the Weald (53 gold left, three level 0 heroes) fell from first to fourth, behind the short Ruins, Cove and Warrens.*
 - [x] **C28: The Caretaker says how ready the party is.** A readiness gauge for the proposed party: the share of nine RULE conditions met (road paid for, rested, sound, a healer, a stun, every rank can fight, a walked road, no quirk against the road, seasoned enough for its length), each read from the save or the game's files, with his verdict (send, nearly, not yet). It is presented as his reckoning, never as odds of success: nothing in the save measures those. Asked by Soushi on 2026-10-10. *Evidence: test "C28"; the Ruins party read 9 of 9 on week 10.*
 - [x] **C29: Recruits share the roster's places.** The recruit cards lean Recruit only for as many recruits as the roster has free places, counting the dismissals the board leans on, best first (good quirks less bad); the rest lean Pass and say who took the places. On a full roster, a recruit with more good quirks than bad that beats a level 0 hero outside the party by 2 or more (RULE) brings a dismissal card for that hero. Asked by Soushi on 2026-10-10. *Evidence: test "C29" (at the roster's real, full and one-free sizes, taken recruits never exceed the places).*
+- [x] **C30: A healer is judged by the strength of the heal.** Each skill's heal is read from the class file's `.heal` range at its first level; a party has a healer only when one of the four can cast, from their own rank, a heal on an ally restoring 4 hit points or more on average (RULE: a Vestal's Divine Grace is 4.5, a Crusader's Battle Heal 2.5). A light heal counts for a little in the party score, never as a healer, and the card and the readiness gauge name it as such. Asked by Soushi on 2026-10-10, on the road to the Weald with only Battle Heal. *Evidence: test "C30".*
 
 ## Anti-claims
 
@@ -76,6 +77,7 @@ Soushi comes back from an expedition, saves, and opens the town board. A village
 - 2026-10-10, Soushi: the save is decoded by **our own TypeScript reader** (card 5).
 - 2026-10-10, Soushi: the save folder is **watched** (card 6). His note, clarified: the board stays live through every town save and does not reload during an expedition (C16).
 - 2026-10-10, Soushi: the repository is **public** on GitHub (card 7).
+- 2026-10-10, Soushi: healing is central to the party's strategy; a light heal is not a healer (C30).
 - 2026-10-10, Soushi: recruits are weighed against the places the roster has (C29).
 - 2026-10-10, Soushi: a confidence status on the board that rises with preparation (C28), shown as readiness against the Caretaker's conditions, since the save holds no odds.
 - 2026-10-10, Soushi: the road is chosen counting the gold it leaves, and a green party keeps to short roads (C27).
