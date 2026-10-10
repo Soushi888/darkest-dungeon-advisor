@@ -1,0 +1,112 @@
+/* darkest-dungeon-advisor skin: a niceboard dressed as an in-game panel.
+   `bun run skin` turns this file into .local/state/theme.css, replacing every font and art placeholder
+   with a data URI, so the art is read from the install at build time and never committed.
+   Dark only: the game has no light mode, and every diagram carries this palette.
+   html-prefixed selectors win over Board.css, which loads after this file. */
+
+@font-face{font-family:"IM Fell English";font-style:normal;src:url("{{font:IMFellEnglish-Regular.woff2}}") format("woff2")}
+@font-face{font-family:"IM Fell English";font-style:italic;src:url("{{font:IMFellEnglish-Italic.woff2}}") format("woff2")}
+@font-face{font-family:"IM Fell English SC";font-style:normal;src:url("{{font:IMFellEnglishSC-Regular.woff2}}") format("woff2")}
+
+html:root{
+  --bg:#0b0908; --panel:#13100e; --ink:#d9c9a8; --dim:#9a8a6c; --line:#3d3122;
+  --accent:#c9a24a; --ok:#8fa86a; --warn:#c9a24a; --bad:#a3271f;
+  --gold:#c9a24a; --gold-dim:#6f5d3c; --blood:#8c1d18; --eldritch:#5fa8a0;
+  --mono:"JetBrains Mono","Fira Code",monospace;
+  --title:"IM Fell English SC",Georgia,serif;
+  --hand:"IM Fell English",Georgia,serif;
+  --paper-ink:#d9c9a8;
+  --k-works:#c9a24a; --k-model:#9a8a6c; --k-habit:#8fa86a; --k-idea:#5fa8a0; --k-gotcha:#c9772f; --k-risk:#a3271f;
+  color-scheme:dark;
+}
+
+/* the page: the road to the Hamlet at dusk, under a dark veil */
+html body{font-family:var(--hand);font-size:18px;color:var(--ink);
+  background:linear-gradient(rgba(8,6,5,.55),rgba(8,6,5,.93) 34rem),url("{{art:vista}}") center top/cover fixed,#0b0908;
+  background-color:#0b0908}
+html a{color:var(--gold)}
+html code{background:rgba(201,162,74,.10);color:#e3cfa0;border-radius:0}
+
+/* top bar: a strip of the town screen's chrome */
+html .bar{background:rgba(8,6,5,.92);backdrop-filter:none;border-bottom:1px solid var(--gold-dim);box-shadow:0 2px 0 #000}
+html .bar a{font-family:var(--title);font-size:1.05rem;color:var(--dim);letter-spacing:.04em}
+html .bar a:hover{color:var(--gold)}
+html .btn,html .dv .dv-btn.btn{font-family:var(--title);letter-spacing:.04em;font-size:.9rem;color:var(--ink);
+  background:linear-gradient(#1c1714,#0e0b09);border:1px solid var(--gold-dim);border-radius:0;box-shadow:inset 0 0 0 1px #000}
+html .btn:hover,html .btn.on{color:#f0dcb0;border-color:var(--gold)}
+
+/* hero: the title over an ink splash, the point as an inscription beside the reaper */
+html .hero{padding:2.6rem 0 1.4rem}
+html h1{font-family:var(--title);font-weight:400;font-size:3.8rem;letter-spacing:.03em;color:#e8d6a8;
+  text-shadow:0 2px 0 #000,0 0 18px rgba(0,0,0,.9);
+  background:url("{{art:splat}}") left center/auto 180% no-repeat;padding:.4rem 0 .4rem .2rem}
+html h1 em{background:none;color:#c23a2c;font-style:normal}
+html .hero .md{color:var(--ink);font-size:1.12rem;text-shadow:0 1px 2px #000}
+html .idea{transform:none;border:1px solid var(--gold-dim);border-left:3px solid var(--blood);border-radius:0;
+  font-family:var(--hand);font-style:italic;font-size:2rem;color:#e8d6a8;
+  background:url("{{art:reaper}}") right bottom/auto 100% no-repeat,linear-gradient(90deg,rgba(10,8,7,.96) 55%,rgba(10,8,7,.75));
+  padding:1.2rem 9rem 1.2rem 1.4rem;min-height:12rem;box-shadow:0 8px 24px #000,inset 0 0 0 1px #000}
+html .idea small{font-style:normal;font-size:1.02rem;color:var(--ink)}
+
+/* zones: the building panels of the town screen, near black with a thin gilt rule */
+html .zone{border-radius:0;border:1px solid var(--gold-dim);border-top:2px solid var(--gold);
+  background:linear-gradient(rgba(19,16,14,.97),rgba(11,9,8,.97));
+  box-shadow:inset 0 0 0 1px #000,inset 0 0 60px rgba(0,0,0,.8),0 10px 24px rgba(0,0,0,.7)}
+html .zone h2{font-family:var(--title);font-weight:400;font-size:1.9rem;line-height:1.15;letter-spacing:.04em;color:#e3cfa0;
+  border-bottom:1px solid var(--line);padding-bottom:.3rem;text-shadow:0 2px 0 #000}
+html .zone h2 .n{transform:none;border:1px solid var(--blood);border-radius:0;background:#2a0d0a;color:#e8d6a8;
+  width:1.9rem;height:1.9rem;line-height:1.8rem;font-size:1.1rem;font-family:var(--title)}
+html .lede{color:var(--dim);font-style:italic}
+
+/* notes: parchment-dark tooltips with a coloured rule, never tilted */
+html .legend{display:none}
+html .sticky{transform:none!important;border-radius:0;color:var(--ink);background:#16120f;
+  border:1px solid var(--line);border-left:3px solid var(--gold-dim);box-shadow:0 4px 10px rgba(0,0,0,.6);font-size:1rem}
+html .sticky.k-works{border-left-color:var(--k-works)}html .sticky.k-model{border-left-color:var(--k-model)}
+html .sticky.k-habit{border-left-color:var(--k-habit)}html .sticky.k-idea{border-left-color:var(--k-idea)}
+html .sticky.k-gotcha{border-left-color:var(--k-gotcha)}html .sticky.k-risk{border-left-color:var(--k-risk)}
+html .sticky b.t{font-family:var(--title);font-weight:400;font-size:1.25rem;color:#e8d6a8;letter-spacing:.02em}
+html .sticky.k-risk b.t{color:#d4685c}html .sticky.k-idea b.t{color:#8fd0c8}
+html .sticky .so{border-top:1px solid var(--line);color:var(--dim);font-style:italic}
+html .sticky code{background:rgba(201,162,74,.10);color:#e3cfa0}
+html .sticky.add{border:1px dashed var(--gold-dim);background:transparent;color:var(--dim);font-family:var(--title);font-size:1.1rem}
+html .sticky.mine{box-shadow:0 4px 10px rgba(0,0,0,.6)}
+html .sticky.mine .rm{color:var(--ink)}
+
+/* figures: framed like the journal's plates */
+html .figwrap{border:1px solid var(--line);border-radius:0;background:#0d0b0a;box-shadow:inset 0 0 0 1px #000}
+html .figwrap figcaption{font-family:var(--title);font-size:1.1rem;color:var(--dim)}
+html .figwrap .fn{border-radius:0;border-color:var(--gold-dim);color:var(--gold)}
+html .fig{border-radius:0}
+
+/* matters awaiting your word: building-upgrade panels, choices on the game's own choice frame */
+html .dec{border:1px solid var(--gold-dim);border-radius:0;background:linear-gradient(#141110,#0b0908);
+  box-shadow:inset 0 0 0 1px #000,0 8px 18px rgba(0,0,0,.7);padding:1rem 1.1rem}
+html .dec h3{font-family:var(--title);font-weight:400;font-size:1.45rem;color:#e8d6a8;letter-spacing:.02em}
+html .dec p.ctx{color:var(--ink);opacity:.9}
+html .dec .dec-img{border-radius:0;object-fit:contain;image-rendering:pixelated;background:#0b0908;
+  border-bottom:1px solid var(--gold-dim);width:calc(100% + 2.2rem);margin:-1rem -1.1rem .8rem}
+html .opt{border-radius:0;padding:.35rem 1.1rem;margin:.45rem 0;color:var(--ink);background:#0e0b09;
+  border-style:solid;border-width:10px 0;border-image:url("{{art:choice}}") 34 0 34 0 fill stretch}
+html .opt:hover{filter:brightness(1.35)}
+html .opt .pk{font-family:var(--title);font-weight:400;font-size:1.08rem;color:#e8d6a8;letter-spacing:.02em}
+html .opt .fx{color:var(--dim)}
+html .opt.lean{border:none;box-shadow:inset 3px 0 0 var(--gold)}
+html .opt .rec{font-family:var(--title);color:var(--gold);font-size:1rem}
+html .opt.sel{background:#1d1a0f;box-shadow:0 0 0 1px var(--gold),0 0 12px rgba(201,162,74,.35)}
+html .opt.sel .pk{color:#f3d98c}
+html .dec .why-lean{font-style:italic}
+html .dec textarea,html .comments textarea,html .pinpop textarea{border-radius:0;border:1px solid var(--line);background:#0b0908;color:var(--ink);font-family:var(--hand)}
+html .stamp{font-family:var(--title);background:var(--blood);color:#f0dcb0;padding:.05rem .6rem;border:1px solid #000;top:-.75rem}
+html .dec.done{border-color:var(--gold);border-style:solid}
+
+/* pins and popovers keep the frame */
+html .pin{border-radius:0;background:var(--blood);font-family:var(--title)}
+html .pinpop{border-radius:0;border:1px solid var(--gold);background:#120f0d}
+html .toast{border-radius:0;background:var(--blood)}
+
+@media(max-width:48rem){
+  html h1{font-size:2.5rem}
+  html .idea{font-size:1.5rem;padding-right:6rem;min-height:9rem}
+  html .zone{border-radius:0}
+}

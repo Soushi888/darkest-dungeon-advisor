@@ -1,0 +1,15 @@
+{
+  "name": "darkest-dungeon-advisor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The town advisor for a Darkest Dungeon playthrough: reads the game's data and a copy of the save, and advises between expeditions, only from what the player has seen.",
+  "scripts": {
+    "skin": "bun src/skin.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.6.0"
+  }
+}
