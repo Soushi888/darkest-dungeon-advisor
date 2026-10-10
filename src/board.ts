@@ -183,7 +183,8 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
       L.push(`    - pick: ${y(questLabel(p))}`, `      effect: ${y(`${DIFFICULTY[q.difficulty] ?? `level ${q.difficulty}`}; rewards ${q.rewards.join(", ")}; ${foes}.${rumour}`)}`)
     }
     const leanIdx = chosen ? a.parties.indexOf(chosen) : 0
-    const longer = a.parties.filter((p) => p !== chosen && p.quest.length > (chosen?.quest.length ?? 1) && p.green).length
+    // only said of a short road chosen over longer ones that a green party would have taken
+    const longer = chosen?.quest.length === 1 ? a.parties.filter((p) => p !== chosen && p.quest.length > 1 && p.green).length : 0
     L.push(`  lean: ${Math.max(0, leanIdx)}`, `  lean_why: ${y(`the four I would send fit it best: ${chosen ? chosen.seats.flatMap((s) => s.notes).join(", ") || "ranks and skills line up" : ""}${chosen?.left !== undefined ? `; it leaves ${coin(Math.max(0, chosen.left))} in the coffers after the road` : ""}${longer ? "; with so many of them untried, I keep them to shorter roads" : ""} (my habits).`)}`)
     if (chosen) {
       L.push(`- q: ${y(`Take this party to the ${chosen.quest.dungeonName}?`)}`)
