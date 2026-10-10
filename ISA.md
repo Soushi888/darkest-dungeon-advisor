@@ -2,7 +2,7 @@
 name: darkest-dungeon-advisor
 principal_stated_goal: "J'aimerais qu'on étudie l'idée de faire un projet darkest-dungeon-advisor, comme on a fait pour factorio. C'est un jeu asser complexe et de l'aide stratégique entre deux quêtes serait utile!"
 phase: climbing
-progress: 16/17 claims, 4/4 anti-claims (counted by checkbox grep, never typed)
+progress: 16/19 claims, 4/4 anti-claims (counted by checkbox grep, never typed)
 frozen: false
 ---
 
@@ -45,6 +45,8 @@ Soushi comes back from an expedition, saves, and opens the town board. A village
 - [ ] **C15: Every board looks like an in-game panel, not a brainstorm.** The skin dresses the compiler with the game's own art and type. Open: the town board's layout is still the compiler's zones; Soushi wants the final board laid out for the game (2026-10-10). Phone width checked 2026-10-10: in a 390px frame the page is 378px wide, 16px gutter, no element past the edge. *Falsifier: a Board.css hand-drawn trait in a pixel capture; a layout Soushi calls brainstorm-like.*
 - [x] **C16: The board follows the Hamlet live and waits during expeditions.** *Evidence: test "C16": on a profile copy, a town save raises `/version` by one, a save with `inraid` set leaves it, the return raises it again.*
 - [x] **C17: Roster management is advised, from the roster and the game's own upgrade trees.** Dismissal cards (RULE: level 0, outside the party, three or more bad quirks), recruit cards for the Stage Coach's current offer, the party's next Guild tiers with the Guild discount (10% per bought `guild.cost` code, summed), Blacksmith tiers shown as waiting on `blacksmith.weapon a` and `blacksmith.armour a`, estate trinkets to party members by class. *Evidence: Battlefield Medicine tier 2 shown at 225 gold, the file's 250 less 10%; roster 14 of 16 from `stage_coach.rostersize` b.*
+- [ ] **C18: Picks are checked against what the save shows.** The board never acts in the game (A1), so every pick is carried out by hand; each pick sent this week is kept in `.local/town/picks.json` (merged across sends, cleared when the week turns) and the next Hamlet save shows a "Did you do what you chose?" zone: one sticky per pick the save can confirm, Done, Not yet, or Not as chosen. Covered: relief (`roster` heroes against the buildings' activity slots), the Medical Ward, dismissals and recruits (the roster), Guild and Blacksmith tiers (`persist.upgrades.json`), heirloom upgrades (the bought code). Not checkable: "Keep the gold" and "Save them". Stickies, never cards, so the expedition cards keep numbers 1 and 2. *Evidence: tests "C18" (statuses from the real save, merge, new week; `/answers` round trip to the zone). Open: the zone not yet viewed in Chrome (deferred while Soushi was in game, 2026-10-10).* *Falsifier: a pick carried out in game still reads Not yet after the next Hamlet save; a contrary move reads Done.*
+- [ ] **C19: The expedition and party picks are checked on setting out.** (after: C18) The save made on leaving the Hamlet records the dungeon (`persist.game.json` `raiddungeon`) and, in a file not yet read, the party. Open: no raid save decoded yet; a capture of the first one is taken while Soushi plays (2026-10-10). *Falsifier: a party that left in another order or with another hero than picked reads as matching.*
 
 ## Anti-claims
 
@@ -64,6 +66,7 @@ Soushi comes back from an expedition, saves, and opens the town board. A village
 - 2026-10-10, Soushi: the save is decoded by **our own TypeScript reader** (card 5).
 - 2026-10-10, Soushi: the save folder is **watched** (card 6). His note, clarified: the board stays live through every town save and does not reload during an expedition (C16).
 - 2026-10-10, Soushi: the repository is **public** on GitHub (card 7).
+- 2026-10-10, Soushi: board picks never act in the game; a mismatch between pick and play is caught by reading the next save (C18, C19).
 - 2026-10-10, Soushi: niceboards from day one; the advisor may ask questions and the board is interactive.
 - Sibling of `factorio-advisor` and `wesnoth-advisor`. Unlike Factorio, no engine run is needed: the game data is text and the save decodes directly.
 - 2026-10-10, independent review (fresh-context agent, read-only), five findings and four smaller ones, all adopted: (1) tier spoiler through shared attack ids, fixed by the walked-level rule in C5; (2) quirk matching by substring ("man" in Photomania), fixed by whole-word matching; (3) answers drifting between cards, fixed by putting the two expedition cards first so their numbers never move, keeping the party card's title stable, and accepting a party note only when it names four heroes on the roster; (4) the Medical Ward offered to more heroes than it has beds, fixed by giving free beds by experience; (5) the watcher dropping a save that arrived mid-build and racing with `/answers`, fixed by one serialized rebuild with a single queued rerun. Smaller: busy heroes are no longer offered for dismissal, bleed and blight lines no longer claim where they happened, weapon and armour tiers are labelled from level 2 and priced at the Blacksmith, unmet foes are counted as distinct kinds from hall and room lines only.
@@ -85,3 +88,5 @@ Soushi comes back from an expedition, saves, and opens the town board. A village
 | C8, C16 | `bun test`: `inraid` flipped in a profile copy; the CLI refuses, the watcher's `/version` holds |
 | A1 | `bun test`: profile mtimes before and after a build |
 | C12 | Chrome through Interceptor: answers sent from the page come back as a rebuilt board |
+| C18 | `bun test`: statuses on the real save, merge and week reset, `/answers` to the zone; Chrome view of the zone |
+| C19 | a raid save copy: dungeon and party read and compared to the picks |

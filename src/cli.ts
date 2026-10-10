@@ -6,7 +6,8 @@ import { join } from "node:path"
 import { buildBoard, outDir } from "./board.ts"
 import { profileDir } from "./paths.ts"
 import { readSave } from "./read.ts"
-import { town } from "./town.ts"
+import { town, type Town } from "./town.ts"
+import { loadPicks, mergePicks, picksFile } from "./reconcile.ts"
 
 const args = process.argv.slice(2)
 const cmd = args[0] ?? "town"
@@ -14,8 +15,10 @@ const foresight = args.includes("--foresight")
 const port = Number(args.find((a) => a.startsWith("--port="))?.split("=")[1] ?? 4317)
 
 /** Returns the board path, or null when the party is out (C8: refused in character). */
+let last: Town | undefined
 async function once(): Promise<string | null> {
   const t = await town(await readSave())
+  last = t
   if (t.inRaid) {
     console.log(`The Caretaker: "You are not back yet. I will be at the gate when you return from the ${t.raidDungeon}."`)
     return null
@@ -62,6 +65,8 @@ if (cmd === "town") {
         await Bun.write(join(outDir, "answers.md"), body)
         const log = Bun.file(join(outDir, "answers-log.md"))
         await Bun.write(log, `${(await log.exists()) ? await log.text() : ""}\n\n<!-- ${new Date().toISOString()} -->\n${body}`)
+        // the week's picks, merged, so a card that leaves the board once done keeps its pick (C18)
+        if (last) await Bun.write(picksFile(outDir), JSON.stringify(mergePicks(await loadPicks(outDir), body, last), null, 1))
         await rebuild()
         return new Response("ok")
       }

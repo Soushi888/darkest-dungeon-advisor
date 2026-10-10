@@ -9,6 +9,7 @@ import { names } from "../src/names.ts"
 import { readSave } from "../src/read.ts"
 import { town } from "../src/town.ts"
 import { profileDir, root } from "../src/paths.ts"
+import { mergePicks, parseAnswers, reconcile } from "../src/reconcile.ts"
 
 let profile = ""
 try { profile = profileDir() } catch {}
@@ -127,6 +128,70 @@ describe.skipIf(!has)("on the local save", () => {
       expect(await version()).toBe(v1 + 1)
     } finally {
       w.kill()
+    }
+  }, 30_000)
+
+  test("C18: each pick the save can confirm reads done, not yet, or not as chosen; a new week starts clean", async () => {
+    const t = await town(await readSave(copyProfile()))
+    const free = t.heroes.find((h) => !h.busy)!
+    const act = t.activities.find((a) => a.heal > 0)!
+    const busy = t.heroes.find((h) => h.busy)
+    const other = t.activities.find((a) => a.heal > 0 && a.name !== busy?.busy)!
+    const recruit = t.recruits[0]
+    const up = t.heroUpgrades[0]!
+    const lines = [
+      "## Soushi's answers: town", "",
+      `- **3. Where does ${free.name} go?** ${act.name}`, "  - Note (refines or overrides the pick): if there is room",
+      `- **4. Where does ${free.name}'s twin go?** Leave them be`,
+      `- **5. Dismiss ${free.name}?** Keep`,
+      `- **6. What do we train first?** ${up.hero}: ${up.label} to level ${up.toLevel}`,
+    ]
+    if (busy) lines.push(`- **7. Where does ${busy.name} go?** ${other.name}`)
+    if (recruit) lines.push(`- **8. Recruit ${recruit.name}, ${recruit.clsName}?** Recruit`)
+    const text = lines.join("\n")
+    const parsed = parseAnswers(text)
+    expect(parsed[`Where does ${free.name} go?`]).toEqual({ pick: act.name, note: "if there is room" })
+    const status = Object.fromEntries(reconcile(mergePicks(undefined, text, t), t).map((c) => [c.question, c.status]))
+    expect(status[`Where does ${free.name} go?`]).toBe("pending")
+    expect(status[`Where does ${free.name}'s twin go?`]).toBe("contrary") // not on the roster
+    expect(status[`Dismiss ${free.name}?`]).toBe("done")
+    expect(status["What do we train first?"]).toBe("pending")
+    if (busy) expect(status[`Where does ${busy.name} go?`]).toBe("contrary")
+    if (recruit) expect(status[`Recruit ${recruit.name}, ${recruit.clsName}?`]).toBe("pending")
+    // the same pick, once the save shows it done
+    const placed = { ...t, heroes: t.heroes.map((h) => h.guid === free.guid ? { ...h, busy: act.name } : h) }
+    expect(reconcile(mergePicks(undefined, text, t), placed).find((c) => c.question === `Where does ${free.name} go?`)?.status).toBe("done")
+    // a later export keeps the earlier picks of the same week, and last week's picks are dropped
+    const merged = mergePicks(mergePicks(undefined, text, t), `- **1. Dismiss ${free.name}?** Dismiss`, t)
+    expect(merged.picks[`Where does ${free.name} go?`]?.pick).toBe(act.name)
+    expect(merged.picks[`Dismiss ${free.name}?`]?.pick).toBe("Dismiss")
+    expect(reconcile(merged, { ...t, week: t.week + 1 })).toEqual([])
+  })
+
+  test("C18: answers sent from the page come back as a checked list on the next board", async () => {
+    const dir = copyProfile()
+    const port = 4392
+    const out = join(root, ".local", "town")
+    rmSync(join(out, "picks.json"), { force: true })
+    const w = Bun.spawn(["bun", "src/cli.ts", "watch", `--port=${port}`], { cwd: root, env: { ...process.env, DD_PROFILE: dir }, stdout: "pipe" })
+    try {
+      for (let i = 0; i < 40; i++) { try { await fetch(`http://127.0.0.1:${port}/version`); break } catch { await Bun.sleep(250) } }
+      const t = await town(await readSave(dir))
+      const h = t.heroes.find((x) => !x.busy)!
+      const r = await fetch(`http://127.0.0.1:${port}/answers`, { method: "POST", body: `- **9. Where does ${h.name} go?** Leave them be` })
+      expect(await r.text()).toBe("ok")
+      const picks = await Bun.file(join(out, "picks.json")).json()
+      expect(picks.week).toBe(t.week)
+      const md = await Bun.file(join(out, "town.md")).text()
+      expect(md).toContain("## Did you do what you chose?")
+      expect(md).toContain(`Done: Where does ${h.name} go?`)
+      // the check is stickies: the expedition cards keep numbers 1 and 2
+      expect(md.indexOf("Which expedition next?")).toBeGreaterThan(md.indexOf("Did you do what you chose?"))
+    } finally {
+      w.kill()
+      rmSync(join(out, "picks.json"), { force: true })
+      rmSync(join(out, "answers.md"), { force: true })
+      rmSync(join(out, "answers-log.md"), { force: true })
     }
   }, 30_000)
 })

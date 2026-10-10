@@ -7,6 +7,7 @@ import { advise, seatParty, RULE, type Advice, type Party } from "./advise.ts"
 import { install, root } from "./paths.ts"
 import { DIFFICULTY, LENGTH, type HeroView, type Town } from "./town.ts"
 import { buildSkin } from "./skin.ts"
+import { loadPicks, reconcile, type Check } from "./reconcile.ts"
 
 export const outDir = join(root, ".local", "town")
 const BOARD = process.env.NICEBOARD ?? join(homedir(), ".claude/skills/Niceboard/Tools/Board.ts")
@@ -49,7 +50,7 @@ export function questLabel(p: Party): string {
   return [q.dungeonName, `${LENGTH[q.length] ?? q.length} ${q.type}`, q.rewards[0], q.rewards[q.rewards.length - 1]].filter(Boolean).join(", ")
 }
 
-export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: Answers; own?: Party }): string {
+export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: Answers; own?: Party; checks?: Check[] }): string {
   const L: string[] = []
   const picked = (opts.answers.expedition && a.parties.find((p) => questLabel(p) === opts.answers.expedition)) || a.best
   const chosen = opts.own ?? picked
@@ -61,6 +62,19 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   L.push(`headline: ${y(chosen ? `${chosen.quest.dungeonName} next,\nwith ${chosen.seats.map((s) => s.hero.name).join(", ")}.` : "Rest first.\nNo four are fit to go.")}`)
   L.push(`detail: ${y(a.afflicted.length ? `${a.afflicted.map((h) => h.name).join(" and ")} cannot be trusted in the dark until the Abbey or the Tavern has had them.` : "Nobody is afflicted. Spend on the party first, the estate second.")}`)
   L.push("```", "")
+
+  // C18: the picks sent this week against what the save shows. Stickies, not cards, so card numbers never move.
+  const checks = opts.checks ?? []
+  if (checks.length) {
+    const n = (s: string) => checks.filter((c) => c.status === s).length
+    L.push("## Did you do what you chose? {wide}", "")
+    L.push(`The picks you sent me this week, against your last save in the Hamlet: ${n("done")} done, ${n("pending")} not yet, ${n("contrary")} otherwise than you chose. The expedition and the party I can only check once you have set out.`, "")
+    L.push("```board-stickies")
+    const kind = { done: "works", pending: "model", contrary: "risk" } as const
+    const word = { done: "Done", pending: "Not yet", contrary: "Not as chosen" } as const
+    for (const c of checks) L.push(`- title: ${y(`${word[c.status]}: ${c.question}`)}`, `  kind: ${kind[c.status]}`, `  body: ${y(`You chose ${c.pick}. ${c.seen}.`)}`)
+    L.push("```", "")
+  }
 
   // the estate at a glance
   L.push("## The estate's coffers {wide}", "")
@@ -265,7 +279,8 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
     // four names that are all on the roster, or the note is not a party
     if (heroes.length === 4) own = await seatParty(heroes, quest)
   }
-  const md = source(t, a, { foresight: !!opts.foresight, answers, own })
+  const checks = reconcile(await loadPicks(outDir), t)
+  const md = source(t, a, { foresight: !!opts.foresight, answers, own, checks })
   const src = join(outDir, "town.md")
   await Bun.write(src, md)
   await buildSkin()
