@@ -15,6 +15,7 @@ export const P = {
   mash: (d: string, level: number) => `dungeons/${d}/${d}.${level}.mash.darkest`,
   portrait: (c: string) => `heroes/${c}/${c}_A/${c}_portrait_roster.png`,
   townEvents: "campaign/town_events/base.town_events.events.json",
+  supplies: "inventory/base.supply.inventory.items.darkest",
 }
 
 const json = async (rel: string) => Bun.file(join(install, rel)).json()
@@ -176,4 +177,12 @@ export async function townEvents(): Promise<Map<string, TownEventDef>> {
   if (eventLib) return eventLib
   eventLib = new Map((await json(P.townEvents)).events.map((e: any) => [e.id, { id: e.id, data: e.data ?? [] }]))
   return eventLib
+}
+
+// ---------- the Provisioner's prices ----------
+/** Purchase price in gold of each item the Provisioner sells: "provision" is food, the rest are supply ids (torch, shovel...). */
+export async function supplyPrices(): Promise<Map<string, number>> {
+  const out = new Map<string, number>()
+  for (const m of (await text(P.supplies)).matchAll(/\.type\s+"(\w+)"\s+\.id\s+"(\w*)".*?\.purchase_gold_value\s+(\d+)/g)) out.set(m[2] || m[1]!, Number(m[3]))
+  return out
 }

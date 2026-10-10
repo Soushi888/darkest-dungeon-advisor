@@ -9,7 +9,9 @@ import { names } from "../src/names.ts"
 import { readSave } from "../src/read.ts"
 import { town } from "../src/town.ts"
 import { profileDir, root } from "../src/paths.ts"
-import { mergePicks, parseAnswers, reconcile } from "../src/reconcile.ts"
+import { boardOptions, mergePicks, parseAnswers, reconcile } from "../src/reconcile.ts"
+import { road, source } from "../src/board.ts"
+import { supplyPrices } from "../src/game.ts"
 import { advise } from "../src/advise.ts"
 
 let profile = ""
@@ -251,5 +253,42 @@ describe.skipIf(!has)("on the local save", () => {
     expect(proc.exitCode).toBe(0)
     const md = await Bun.file(join(townOut, "town.md")).text()
     for (const h of t.fallen) expect(t.heroes.some((x) => x.name === h.name) || !md.includes(h.name)).toBe(true)
+  })
+
+  test("C22: the road is priced from the Provisioner's list and paid for first; no lean spends what it needs", async () => {
+    const t = await town(await readSave(copyProfile()))
+    const a = await advise(t)
+    const prices = await supplyPrices()
+    expect(prices.get("provision")).toBeGreaterThan(0)
+    const items = road(t, a.best, prices)
+    const reserve = items.reduce((x, i) => x + i.count * i.price, 0)
+    for (const i of items) expect(i.price).toBe(prices.get(i.id)!)
+    // what a board leans on, in gold: every lean must fit in what the road leaves
+    const spent = (md: string) => {
+      let total = 0
+      for (const block of md.split(/\n- q: /).slice(1)) {
+        const picks = [...block.matchAll(/- pick: (".*")\n\s+effect: (".*")/g)].map((m) => JSON.parse(m[2]!) as string)
+        const lean = Number(block.match(/\n\s+lean: (\d+)/)?.[1] ?? -1)
+        const fx = picks[lean] ?? ""
+        if (/^Which expedition|^Take this party/.test(block)) continue
+        const g = fx.match(/^([\d,]+) gold/)
+        if (g) total += Number(g[1]!.replace(/,/g, ""))
+      }
+      return total
+    }
+    for (const gold of [t.wallet.gold ?? 0, reserve - 1, reserve + 2000, 100_000]) {
+      const rich = { ...t, wallet: { ...t.wallet, gold } }
+      const md = source(rich, await advise(rich), { foresight: false, answers: {}, prices }).board
+      expect(spent(md)).toBeLessThanOrEqual(Math.max(0, gold - reserve))
+      expect(md).toContain(gold >= reserve ? "kept for the road" : "cannot pay for the road")
+    }
+  })
+
+  test("C18: a pick that is not one of its card's options is dropped, its note kept", () => {
+    const md = ['- q: "Where do the heirlooms go?"', "  options:", '    - pick: "Save them"', '      effect: "x"', '- q: "Dismiss Cioches?"', "  options:", '    - pick: "Dismiss"', '    - pick: "Keep"'].join("\n")
+    const o = boardOptions(md)
+    expect(o.get("Dismiss Cioches?")).toEqual(["Dismiss", "Keep"])
+    const text = ["- **6. Where do the heirlooms go?** Recruit", "  - Note (refines or overrides the pick): mine", "- **7. Dismiss Cioches?** Recruit", "- **8. Dismiss Cioches?** Keep"].join("\n")
+    expect(parseAnswers(text, o)).toEqual({ "Where do the heirlooms go?": { pick: "", note: "mine" }, "Dismiss Cioches?": { pick: "Keep" } })
   })
 })

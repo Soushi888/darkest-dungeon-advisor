@@ -6,6 +6,7 @@ import { copyFileSync, existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { homedir } from "node:os"
 import { advise, seatParty, RULE, type Advice, type Party } from "./advise.ts"
+import { supplyPrices } from "./game.ts"
 import { install, root } from "./paths.ts"
 import { DIFFICULTY, LENGTH, type HeroView, type Town } from "./town.ts"
 import { buildSkin } from "./skin.ts"
@@ -61,11 +62,29 @@ export function questLabel(p: Party): string {
   return [q.dungeonName, `${LENGTH[q.length] ?? q.length} ${q.type}`, q.rewards[0], q.rewards[q.rewards.length - 1]].filter(Boolean).join(", ")
 }
 
-export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: Answers; own?: Party; checks?: Check[] }): { board: string; sources: string } {
+export interface RoadItem { id: string; label: string; count: number; price: number }
+/** What the road to a quest asks of the Provisioner (counts are RULE), priced from the game's list with this week's event applied (C22). */
+export function road(t: Town, p: Party | undefined, prices: Map<string, number>): RoadItem[] {
+  if (!p) return []
+  const q = p.quest, len = Math.max(1, Math.min(3, q.length))
+  const change = (id: string) => (t.event?.provisions ?? []).filter((v) => v.item === (id === "provision" ? "provision" : "supply")).reduce((x, v) => x + v.cost, 0)
+  const item = (id: string, label: string, count: number): RoadItem => ({ id, label, count, price: Math.max(0, Math.round((prices.get(id) ?? 0) * (1 + change(id)))) })
+  const out = [item("provision", "Food", RULE_FOOD[len]!), item("torch", "Torches", RULE_FOOD[len]!), item("shovel", "Shovels", len)]
+  if (q.bleeders.length) out.push(item("bandage", "Bandages", len + 1))
+  if (q.blighters.length) out.push(item("antivenom", "Antivenom", len + 1))
+  return out
+}
+
+export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: Answers; own?: Party; checks?: Check[]; prices?: Map<string, number> }): { board: string; sources: string } {
   const L: string[] = []
   const picked = (opts.answers.expedition && a.parties.find((p) => questLabel(p) === opts.answers.expedition)) || a.best
   const chosen = opts.own ?? picked
   const gold = t.wallet.gold ?? 0
+  // C22: the road is paid for first; every spending lean below draws only on what is left after it
+  const roadItems = road(t, chosen, opts.prices ?? new Map())
+  const reserve = roadItems.reduce((x, i) => x + i.count * i.price, 0)
+  let left = Math.max(0, gold - reserve)
+  const firstRoad = `the road comes first: I keep ${coin(reserve)} for provisions, and ${left ? `only ${coin(left)} is` : "nothing is"} free`
 
   L.push(`# The *Hamlet*, week ${t.week}`, "")
   L.push(`You are back, and the estate stands. ${t.heroes.length} names on the roster, ${coin(gold)} in the coffers, ${t.quests_won} of ${t.quests_done} expeditions won. I have gone through the ledgers and walked the streets; here is what I would do before the coach leaves again. Where a number is only my own habit, I say so.`, "")
@@ -113,6 +132,12 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   ]
   for (const [n, label, pct] of tally) L.push(`- n: ${n}`, `  label: ${y(label)}`, `  pct: ${pct}`)
   L.push("```", "")
+  if (chosen) {
+    L.push("```board-stickies")
+    if (gold >= reserve) L.push(`- title: ${y(`${coin(reserve)} kept for the road to the ${chosen.quest.dungeonName}`)}`, "  kind: works", `  body: ${y(`Food, torches and the rest, at the Provisioner's prices. ${coin(gold - reserve)} is free to spend; every lean below stays within it.`)}`)
+    else L.push(`- title: ${y(`The coffers cannot pay for the road: ${coin(reserve - gold)} short`)}`, "  kind: risk", `  body: ${y(`The road to the ${chosen.quest.dungeonName} wants ${coin(reserve)} of provisions and you have ${coin(gold)}. Spend nothing else this week and buy food and torches first.${chosen.quest.length > 1 ? " A shorter road is wiser than a hungry one." : ""}`)}`)
+    L.push("```", "")
+  }
 
   // expedition first: its cards stay numbered 1 and 2 whatever else changes, so a stored pick never drifts onto them
   L.push("## The next expedition {wide}", "")
@@ -161,8 +186,11 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     if (a.dismiss.some((d) => d.hero.guid === r.hero.guid)) {
       cards.push(`  lean: ${r.options.length}`, `  lean_why: ${y("I would rather let them go than pay for their rest; see Who stays, who goes.")}`)
     } else {
-      const best = r.options.find((o) => o.activity.cost <= gold) ?? r.options[0]!
-      cards.push(`  lean: ${r.options.indexOf(best)}`, `  lean_why: ${y(`the cheapest place they accept that has a free seat (${best.note}).`)}`)
+      const best = r.options.find((o) => o.activity.cost <= left)
+      if (best) {
+        left -= best.activity.cost
+        cards.push(`  lean: ${r.options.indexOf(best)}`, `  lean_why: ${y(`the cheapest place they accept that has a free seat (${best.note}).`)}`)
+      } else cards.push(`  lean: ${r.options.length}`, `  lean_why: ${y(`${firstRoad}.`)}`)
     }
   }
   const ward = t.activities.find((x) => x.activity === "disease_treatment")
@@ -177,8 +205,10 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     cards.push(`  context: ${y(`${h.name}, ${h.clsName} level ${h.level}, carries ${ill}. The Medical Ward has ${ward.slots} bed${ward.slots === 1 ? "" : "s"} as the Sanitarium stands, ${ward.slots - ward.used} free this week, for ${a.disease.length} ill.`)}`, "  options:")
     cards.push(`    - pick: "Medical Ward"`, `      effect: ${y(`${coin(ward.cost)}; the disease is treated before the next expedition.`)}`)
     cards.push(`    - pick: "Not this week"`, `      effect: ${y("The disease stays; keep them out of the party.")}`)
-    const lean = gets && h.level >= 1 ? 0 : 1
-    cards.push(`  lean: ${lean}`, `  lean_why: ${y(!gets ? "the bed goes to a more experienced hero this week." : h.level >= 1 ? "a hero with experience is worth the bed." : "a level 0 hero is cheaper to replace than to cure.")}`)
+    const purse = ward.cost <= left
+    const lean = gets && h.level >= 1 && purse ? 0 : 1
+    if (lean === 0) left -= ward.cost
+    cards.push(`  lean: ${lean}`, `  lean_why: ${y(!gets ? "the bed goes to a more experienced hero this week." : h.level < 1 ? "a level 0 hero is cheaper to replace than to cure." : !purse ? `${firstRoad}.` : "a hero with experience is worth the bed.")}`)
   }
   const stuck = a.relief.filter((r) => !r.options.length)
   if (cards.length) L.push("```board-decisions", ...cards, "```", "")
@@ -200,11 +230,11 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
       const change = pv.cost ? `cost ${pv.cost <= -1 ? "nothing" : `${Math.round(-pv.cost * 100)}% less`}` : `come in ${Math.round(-pv.amount * 100)}% smaller lots`
       L.push(`- title: ${y(`${what} ${change} this week`)}`, "  kind: idea", `  body: ${y(`The ${t.event!.title}. Buy accordingly.`)}`)
     }
-    L.push(`- title: ${y(`Food: ${RULE_FOOD[len]} ${HABIT}`)}`, "  kind: works", `  body: ${y(t.supply.provision ?? "")}`)
-    L.push(`- title: ${y(`Torches: ${RULE_FOOD[len]} ${HABIT}`)}`, "  kind: works", `  body: ${y(t.supply.torch ?? "")}`)
-    L.push(`- title: ${y(`Shovels: ${len} ${HABIT}`)}`, "  kind: works", `  body: ${y(t.supply.shovel ?? "")}`)
-    if (q.bleeders.length) L.push(`- title: ${y(`Bandages: ${len + 1} ${HABIT}`)}`, "  kind: model", `  body: ${y(`${t.supply.bandage ?? ""} Foes you know there whose attacks have bled you: ${q.bleeders.join(", ")}.`)}`)
-    if (q.blighters.length) L.push(`- title: ${y(`Antivenom: ${len + 1} ${HABIT}`)}`, "  kind: model", `  body: ${y(`${t.supply.antivenom ?? ""} Foes you know there whose attacks have blighted you: ${q.blighters.join(", ")}.`)}`)
+    for (const i of roadItems) {
+      const why = i.id === "bandage" ? ` Foes you know there whose attacks have bled you: ${q.bleeders.join(", ")}.` : i.id === "antivenom" ? ` Foes you know there whose attacks have blighted you: ${q.blighters.join(", ")}.` : ""
+      L.push(`- title: ${y(`${i.label}: ${i.count} ${HABIT}, ${coin(i.count * i.price)}`)}`, `  kind: ${why ? "model" : "works"}`, `  body: ${y(`${t.supply[i.id] ?? ""} ${coin(i.price)} each.${why}`)}`)
+    }
+    L.push(`- title: ${y(`The road costs ${coin(reserve)} in all`)}`, `  kind: ${gold >= reserve ? "works" : "risk"}`, `  body: ${y(gold >= reserve ? "Already set aside in the coffers above." : `You have ${coin(gold)}. Buy food and torches first; they keep the party alive and the light up.`)}`)
     if (q.length >= 2) L.push(`- title: ${y("Firewood comes with a medium or long expedition")}`, "  kind: idea", `  body: ${y(t.supply.firewood ?? "")}`)
     L.push("```", "")
   }
@@ -217,8 +247,12 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     L.push(`- q: "What do we train first?"`, `  context: ${y(`You have ${coin(gold)}. These are the party's upgrades you can afford now, cheapest first.`)}`, "  options:")
     for (const u of a.buys.slice(0, 5)) L.push(`    - pick: ${y(`${u.hero}: ${u.label} to level ${u.toLevel}`)}`, `      effect: ${y(`${coin(u.cost.find((c) => c.type === "gold")?.amount ?? 0)} at the ${u.where}.`)}`)
     L.push(`    - pick: "Keep the gold"`, `      effect: ${y("Spend nothing at the Guild this week.")}`)
-    const heal = a.buys.findIndex((u) => /medicine|reconstruction|grace|comfort|heal/i.test(u.label))
-    L.push(`  lean: ${heal >= 0 && heal < 5 ? heal : 0}`, `  lean_why: ${y(heal >= 0 && heal < 5 ? "the party's healing is what brings everyone home." : "the cheapest step for the hero who fights most.")}`)
+    const shown = a.buys.slice(0, 5), price = (u: (typeof shown)[number]) => u.cost.find((c) => c.type === "gold")?.amount ?? 0
+    const heal = shown.findIndex((u) => /medicine|reconstruction|grace|comfort|heal/i.test(u.label) && price(u) <= left)
+    const cheap = shown.findIndex((u) => price(u) <= left)
+    const pick = heal >= 0 ? heal : cheap
+    if (pick >= 0) left -= price(shown[pick]!)
+    L.push(`  lean: ${pick >= 0 ? pick : shown.length}`, `  lean_why: ${y(heal >= 0 ? "the party's healing is what brings everyone home." : cheap >= 0 ? "the cheapest step for the hero who fights most." : `${firstRoad}.`)}`)
     L.push("```", "")
   }
   if (a.blocked.length) {
@@ -287,6 +321,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   for (const u of a.buys.slice(0, 5)) rows.push([`${u.cost.find((c) => c.type === "gold")?.amount ?? 0}`, `${u.hero}: ${u.label} to level ${u.toLevel}`, `\`upgrades/heroes/${u.tree.split(".")[0]}.upgrades.json\` ${u.tree} code ${u.code}, less ${Math.round((u.where === "Guild" ? t.skillDiscount : t.gearDiscount) * 100)}% from \`${u.where === "Guild" ? "guild" : "blacksmith"}.building.json\``])
   for (const u of a.heirlooms) rows.push([u.cost.map((c) => `${c.amount} ${c.type}`).join(", "), u.label, `\`upgrades/building/${u.tree.split(".")[0]}.upgrades.json\` ${u.tree} code ${u.code}`])
   for (const p of a.parties) rows.push([p.quest.rewards.filter((r) => /^\d/.test(r)).join(", "), `${questLabel(p)}, rewards`, "`persist.quest.json` completion_reward"])
+  for (const i of roadItems) rows.push([`${i.price}`, `${i.label}, gold each`, `\`inventory/base.supply.inventory.items.darkest\` purchase_gold_value${t.event?.provisions.length ? `, with this week's event (\`${t.event.id}\`)` : ""}`])
   rows.push([`${t.witnessedSkills}`, "enemy attacks witnessed", "`persist.game_knowledge.json` combat_skills"])
   L.push("## How I keep the accounts {wide}", "")
   L.push(`My habits, so you can weigh them: rest at ${RULE.restAbove} stress, send only under ${RULE.sendBelow}, let go of level 0 heroes with ${RULE.dismissNegatives} or more bad quirks. Your heroes have suffered ${t.witnessedSkills} kinds of blow so far, in ${t.visited.length ? t.visited.length + " of the places beyond the Hamlet" : "no place yet"}. Everything else on this page is what the estate's ledgers and my own eyes tell me.`, "")
@@ -311,7 +346,7 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
     if (heroes.length === 4) own = await seatParty(heroes, quest)
   }
   const checks = reconcile(await loadPicks(outDir), t)
-  const { board, sources } = source(t, a, { foresight: !!opts.foresight, answers, own, checks })
+  const { board, sources } = source(t, a, { foresight: !!opts.foresight, answers, own, checks, prices: await supplyPrices() })
   const src = join(outDir, "town.md")
   await Bun.write(src, board)
   await Bun.write(join(outDir, "sources.md"), sources)

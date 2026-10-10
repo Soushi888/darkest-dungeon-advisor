@@ -14,6 +14,7 @@ bun run town                 # build the board once: .local/town/town.md -> town
 bun run watch                # serve on http://127.0.0.1:4317/, rebuild on every Hamlet save (--port=<n>, --foresight)
 bun run read                 # decode the save to data/state.json, for inspecting fields
 bun run skin                 # build .local/state/theme.css from skin/darkest.css plus art from the install
+bun run live                 # one line per board send or game save, for a live session (see below)
 bun test                     # all claim probes
 bun test -t "C6"             # one test, by its claim id
 bun run typecheck            # tsc --noEmit
@@ -55,6 +56,24 @@ Environment: `DD_INSTALL` (game folder, default `~/.steam/steam/steamapps/common
 
 - **No game art or wiki text committed (A4).** Art is inlined into `.local/` at build time; `.local/`, `data/` and `.dd-runtime/` are gitignored. Fonts in `skin/fonts/` are SIL OFL and are the only committed assets.
 
+- **The road is paid for first (C22).** `road()` in `board.ts` prices the expedition's provisions from `inventory/base.supply.inventory.items.darkest` (with the week's event applied); every spending lean on the board draws only on the gold left after that reserve.
+
+- **The fallen are never advised (C21).** `persist.roster.json` keeps dead heroes; `town.ts` sets aside every guid the campaign log records as `died`.
+
 - **A save made in a dungeon** (`persist.game.json` `inraid`) is refused in character and writes no board (C8). The watcher's `/version` only moves on Hamlet saves (C16).
 
 When a change touches a claim, update its line in `ISA.md` with the new evidence; open design questions go under its "Not yet specified" section.
+
+## Live session
+
+When Soushi plays with the board open, watch the session yourself; he should never have to tell you that he pressed Send or that the game saved.
+
+- **Start:** check the watcher is up (`pgrep -af "src/cli.ts watch"`), then arm the Monitor tool on `bun run live` with the maximum timeout, and re-arm it on every expiry until he stops playing. It prints one line per event: `SEND <time> <n> picks` and `SAVE <time> town|dungeon`.
+
+- **On SEND:** read `.local/town/answers.md`, `.local/town/picks.json` and the rebuilt `.local/town/town.md`, then tell him in a few lines what the Caretaker took from it: the expedition and party, picks dropped as not belonging to their card (the page keeps picks by card position), and anything the board now warns about (a road the coffers cannot pay for). His notes, stickies and general comments are requests: answer them, and build what they ask for when it is a change to the advisor.
+
+- **On SAVE town:** the board has rebuilt. Read its "Did you do what you chose?" zone and name anything Not as chosen.
+
+- **On SAVE dungeon:** the board waits (C16). Say nothing unless asked.
+
+- **Keep the live board on current code.** Changes land on `main`; after each one, restart the watcher (`pkill -f "src/cli.ts watch$"`, then `nohup bun src/cli.ts watch > .dd-runtime/watch.log 2>&1 &`) and check `.dd-runtime/watch.log` prints a new `week N` line. Tests build in `.dd-runtime/test-town` (`DD_TOWN_OUT`) and never touch the live board; preview a change with `DD_TOWN_OUT=.dd-runtime/preview bun src/cli.ts town`.

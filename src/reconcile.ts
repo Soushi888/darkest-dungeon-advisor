@@ -10,25 +10,43 @@ export interface Picks { week: number; picks: Record<string, Pick> }
 export type Status = "done" | "pending" | "contrary"
 export interface Check { question: string; pick: string; status: Status; seen: string }
 
-/** The board's export: `- **N. Question** Pick` with an optional `  - Note (...): text` line. Card numbers are dropped. */
-export function parseAnswers(text: string): Record<string, Pick> {
+/** Each card of a built board and its options, from the board's markdown (`- q:` then `    - pick:` lines, JSON strings). */
+export function boardOptions(md: string): Map<string, string[]> {
+  const out = new Map<string, string[]>()
+  let q: string | undefined
+  for (const line of md.split("\n")) {
+    const mq = line.match(/^- q: (".*")\s*$/)
+    if (mq) { q = JSON.parse(mq[1]!); out.set(q!, []); continue }
+    const mp = line.match(/^\s+- pick: (".*")\s*$/)
+    if (mp && q) out.get(q)!.push(JSON.parse(mp[1]!))
+  }
+  return out
+}
+
+/** The board's export: `- **N. Question** Pick` with an optional `  - Note (...): text` line. Card numbers are dropped.
+ *  With the board's options, a pick that is not one of its card's options is dropped (C18): the page keeps picks by card
+ *  position, so when cards come or go between builds an old pick can land on the wrong card. Its note is kept. */
+export function parseAnswers(text: string, options?: Map<string, string[]>): Record<string, Pick> {
   const out: Record<string, Pick> = {}
   const lines = text.split("\n")
   for (let i = 0; i < lines.length; i++) {
     const m = lines[i]!.match(/^- \*\*\d+\.\s*(.+?)\*\*\s*(.*)$/)
     if (!m) continue
+    const q = m[1]!.trim()
     const p: Pick = { pick: m[2]!.trim() }
     const n = lines[i + 1]?.match(/^\s+- Note[^:]*:\s*(.+)$/)
     if (n) p.note = n[1]!.trim()
-    out[m[1]!.trim()] = p
+    const opts = options?.get(q)
+    if (opts && !opts.includes(p.pick)) { if (!p.note) continue; p.pick = "" }
+    out[q] = p
   }
   return out
 }
 
 /** Merges a new export into the week's picks; a new week starts clean. Heirloom picks remember the code they aimed at. */
-export function mergePicks(prev: Picks | undefined, text: string, t: Town): Picks {
+export function mergePicks(prev: Picks | undefined, text: string, t: Town, options?: Map<string, string[]>): Picks {
   const base: Picks = prev && prev.week === t.week ? prev : { week: t.week, picks: {} }
-  for (const [q, p] of Object.entries(parseAnswers(text))) {
+  for (const [q, p] of Object.entries(parseAnswers(text, options))) {
     if (q.startsWith("Where do the heirlooms go")) p.code = t.buildingUpgrades.find((u) => u.label === p.pick)?.code
     base.picks[q] = p
   }
@@ -48,6 +66,7 @@ export function reconcile(p: Picks | undefined, t: Town): Check[] {
   const out: Check[] = []
   const add = (question: string, pick: string, status: Status, seen: string) => out.push({ question, pick, status, seen })
   for (const [q, { pick, code }] of Object.entries(p.picks)) {
+    if (!pick) continue
     let m: RegExpMatchArray | null
     if ((m = q.match(/^Where does (.+) go\?$/))) {
       const h = hero(m[1]!)

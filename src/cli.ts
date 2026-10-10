@@ -7,7 +7,7 @@ import { buildBoard, outDir } from "./board.ts"
 import { profileDir } from "./paths.ts"
 import { readSave } from "./read.ts"
 import { town, type Town } from "./town.ts"
-import { loadPicks, mergePicks, picksFile } from "./reconcile.ts"
+import { boardOptions, loadPicks, mergePicks, picksFile } from "./reconcile.ts"
 
 const args = process.argv.slice(2)
 const cmd = args[0] ?? "town"
@@ -66,7 +66,10 @@ if (cmd === "town") {
         const log = Bun.file(join(outDir, "answers-log.md"))
         await Bun.write(log, `${(await log.exists()) ? await log.text() : ""}\n\n<!-- ${new Date().toISOString()} -->\n${body}`)
         // the week's picks, merged, so a card that leaves the board once done keeps its pick (C18)
-        if (last) await Bun.write(picksFile(outDir), JSON.stringify(mergePicks(await loadPicks(outDir), body, last), null, 1))
+        // a pick is checked against the board it was made on, so a pick that slid onto another card is dropped
+        const board = Bun.file(join(outDir, "town.md"))
+        const options = (await board.exists()) ? boardOptions(await board.text()) : undefined
+        if (last) await Bun.write(picksFile(outDir), JSON.stringify(mergePicks(await loadPicks(outDir), body, last, options), null, 1))
         await rebuild()
         return new Response("ok")
       }

@@ -9,6 +9,7 @@
     "town": "bun src/cli.ts town",
     "watch": "bun src/cli.ts watch",
     "skin": "bun src/skin.ts",
+    "live": "bun src/live.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
