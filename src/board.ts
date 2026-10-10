@@ -1,5 +1,7 @@
 // Writes the town board: a niceboard source in the Caretaker's voice, the portraits it shows, and the
 // compiled page. One fixed file name, so the picks a reader makes survive every rebuild of the board.
+// The board speaks only as the Caretaker, in the Hamlet's own words (C13): no file, field or save is named on it.
+// Where each figure comes from goes to sources.md beside it (C14).
 import { copyFileSync, existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { homedir } from "node:os"
@@ -13,6 +15,7 @@ export const outDir = join(root, ".local", "town")
 const BOARD = process.env.NICEBOARD ?? join(homedir(), ".claude/skills/Niceboard/Tools/Board.ts")
 const y = (s: string) => JSON.stringify(s) // a JSON string is a valid YAML scalar, quotes and colons included
 const RULE_FOOD = [0, 8, 12, 16] // RULE: food and torches by expedition length
+const HABIT = "(my habit)" // how a RULE number is labelled on the board, in his voice (A2)
 const coin = (n: number) => `${n.toLocaleString("en-US")} gold`
 
 function portrait(h: HeroView): string {
@@ -20,6 +23,13 @@ function portrait(h: HeroView): string {
   const rel = `img/${h.cls}.png`
   if (existsSync(src)) copyFileSync(src, join(outDir, rel))
   return rel
+}
+
+/** "needs blacksmith.weapon a" in the Hamlet's words: "the Blacksmith's weapon work, first tier". */
+const TIER = ["first", "second", "third", "fourth", "fifth", "sixth"]
+export function inWords(need: string): string {
+  return need.replace(/^needs /, "").replace(/\b([a-z_]+)\.([a-z_]+) ([a-z])\b/g, (_m, b: string, tree: string, code: string) =>
+    `the ${b.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}'s ${tree.replace(/_/g, " ")}, ${TIER[code.charCodeAt(0) - 97] ?? code} tier`)
 }
 
 function partyLine(p: Party): string {
@@ -50,14 +60,14 @@ export function questLabel(p: Party): string {
   return [q.dungeonName, `${LENGTH[q.length] ?? q.length} ${q.type}`, q.rewards[0], q.rewards[q.rewards.length - 1]].filter(Boolean).join(", ")
 }
 
-export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: Answers; own?: Party; checks?: Check[] }): string {
+export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: Answers; own?: Party; checks?: Check[] }): { board: string; sources: string } {
   const L: string[] = []
   const picked = (opts.answers.expedition && a.parties.find((p) => questLabel(p) === opts.answers.expedition)) || a.best
   const chosen = opts.own ?? picked
   const gold = t.wallet.gold ?? 0
 
   L.push(`# The *Hamlet*, week ${t.week}`, "")
-  L.push(`You are back, and the estate stands. ${t.heroes.length} names on the roster, ${coin(gold)} in the coffers, ${t.quests_won} of ${t.quests_done} expeditions won. I have read your records; here is what I would do before the coach leaves again. Every number below is from your save or the game's own ledgers, and I say so where it matters.`, "")
+  L.push(`You are back, and the estate stands. ${t.heroes.length} names on the roster, ${coin(gold)} in the coffers, ${t.quests_won} of ${t.quests_done} expeditions won. I have gone through the ledgers and walked the streets; here is what I would do before the coach leaves again. Where a number is only my own habit, I say so.`, "")
   L.push("```board-idea")
   L.push(`headline: ${y(chosen ? `${chosen.quest.dungeonName} next,\nwith ${chosen.seats.map((s) => s.hero.name).join(", ")}.` : "Rest first.\nNo four are fit to go.")}`)
   L.push(`detail: ${y(a.afflicted.length ? `${a.afflicted.map((h) => h.name).join(" and ")} cannot be trusted in the dark until the Abbey or the Tavern has had them.` : "Nobody is afflicted. Spend on the party first, the estate second.")}`)
@@ -68,17 +78,17 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   if (checks.length) {
     const n = (s: string) => checks.filter((c) => c.status === s).length
     L.push("## Did you do what you chose? {wide}", "")
-    L.push(`The picks you sent me this week, against your last save in the Hamlet: ${n("done")} done, ${n("pending")} not yet, ${n("contrary")} otherwise than you chose. The expedition and the party I can only check once you have set out.`, "")
+    L.push(`What you told me this week, and what I have seen with my own eyes since: ${n("done")} done, ${n("pending")} not yet, ${n("contrary")} otherwise than you said. Of the road and who takes it, I will know only once the coach has left.`, "")
     L.push("```board-stickies")
     const kind = { done: "works", pending: "model", contrary: "risk" } as const
     const word = { done: "Done", pending: "Not yet", contrary: "Not as chosen" } as const
-    for (const c of checks) L.push(`- title: ${y(`${word[c.status]}: ${c.question}`)}`, `  kind: ${kind[c.status]}`, `  body: ${y(`You chose ${c.pick}. ${c.seen}.`)}`)
+    for (const c of checks) L.push(`- title: ${y(`${word[c.status]}: ${c.question}`)}`, `  kind: ${kind[c.status]}`, `  body: ${y(`You told me: ${c.pick}. ${c.seen}.`)}`)
     L.push("```", "")
   }
 
   // the estate at a glance
   L.push("## The estate's coffers {wide}", "")
-  L.push("From `persist.estate.json`, `persist.roster.json` and `persist.progression.json`.", "")
+  L.push("What the estate holds tonight, and how many the roster can bear.", "")
   L.push("```board-tally")
   const tally: [number, string, number][] = [
     [gold, "gold", 0], [t.wallet.crest ?? 0, "crests", 0], [t.wallet.bust ?? 0, "busts", 0], [t.wallet.portrait ?? 0, "portraits", 0], [t.wallet.deed ?? 0, "deeds", 0],
@@ -89,7 +99,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
 
   // expedition first: its cards stay numbered 1 and 2 whatever else changes, so a stored pick never drifts onto them
   L.push("## The next expedition {wide}", "")
-  L.push(`Quests from \`persist.quest.json\`. Foes are named only where you have walked and fought them: a monster is named when one of its attacks is in \`persist.game_knowledge.json\` and the dungeon is in your heroes' histories. ${opts.foresight ? "Foresight is on: what I have heard about the rest is marked as such." : "Foresight is off."}`, "")
+  L.push(`The roads the estate can send you down this week. I name only the foes your heroes have fought, in places they have walked; of the rest I say nothing. ${opts.foresight ? "Travellers' tales do reach me, though, and where I repeat one I say so." : ""}`.trim(), "")
   if (a.parties.length) {
     L.push("```board-decisions")
     L.push(`- q: "Which expedition next?"`, `  context: ${y(`Your heroes able to go now (under ${RULE.sendBelow} stress, not afflicted, not ill, not in a building): ${a.ready.map((h) => h.name).join(", ")}.`)}`, "  options:")
@@ -106,8 +116,8 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
       L.push(`- q: ${y(`Take this party to the ${chosen.quest.dungeonName}?`)}`)
       L.push(`  context: ${y(`${opts.own ? "The four you named, seated as you gave them. " : ""}Front to back: ${chosen.seats.map((s) => `${s.rank}. ${s.hero.name} (${s.hero.clsName}, ${s.hero.stress} stress)`).join("; ")}. ${chosen.healer ? "A healer is in it." : "No healer in it."} ${chosen.stunner ? "So is a stun." : "No stun."}`)}`, "  options:")
       L.push(`    - pick: "Yes, this four"`, `      effect: ${y("Embark with them in this order; each one's equipped skills reach from their rank.")}`)
-      L.push(`    - pick: "No, I choose my own"`, `      effect: ${y("Name your four, front to back, in this card's note and send it; I check their ranks and stress on the next board.")}`)
-      L.push(`  lean: 0`, `  lean_why: ${y("best ranks and quirks among those fit to go, by my reckoning from the class files.")}`)
+      L.push(`    - pick: "No, I choose my own"`, `      effect: ${y("Write your four in the note below, front to back, and send them to me; I will look them over before the coach leaves.")}`)
+      L.push(`  lean: 0`, `  lean_why: ${y("of those fit to go, they stand best where I would place them, by my reckoning of what each can do from there.")}`)
     }
     L.push("```", "")
   }
@@ -123,7 +133,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
 
   // relief
   L.push("## Who rests, who prays {wide}", "")
-  L.push(`Stress from \`persist.roster.json\`; what each place costs and relieves from \`campaign/town/buildings/\`, at the level your upgrades have reached; which places a hero refuses from their quirks. My rule: anyone at ${RULE.restAbove} or more rests before going out again.`, "")
+  L.push(`The ones the dark has worn down, where the Abbey and the Tavern can take them as the estate has built them up, and the places their own habits forbid them. My habit: anyone at ${RULE.restAbove} stress or more rests before going out again.`, "")
   const cards: string[] = []
   for (const r of a.relief) {
     if (!r.options.length) continue
@@ -147,7 +157,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     if (gets) beds--
     const ill = h.quirks.filter((q) => q.disease).map((q) => q.name).join(", ")
     cards.push(`- q: ${y(`Treat ${h.name}'s ${ill}?`)}`, `  image: ${y(portrait(h))}`)
-    cards.push(`  context: ${y(`${h.name}, ${h.clsName} level ${h.level}, carries ${ill}. The Medical Ward has ${ward.slots} bed${ward.slots === 1 ? "" : "s"} at your upgrades, ${ward.slots - ward.used} free this week, for ${a.disease.length} ill.`)}`, "  options:")
+    cards.push(`  context: ${y(`${h.name}, ${h.clsName} level ${h.level}, carries ${ill}. The Medical Ward has ${ward.slots} bed${ward.slots === 1 ? "" : "s"} as the Sanitarium stands, ${ward.slots - ward.used} free this week, for ${a.disease.length} ill.`)}`, "  options:")
     cards.push(`    - pick: "Medical Ward"`, `      effect: ${y(`${coin(ward.cost)}; the disease is treated before the next expedition.`)}`)
     cards.push(`    - pick: "Not this week"`, `      effect: ${y("The disease stays; keep them out of the party.")}`)
     const lean = gets && h.level >= 1 ? 0 : 1
@@ -166,20 +176,20 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     const q = chosen.quest
     const len = Math.max(1, Math.min(3, q.length))
     L.push("## Provisions for the road {wide}", "")
-    L.push(`What to buy at the Provisioner for the ${q.dungeonName}. Counts marked RULE are my habit for a ${LENGTH[len]?.toLowerCase()} expedition, not the game's numbers; the bandage and antivenom lines come only from foes you know there and attacks you have already suffered.`, "")
+    L.push(`What to buy at the Provisioner for the ${q.dungeonName}. The counts are my habit for a ${LENGTH[len]?.toLowerCase()} expedition, nothing more; I ask for bandages and antivenom only where foes you know there have already bled or poisoned you.`, "")
     L.push("```board-stickies")
-    L.push(`- title: ${y(`Food: ${RULE_FOOD[len]} (RULE)`)}`, "  kind: works", `  body: ${y(t.supply.provision ?? "")}`)
-    L.push(`- title: ${y(`Torches: ${RULE_FOOD[len]} (RULE)`)}`, "  kind: works", `  body: ${y(t.supply.torch ?? "")}`)
-    L.push(`- title: ${y(`Shovels: ${len} (RULE)`)}`, "  kind: works", `  body: ${y(t.supply.shovel ?? "")}`)
-    if (q.bleeders.length) L.push(`- title: ${y(`Bandages: ${len + 1} (RULE)`)}`, "  kind: model", `  body: ${y(`${t.supply.bandage ?? ""} Foes you know there whose attacks have bled you: ${q.bleeders.join(", ")}.`)}`)
-    if (q.blighters.length) L.push(`- title: ${y(`Antivenom: ${len + 1} (RULE)`)}`, "  kind: model", `  body: ${y(`${t.supply.antivenom ?? ""} Foes you know there whose attacks have blighted you: ${q.blighters.join(", ")}.`)}`)
+    L.push(`- title: ${y(`Food: ${RULE_FOOD[len]} ${HABIT}`)}`, "  kind: works", `  body: ${y(t.supply.provision ?? "")}`)
+    L.push(`- title: ${y(`Torches: ${RULE_FOOD[len]} ${HABIT}`)}`, "  kind: works", `  body: ${y(t.supply.torch ?? "")}`)
+    L.push(`- title: ${y(`Shovels: ${len} ${HABIT}`)}`, "  kind: works", `  body: ${y(t.supply.shovel ?? "")}`)
+    if (q.bleeders.length) L.push(`- title: ${y(`Bandages: ${len + 1} ${HABIT}`)}`, "  kind: model", `  body: ${y(`${t.supply.bandage ?? ""} Foes you know there whose attacks have bled you: ${q.bleeders.join(", ")}.`)}`)
+    if (q.blighters.length) L.push(`- title: ${y(`Antivenom: ${len + 1} ${HABIT}`)}`, "  kind: model", `  body: ${y(`${t.supply.antivenom ?? ""} Foes you know there whose attacks have blighted you: ${q.blighters.join(", ")}.`)}`)
     if (q.length >= 2) L.push(`- title: ${y("Firewood comes with a medium or long expedition")}`, "  kind: idea", `  body: ${y(t.supply.firewood ?? "")}`)
     L.push("```", "")
   }
 
   // guild and blacksmith
   L.push("## The Guild and the Blacksmith {wide}", "")
-  L.push(`Next tier of each tree, from \`upgrades/heroes/<class>.upgrades.json\`, with the Guild's discount of ${Math.round(t.skillDiscount * 100)}% and the Blacksmith's of ${Math.round(t.gearDiscount * 100)}% (each bought cost upgrade takes its listed share off, summed). Only the party's heroes are listed.`, "")
+  L.push(`What the trainers and the smith can teach the party next, and at what price: the Guild knocks ${Math.round(t.skillDiscount * 100)}% off its lessons and the Blacksmith ${Math.round(t.gearDiscount * 100)}% off his work, for what the estate has already paid them.`, "")
   if (a.buys.length) {
     L.push("```board-decisions")
     L.push(`- q: "What do we train first?"`, `  context: ${y(`You have ${coin(gold)}. These are the party's upgrades you can afford now, cheapest first.`)}`, "  options:")
@@ -193,13 +203,13 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     L.push("```board-stickies")
     const byNeed = new Map<string, string[]>()
     for (const u of a.blocked) { const k = u.blockedBy; byNeed.set(k, [...(byNeed.get(k) ?? []), `${u.hero} ${u.label}`]) }
-    for (const [need, what] of byNeed) L.push(`- title: ${y(`Waiting: ${need.replace("needs ", "")}`)}`, "  kind: model", `  body: ${y(`${what.join(", ")}. Buy that building upgrade first, with heirlooms.`)}`)
+    for (const [need, what] of byNeed) L.push(`- title: ${y(`Waiting on ${inWords(need)}`)}`, "  kind: model", `  body: ${y(`${what.join(", ")}. Buy that building upgrade first, with heirlooms.`)}`)
     L.push("```", "")
   }
 
   // roster
   L.push("## Who stays, who goes {wide}", "")
-  L.push(`Roster ${t.rosterSize} of ${t.rosterCap} (the Stage Coach's size at your upgrades). My rule: a level 0 hero with ${RULE.dismissNegatives} or more bad quirks, outside the party, is worth letting go. Recruits are the Stage Coach's current offer in \`persist.town.json\`.`, "")
+  L.push(`${t.rosterSize} names on the roster, room for ${t.rosterCap} as the Stage Coach stands. My habit: a hero still at level 0 with ${RULE.dismissNegatives} or more bad quirks, outside the party, is worth letting go. The coach has brought these.`, "")
   const rcards: string[] = []
   for (const d of a.dismiss) {
     rcards.push(`- q: ${y(`Dismiss ${d.hero.name}?`)}`, `  image: ${y(portrait(d.hero))}`, `  context: ${y(`${d.hero.clsName}, ${d.why}.`)}`, "  options:")
@@ -217,7 +227,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   // heirlooms and trinkets
   if (a.heirlooms.length || a.trinkets.length) {
     L.push("## Heirlooms and trinkets {wide}", "")
-    L.push("Building upgrades you can afford with what the estate holds, from `upgrades/building/`; trinkets from the estate's stores with who may wear them, from `trinkets/base.entries.trinkets.json`.", "")
+    L.push("What the family's heirlooms could build tonight, and the trinkets in the estate's stores with who may wear them.", "")
     if (a.heirlooms.length) {
       L.push("```board-decisions")
       L.push(`- q: "Where do the heirlooms go?"`, `  context: ${y(`The estate holds ${t.wallet.crest ?? 0} crests, ${t.wallet.bust ?? 0} busts, ${t.wallet.portrait ?? 0} portraits, ${t.wallet.deed ?? 0} deeds.`)}`, "  options:")
@@ -256,15 +266,14 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   for (const u of a.heirlooms) rows.push([u.cost.map((c) => `${c.amount} ${c.type}`).join(", "), u.label, `\`upgrades/building/${u.tree.split(".")[0]}.upgrades.json\` ${u.tree} code ${u.code}`])
   for (const p of a.parties) rows.push([p.quest.rewards.filter((r) => /^\d/.test(r)).join(", "), `${questLabel(p)}, rewards`, "`persist.quest.json` completion_reward"])
   rows.push([`${t.witnessedSkills}`, "enemy attacks witnessed", "`persist.game_knowledge.json` combat_skills"])
-  L.push("## Where each figure comes from {wide}", "")
-  L.push("Every number on this page, beside the field or file it was read from. Numbers marked RULE above are my own habits and are not in this table.", "")
-  L.push("| Figure | What | Read from |", "|---|---|---|")
-  for (const [n, what, from] of rows) L.push(`| ${n} | ${what.replace(/\|/g, "/")} | ${from} |`)
-  L.push("")
+  L.push("## How I keep the accounts {wide}", "")
+  L.push(`My habits, so you can weigh them: rest at ${RULE.restAbove} stress, send only under ${RULE.sendBelow}, let go of level 0 heroes with ${RULE.dismissNegatives} or more bad quirks. Your heroes have suffered ${t.witnessedSkills} kinds of blow so far, in ${t.visited.length ? t.visited.length + " of the places beyond the Hamlet" : "no place yet"}. Everything else on this page is what the estate's ledgers and my own eyes tell me.`, "")
 
-  L.push("## How I read your estate {wide}", "")
-  L.push(`Save copied from your Steam profile to \`.dd-runtime/profile/\` and decoded there; your files are never written. Game data read from the install. ${t.witnessedSkills} enemy attacks witnessed, dungeons walked: ${t.visited.join(", ") || "none"}. Rules of mine on this page: rest at ${RULE.restAbove} stress, send under ${RULE.sendBelow}, let go of level 0 heroes with ${RULE.dismissNegatives}+ bad quirks.`, "")
-  return L.join("\n")
+  const S: string[] = [`# Where each figure comes from, week ${t.week}`, "", "Every number on the town board beside the save field or game file it was read from (C14). Numbers labelled (my habit) on the board are RULE values and are not here.", ""]
+  S.push("| Figure | What | Read from |", "|---|---|---|")
+  for (const [n, what, from] of rows) S.push(`| ${n} | ${what.replace(/\|/g, "/")} | ${from} |`)
+  S.push("", `Save copied from your Steam profile to \`.dd-runtime/profile/\` and decoded there; your files are never written. Game data read from the install. ${t.witnessedSkills} enemy attacks witnessed, dungeons walked: ${t.visited.join(", ") || "none"}. Rules of mine on this page: rest at ${RULE.restAbove} stress, send under ${RULE.sendBelow}, let go of level 0 heroes with ${RULE.dismissNegatives}+ bad quirks.`, "")
+  return { board: L.join("\n"), sources: S.join("\n") }
 }
 
 export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): Promise<string> {
@@ -280,9 +289,10 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
     if (heroes.length === 4) own = await seatParty(heroes, quest)
   }
   const checks = reconcile(await loadPicks(outDir), t)
-  const md = source(t, a, { foresight: !!opts.foresight, answers, own, checks })
+  const { board, sources } = source(t, a, { foresight: !!opts.foresight, answers, own, checks })
   const src = join(outDir, "town.md")
-  await Bun.write(src, md)
+  await Bun.write(src, board)
+  await Bun.write(join(outDir, "sources.md"), sources)
   await buildSkin()
   const out = join(outDir, "town.html")
   const proc = Bun.spawnSync(["bun", BOARD, src, "--no-sketch", "--out", out], { stdout: "pipe", stderr: "pipe" })

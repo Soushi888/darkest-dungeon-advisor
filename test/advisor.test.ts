@@ -194,4 +194,16 @@ describe.skipIf(!has)("on the local save", () => {
       rmSync(join(out, "answers-log.md"), { force: true })
     }
   }, 30_000)
+
+  test("C13: the board speaks in the Caretaker's voice: no save, file, field or tool is named on it", async () => {
+    const dir = copyProfile()
+    const proc = Bun.spawnSync(["bun", "src/cli.ts", "town"], { cwd: root, env: { ...process.env, DD_PROFILE: dir } })
+    expect(proc.exitCode).toBe(0)
+    // what a reader sees: the board's markdown without its block fences
+    const md = (await Bun.file(join(root, ".local", "town", "town.md")).text()).replace(/^```.*$/gm, "").replace(/^\s*image: .*$/gm, "")
+    const meta = [/persist/i, /\.json/, /`/, /\bRULE\b/, /\bfiles?\b/i, /\bsav(e|ed|es)\b(?! them)/i, /\bboard\b/i, /\bgame\b/i, /\bsteam\b/i, /\bcode\b/i, /\b[a-z_]+\.[a-z_]+\b/]
+    expect(meta.flatMap((re) => md.match(new RegExp(`.{0,30}${re.source}.{0,10}`, re.flags)) ?? [])).toEqual([])
+    // the sources still exist, off the board (C14)
+    expect(await Bun.file(join(root, ".local", "town", "sources.md")).text()).toContain("`persist.estate.json` wallet")
+  })
 })

@@ -27,7 +27,7 @@ bun run watch --foresight   # experimental: the Caretaker hints at what you have
 bun test               # the claims of ISA.md, run against a copy of your save
 ```
 
-What the Caretaker will not do: name a foe you have not fought in a dungeon you have walked, speak of a dungeon you have never entered, or reveal curio interactions (your save keeps no record of the ones you know). His own rules of thumb (rest at 45 stress, food and torches by length) are labelled RULE on the page; every other number is read from your save or from the game's files.
+What the Caretaker will not do: name a foe you have not fought in a dungeon you have walked, speak of a dungeon you have never entered, or reveal curio interactions (your save keeps no record of the ones you know). His own rules of thumb (rest at 45 stress, food and torches by length) are labelled "my habit" on the page; every other number is read from your save or from the game's files.
 
 ## Status
 
@@ -42,7 +42,8 @@ src/read.ts     copies the profile into .dd-runtime/ and decodes it
 src/game.ts     the game's own data: quirks, class skills by rank, upgrade trees, buildings, monsters, English names
 src/town.ts     the Hamlet as the save describes it, and the knowledge boundary
 src/advise.ts   the Caretaker's reading: relief, party, roster, purchases
-src/board.ts    the board source in his voice, compiled with the Niceboard compiler and the skin
+src/reconcile.ts the week's picks against the next Hamlet save: done, not yet, not as chosen
+src/board.ts    the board source in his voice, compiled with the Niceboard compiler and the skin; sources.md beside it
 src/cli.ts      town, watch, and the answers endpoint
 ```
 

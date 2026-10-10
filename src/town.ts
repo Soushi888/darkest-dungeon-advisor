@@ -36,6 +36,11 @@ async function supplies(): Promise<Record<string, string>> {
   return out
 }
 
+// building upgrade trees in the Hamlet's words; the activity trees (abbey.meditation...) are named by their activity
+const TREE_WORDS: Record<string, string> = {
+  cost: "lower prices", disease_quirk_cost: "cheaper cures for disease", slots: "more beds", weapon: "better weapons", armour: "better armour",
+  skill_levels: "higher teachings", numrecruits: "more recruits each week", rostersize: "a larger roster", upgraded_recruits: "seasoned recruits", numitems: "more wares",
+}
 const LENGTH = ["", "Short", "Medium", "Long"]
 const DIFFICULTY: Record<number, string> = { 1: "Apprentice", 3: "Veteran", 5: "Champion", 6: "Darkest" }
 
@@ -208,7 +213,9 @@ export async function town(save: Save): Promise<Town> {
       const next = reqs.find((r) => !bought.has(`${id}:${r.code}`))
       if (!next) continue
       const affordable = next.cost.every((c) => c.amount <= (wallet[c.type] ?? 0))
-      buildingUpgrades.push({ tree: id, label: `${await nameOf("building", b)}: ${id.split(".")[1]!.replace(/_/g, " ")}`, code: next.code, cost: next.cost.filter((c) => c.amount > 0), affordable, blockedBy: "" })
+      const part = id.split(".")[1]!
+      const what = TREE_WORDS[part] ?? `${await nameOf("activity", part)}, improved`
+      buildingUpgrades.push({ tree: id, label: `${await nameOf("building", b)}: ${what}`, code: next.code, cost: next.cost.filter((c) => c.amount > 0), affordable, blockedBy: "" })
     }
   }
 
