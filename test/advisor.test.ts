@@ -401,4 +401,28 @@ describe.skipIf(!has)("on the local save", () => {
     check({ ...t, rosterCap: t.rosterSize })
     check({ ...t, rosterCap: t.rosterSize + 1 })
   })
+
+  test("C18: a stored pick follows its question when cards come or go between builds", async () => {
+    const dir = copyProfile()
+    const port = 4393
+    const w = Bun.spawn(["bun", "src/cli.ts", "watch", `--port=${port}`], { cwd: root, env: { ...process.env, DD_PROFILE: dir }, stdout: "pipe" })
+    try {
+      let html = ""
+      for (let i = 0; i < 40; i++) { try { html = await (await fetch(`http://127.0.0.1:${port}/`)).text(); if (html.includes("ddCards")) break } catch {} await Bun.sleep(250) }
+      const script = html.match(/<head><script>([\s\S]*?)<\/script>/)![1]!
+      const cards = JSON.parse(script.match(/C=(\[[\s\S]*?\]),st=/)![1]!) as { q: string; o: string[] }[]
+      expect(cards.length).toBeGreaterThan(2)
+      // the last build had one more card at the front: every stored number is one too high for this build
+      const store = new Map<string, string>()
+      const ls = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) }
+      const key = "brainstorm:town.html:v1"
+      store.set("ddCards", JSON.stringify(["A card that is gone", ...cards.map((c) => c.q)]))
+      store.set(key, JSON.stringify({ dec: { "3": { pick: cards[1]!.o[0] }, "4": { pick: "not an option here", note: "kept" } } }))
+      new Function("localStorage", script)(ls)
+      const dec = JSON.parse(store.get(key)!).dec
+      expect(dec["2"]).toEqual({ pick: cards[1]!.o[0] }) // followed its question from card 3 to card 2
+      expect(dec["3"]).toEqual({ note: "kept" }) // a pick that is not an option is dropped, its note kept
+      expect(JSON.parse(store.get("ddCards")!)).toEqual(cards.map((c) => c.q))
+    } finally { w.kill() }
+  }, 30_000)
 })

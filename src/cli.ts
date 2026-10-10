@@ -89,7 +89,14 @@ if (cmd === "town") {
         const log = join(outDir, "answers-log.md")
         const sent = existsSync(log) ? String(statSync(log).mtimeMs) : "none"
         const forget = `<script>(()=>{try{const K=(window.BRAINSTORM_KEY||'brainstorm')+':v1';if(localStorage.getItem('ddSent')!==${JSON.stringify(sent)}){const had=localStorage.getItem(K);localStorage.removeItem(K);localStorage.setItem('ddSent',${JSON.stringify(sent)});if(had)location.reload()}}catch{}})()</script>`
-        return new Response(html.replace("</body>", `${forget}${reload}</body>`), { headers: { "content-type": "text/html; charset=utf-8" } })
+        // C18: the board stores each pick under its card's number, so a card that comes or goes between builds slid picks onto
+        // the wrong card (three times on 2026-10-10). Before the board's script reads them, re-key the stored picks by question
+        // text against this build's cards, keeping a pick only where it is still one of its card's options.
+        const md = Bun.file(join(outDir, "town.md"))
+        const cards = (await md.exists()) ? [...boardOptions(await md.text())].map(([q, o]) => ({ q, o })) : []
+        const key = (html.match(/window\.BRAINSTORM_KEY=("(?:[^"\\]|\\.)*")/)?.[1]) ?? '"brainstorm"'
+        const rekey = `<script>(()=>{try{const K=${key}+':v1',C=${JSON.stringify(cards).replaceAll("<", "\\u003c")},st=JSON.parse(localStorage.getItem(K)||'{}'),was=JSON.parse(localStorage.getItem('ddCards')||'null');if(st.dec&&was){const byQ={};for(const[id,v]of Object.entries(st.dec)){const q=was[Number(id)-1];if(q)byQ[q]=v}const dec={};C.forEach((c,i)=>{const v=byQ[c.q];if(!v)return;const keep={};if(v.pick&&c.o.includes(v.pick))keep.pick=v.pick;if(v.note)keep.note=v.note;if(keep.pick||keep.note)dec[String(i+1)]=keep});st.dec=dec;localStorage.setItem(K,JSON.stringify(st))}localStorage.setItem('ddCards',JSON.stringify(C.map(c=>c.q)))}catch{}})()</script>`
+        return new Response(html.replace("<head>", `<head>${rekey}`).replace("</body>", `${forget}${reload}</body>`), { headers: { "content-type": "text/html; charset=utf-8" } })
       }
       const f = Bun.file(join(outDir, path.replace(/^\/+/, "")))
       return (await f.exists()) ? new Response(f) : new Response("not found", { status: 404 })
