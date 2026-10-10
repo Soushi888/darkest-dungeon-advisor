@@ -73,6 +73,16 @@ html .sticky.add{border:1px dashed var(--gold-dim);background:transparent;color:
 html .sticky.mine{box-shadow:0 4px 10px rgba(0,0,0,.6)}
 html .sticky.mine .rm{color:var(--ink)}
 
+/* the source ledger: one cell wraps, the table scrolls inside its zone rather than the page */
+html .zone .md table{display:block;max-width:100%;overflow-x:auto}
+html .zone .md td code{overflow-wrap:anywhere;white-space:normal}
+html .zone .md td{border-bottom:1px solid var(--line)}
+
+/* a tally of coins has no bar to fill */
+html .tally .bar2:has(> span[style*="width:0%"]){display:none}
+html .tally>div{border:1px solid var(--line);border-radius:0;background:#0d0b0a}
+html .tally .big{font-family:var(--title);color:#e8d6a8}
+
 /* figures: framed like the journal's plates */
 html .figwrap{border:1px solid var(--line);border-radius:0;background:#0d0b0a;box-shadow:inset 0 0 0 1px #000}
 html .figwrap figcaption{font-family:var(--title);font-size:1.1rem;color:var(--dim)}

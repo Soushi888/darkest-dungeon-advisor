@@ -1,0 +1,79 @@
+// bun run town     build the town board once from the newest save
+// bun run watch    keep it live: every save made in the Hamlet rebuilds it; during an expedition it waits (C16)
+// flags: --foresight (experimental, C7), --port=<n> for watch (default 4317)
+import { watch as fsWatch } from "node:fs"
+import { join } from "node:path"
+import { buildBoard, outDir } from "./board.ts"
+import { profileDir } from "./paths.ts"
+import { readSave } from "./read.ts"
+import { town } from "./town.ts"
+
+const args = process.argv.slice(2)
+const cmd = args[0] ?? "town"
+const foresight = args.includes("--foresight")
+const port = Number(args.find((a) => a.startsWith("--port="))?.split("=")[1] ?? 4317)
+
+/** Returns the board path, or null when the party is out (C8: refused in character). */
+async function once(): Promise<string | null> {
+  const t = await town(await readSave())
+  if (t.inRaid) {
+    console.log(`The Caretaker: "You are not back yet. I will be at the gate when you return from the ${t.raidDungeon}."`)
+    return null
+  }
+  const out = await buildBoard(t, { foresight })
+  console.log(`week ${t.week}: ${out}`)
+  return out
+}
+
+if (cmd === "town") {
+  await once()
+} else if (cmd === "watch") {
+  let version = 0
+  // one rebuild at a time; a save or an answer arriving mid-build queues exactly one more
+  let running: Promise<void> | undefined, again = false
+  const rebuild = async (): Promise<void> => {
+    if (running) { again = true; return running }
+    running = (async () => {
+      do {
+        again = false
+        try { if (await once()) version++ } catch (e) { console.error((e as Error).message) }
+      } while (again)
+      running = undefined
+    })()
+    return running
+  }
+  await rebuild()
+  // the game writes several persist files per save; one rebuild per burst
+  let timer: ReturnType<typeof setTimeout> | undefined
+  fsWatch(profileDir(), (_e, f) => {
+    if (!f?.startsWith("persist.")) return
+    clearTimeout(timer)
+    timer = setTimeout(() => void rebuild(), 1500)
+  })
+  // the served page reloads when the board changes, and can send its answers back to the Caretaker
+  const reload = `<button id="toCaretaker" class="btn">Send to the Caretaker</button><script>(()=>{let v=null;setInterval(async()=>{try{const r=await fetch('/version');const n=await r.text();if(v!==null&&n!==v)location.reload();v=n}catch{}},2000);const b=document.getElementById('toCaretaker');b.onclick=async()=>{b.textContent='Sent…';await fetch('/answers',{method:'POST',body:window.brainstormAnswers()});b.textContent='The Caretaker has your answers'}})()</script>`
+  Bun.serve({
+    port, hostname: "127.0.0.1",
+    async fetch(req) {
+      const path = new URL(req.url).pathname
+      if (path === "/version") return new Response(String(version))
+      if (path === "/answers" && req.method === "POST") {
+        const body = await req.text()
+        await Bun.write(join(outDir, "answers.md"), body)
+        const log = Bun.file(join(outDir, "answers-log.md"))
+        await Bun.write(log, `${(await log.exists()) ? await log.text() : ""}\n\n<!-- ${new Date().toISOString()} -->\n${body}`)
+        await rebuild()
+        return new Response("ok")
+      }
+      if (path === "/" || path === "/town.html") {
+        const html = await Bun.file(join(outDir, "town.html")).text()
+        return new Response(html.replace("</body>", `${reload}</body>`), { headers: { "content-type": "text/html; charset=utf-8" } })
+      }
+      const f = Bun.file(join(outDir, path.replace(/^\/+/, "")))
+      return (await f.exists()) ? new Response(f) : new Response("not found", { status: 404 })
+    },
+  })
+  console.log(`The town board: http://127.0.0.1:${port}/  (watching ${profileDir()})`)
+} else {
+  console.log("usage: bun run town | bun run watch [--foresight] [--port=4317]")
+}
