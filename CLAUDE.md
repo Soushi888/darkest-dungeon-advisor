@@ -74,6 +74,6 @@ When Soushi plays with the board open, watch the session yourself; he should nev
 
 - **On SAVE town:** the board has rebuilt. Read its "Did you do what you chose?" zone and name anything Not as chosen.
 
-- **On SAVE dungeon:** the board waits (C16). Say nothing unless asked.
+- **On SAVE dungeon:** the board has turned into the farewell (C24), once per expedition, and then waits (C16). Read `.local/town/town.md` and give him its verdict and its warnings in two or three lines, then say nothing until he is back unless asked.
 
 - **Keep the live board on current code.** Changes land on `main`; after each one, restart the watcher (`pkill -f "src/cli.ts watch$"`, then `nohup bun src/cli.ts watch > .dd-runtime/watch.log 2>&1 &`) and check `.dd-runtime/watch.log` prints a new `week N` line. Tests build in `.dd-runtime/test-town` (`DD_TOWN_OUT`) and never touch the live board; preview a change with `DD_TOWN_OUT=.dd-runtime/preview bun src/cli.ts town`.

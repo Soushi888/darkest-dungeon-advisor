@@ -3,7 +3,7 @@
 // flags: --foresight (experimental, C7), --port=<n> for watch (default 4317)
 import { watch as fsWatch } from "node:fs"
 import { join } from "node:path"
-import { buildBoard, outDir } from "./board.ts"
+import { buildBoard, buildFarewell, outDir } from "./board.ts"
 import { profileDir } from "./paths.ts"
 import { readSave } from "./read.ts"
 import { town, type Town } from "./town.ts"
@@ -20,6 +20,14 @@ async function once(): Promise<string | null> {
   const t = await town(await readSave())
   last = t
   if (t.inRaid) {
+    // one farewell per expedition, on its first save (C24); after that the board waits for the return (C16)
+    const keyFile = Bun.file(join(outDir, "farewell.key"))
+    if (t.raid && (!(await keyFile.exists()) || (await keyFile.text()) !== t.raid.key)) {
+      const out = await buildFarewell(t)
+      await Bun.write(join(outDir, "farewell.key"), t.raid.key)
+      console.log(`farewell, week ${t.week}: ${out}`)
+      return out
+    }
     console.log(`The Caretaker: "You are not back yet. I will be at the gate when you return from the ${t.raidDungeon}."`)
     return null
   }

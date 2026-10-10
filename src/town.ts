@@ -29,7 +29,10 @@ export interface Town {
   bought: Set<string>
   supply: Record<string, string>
   event?: TownEvent
+  raid?: Raid
 }
+/** The expedition under way: a key that names it (one farewell per expedition), its quest, the party front to back, what it carries. */
+export interface Raid { key: string; quest: Quest; party: number[]; carried: Record<string, number> }
 /** This week's town event, as the game rolled it: its own title and text, and what it changes, in the game's own effect lines. */
 export interface TownEvent { id: string; title: string; description: string; lines: string[]; provisions: { item: string; cost: number; amount: number }[] }
 
@@ -186,10 +189,10 @@ export async function town(save: Save): Promise<Town> {
     if (m && m.skills.some((s) => known.has(s))) knownVariants.add(v)
   }
 
+  const g0 = save.game as any
   const quests: Quest[] = []
   let idx = 0
-  for (const q of Object.values<any>((save.quest as any)?.quests ?? {})) {
-    idx++
+  const view = async (q: any, idx: number): Promise<Quest> => {
     const variants = await dungeonMonsters(q.dungeon, q.difficulty, ["hall", "room"])
     const seen = new Map<string, string>(), types = new Set<string>(), bleeders = new Set<string>(), blighters = new Set<string>()
     const unknown = new Set<string>(), unknownTypes = new Set<string>()
@@ -213,10 +216,20 @@ export async function town(save: Save): Promise<Town> {
       else if (it.type === "heirloom") rewards.push(`${it.amount} ${it.id}${it.amount > 1 ? "s" : ""}`)
       else if (it.type === "trinket") rewards.push(await nameOf("trinket", it.id))
     }
-    quests.push({
+    return {
       unknownTypes: [...unknownTypes], bleeders: [...bleeders], blighters: [...blighters], walked: visited.has(q.dungeon), idx, dungeon: q.dungeon, dungeonName: await nameOf("dungeon", q.dungeon), type: q.type, difficulty: q.difficulty,
       length: q.length, plot: !!q.is_plot_quest, rewards, known: [...new Set(seen.values())], unknownCount: unknown.size, types: [...types],
-    })
+    }
+  }
+  for (const q of Object.values<any>((save.quest as any)?.quests ?? {})) quests.push(await view(q, ++idx))
+
+  // the expedition under way (persist.raid.json, written once the party has left): where, who front to back, what they carry
+  let raid: Raid | undefined
+  const ri = (save.raid as any)?.raid_instance, rp = (save.raid as any)?.party
+  if (g0?.inraid && ri && rp) {
+    const carried: Record<string, number> = {}
+    for (const it of Object.values<any>(rp.inventory?.items ?? {})) { const k = it.type === "provision" ? "provision" : it.id || it.type; carried[k] = (carried[k] ?? 0) + (it.amount ?? 0) }
+    raid = { key: `${ri.id}:${(save.raid as any).start_elapsed_time ?? ""}`, quest: await view(ri, 0), party: (rp.heroes ?? []).filter((x: unknown) => typeof x === "number"), carried }
   }
 
   // Guild and Blacksmith discounts: each "cost" upgrade bought takes its listed percent off, summed
@@ -269,7 +282,7 @@ export async function town(save: Save): Promise<Town> {
     estateTrinkets.push({ id: t.id, name: await nameOf("trinket", t.id), classes: lib.get(t.id)?.classes ?? [] })
   }
 
-  const g = save.game as any, prog = save.progression as any
+  const g = g0, prog = save.progression as any
   return {
     week: (save.campaign_log as any)?.total_weeks ?? 0, inRaid: !!g?.inraid, raidDungeon: typeof g?.raiddungeon === "string" ? g.raiddungeon : "",
     estate: g?.estatename ?? "", wallet, heroes, fallen, recruits, rosterSize: heroes.length, rosterCap,
@@ -277,7 +290,7 @@ export async function town(save: Save): Promise<Town> {
     quests_done: prog?.total_quests_finished ?? 0, quests_won: prog?.total_successful_quests_finished ?? 0,
     lastQuest: typeof prog?.last_quest_played_id === "string" ? prog.last_quest_played_id : "", lastWon: !!prog?.last_raid_success,
     skillDiscount, gearDiscount, visited: [...visited], knownVariants: [...knownVariants],
-    heroUpgrades, buildingUpgrades, estateTrinkets, bought, supply: await supplies(), event,
+    heroUpgrades, buildingUpgrades, estateTrinkets, bought, supply: await supplies(), event, raid,
   }
 }
 

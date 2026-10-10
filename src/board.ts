@@ -347,6 +347,13 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
   }
   const checks = reconcile(await loadPicks(outDir), t)
   const { board, sources } = source(t, a, { foresight: !!opts.foresight, answers, own, checks, prices: await supplyPrices() })
+  // what the Caretaker proposed this week, for the farewell to judge the departure against (C24)
+  const chosen = own ?? ((answers.expedition && a.parties.find((p) => questLabel(p) === answers.expedition)) || a.best)
+  if (chosen) await Bun.write(join(outDir, "proposal.json"), JSON.stringify({ week: t.week, dungeon: chosen.quest.dungeon, length: chosen.quest.length, type: chosen.quest.type, label: questLabel(chosen), party: chosen.seats.map((x) => x.hero.guid), own: !!own }, null, 1))
+  return compile(board, sources)
+}
+
+async function compile(board: string, sources: string): Promise<string> {
   const src = join(outDir, "town.md")
   await Bun.write(src, board)
   await Bun.write(join(outDir, "sources.md"), sources)
@@ -355,4 +362,94 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
   const proc = Bun.spawnSync(["bun", BOARD, src, "--no-sketch", "--out", out], { stdout: "pipe", stderr: "pipe" })
   if (proc.exitCode !== 0) throw new Error(`board build failed: ${proc.stderr.toString()}`)
   return out
+}
+
+export interface Proposal { week: number; dungeon: string; length: number; type: string; label: string; party: number[]; own: boolean }
+
+/** The farewell (C24): once the party has left, the board turns into the Caretaker's last word before the dark: how they were
+ *  sent against what he proposed and what was picked, what they carry against his habit, the foes known there, when he would
+ *  turn back, and a send-off. In his voice like the town board (C13); its figures go to sources.md (C14). */
+export function farewellSource(t: Town, r: NonNullable<Town["raid"]>, opts: { proposal?: Proposal; checks: Check[]; prices: Map<string, number> }): { board: string; sources: string } {
+  const q = r.quest, L: string[] = [], rows: [string, string, string][] = []
+  const who = r.party.map((g) => t.heroes.find((h) => h.guid === g)).filter((h): h is HeroView => !!h)
+  const names = who.map((h) => h.name)
+  const p = opts.proposal && opts.proposal.week === t.week ? opts.proposal : undefined
+  const len = Math.max(1, Math.min(3, q.length))
+  L.push(`# The coach has left for the *${q.dungeonName}*`, "")
+  L.push(`The wheels are past the old bridge and the road turns toward the ${q.dungeonName}. Before the sound of them is gone, here is my last word on how you sent them.`, "")
+  const sameFour = !!p && p.party.length === r.party.length && p.party.every((g) => r.party.includes(g))
+  const sameOrder = sameFour && p!.party.every((g, i) => r.party[i] === g)
+  const sameRoad = !!p && p.dungeon === q.dungeon && p.length === q.length
+  const verdict = !p ? "I had no proposal of mine this week to hold them to." : sameRoad && sameOrder ? (p.own ? "The four you named, on the road you chose, in the order you gave them." : "As I would have sent them: the road I proposed, the four I proposed, in the order I placed them.") : `${sameRoad ? "The road I proposed" : "Not the road I proposed"}, ${sameFour ? (sameOrder ? "with the four I proposed in my order" : "with the four I proposed, in another order") : "and not the four I proposed"}.`
+  L.push("```board-idea")
+  L.push(`headline: ${y(`${q.dungeonName}, ${(LENGTH[q.length] ?? "").toLowerCase()} ${q.type},\nwith ${names.join(", ")}.`)}`)
+  L.push(`detail: ${y(verdict)}`)
+  L.push("```", "")
+
+  // how they were sent
+  L.push("## How you sent them {wide}", "")
+  L.push("Who left, front to back, against what I proposed and what you told me.", "")
+  L.push("```board-stickies")
+  who.forEach((h, i) => {
+    // the first save on the road can follow a fight, so this is how they stand now, not how they left
+    const worry = [h.stress >= RULE.sendBelow ? "past the stress I send them at" : "", h.affliction ? `afflicted (${h.affliction})` : "", h.quirks.some((x) => x.disease) ? `ill (${h.quirks.filter((x) => x.disease).map((x) => x.name).join(", ")})` : ""].filter(Boolean)
+    const was = p && p.party[i] !== h.guid ? ` I had placed ${t.heroes.find((x) => x.guid === p.party[i])?.name ?? "another"} here.` : ""
+    L.push(`- title: ${y(`Rank ${i + 1}: ${h.name}, ${h.clsName}`)}`, `  kind: ${worry.length ? "risk" : was ? "model" : "works"}`, `  body: ${y(`Level ${h.level}, ${h.stress} stress.${worry.length ? ` Already ${worry.join(" and ")}; watch them first.` : ""}${was}`)}`)
+    rows.push([`${h.stress}`, `${h.name}'s stress on the road`, `\`persist.roster.json\` heroes.${h.guid}.m_Stress; seat from \`persist.raid.json\` party.heroes`])
+  })
+  const contrary = opts.checks.filter((c) => c.status === "contrary"), pending = opts.checks.filter((c) => c.status === "pending")
+  if (opts.checks.length) L.push(`- title: ${y(`${opts.checks.filter((c) => c.status === "done").length} of ${opts.checks.length} of your other choices done before you left`)}`, `  kind: ${contrary.length ? "risk" : pending.length ? "model" : "works"}`, `  body: ${y([...contrary.map((c) => `Not as chosen: ${c.question} ${c.seen}.`), ...pending.map((c) => `Left undone: ${c.question} ${c.seen}.`)].join(" ") || "Everything you told me is done.")}`)
+  L.push("```", "")
+
+  // what they carry
+  const habit = road(t, { quest: q } as Party, opts.prices)
+  L.push("## What they carry {wide}", "")
+  L.push(`Their packs against what I would carry on a ${LENGTH[len]?.toLowerCase()} road (my habit), and what the coffers kept: ${coin(t.wallet.gold ?? 0)}.`, "")
+  L.push("```board-stickies")
+  for (const i of habit) {
+    const has = r.carried[i.id] ?? 0
+    L.push(`- title: ${y(`${i.label}: ${has} carried, ${i.count} by my habit`)}`, `  kind: ${has >= i.count ? "works" : "risk"}`, `  body: ${y(has >= i.count ? "Enough, by my reckoning." : has === 0 ? `None at all. ${i.id === "bandage" ? "Foes you know there have bled you before." : i.id === "antivenom" ? "Foes you know there have poisoned you before." : "Spend what else they carry with care."}` : `${i.count - has} short of what I would carry. Spend ${i.label.toLowerCase()} only when you must.`)}`)
+    rows.push([`${has}`, `${i.label} carried`, "`persist.raid.json` party.inventory"])
+  }
+  for (const [id, n] of Object.entries(r.carried)) {
+    if (habit.some((i) => i.id === id)) continue
+    L.push(`- title: ${y(`Also in the packs: ${n} ${id.replace(/_/g, " ")}`)}`, "  kind: idea", `  body: ${y(t.supply[id] || "Something for the road.")}`)
+  }
+  L.push("```", "")
+
+  // foes known there
+  L.push(`## What waits in the ${q.dungeonName} {wide}`, "")
+  L.push("Only the foes your heroes have fought where they have walked; of the rest I say nothing.", "")
+  L.push("```board-stickies")
+  if (q.known.length) L.push(`- title: ${y(`Foes you know there: ${q.known.length}`)}`, "  kind: model", `  body: ${y(`${q.known.join(", ")}.${q.unknownCount ? ` And ${q.unknownCount} kind${q.unknownCount === 1 ? "" : "s"} you have not met.` : ""}`)}`)
+  else L.push(`- title: ${y("You have not walked it before")}`, "  kind: risk", `  body: ${y("I will not speak of what lives there. Go carefully.")}`)
+  if (q.bleeders.length) L.push(`- title: ${y(`They bleed you: ${q.bleeders.length}`)}`, `  kind: ${(r.carried.bandage ?? 0) ? "works" : "risk"}`, `  body: ${y(`${q.bleeders.join(", ")}. ${(r.carried.bandage ?? 0) ? `You carry ${r.carried.bandage} bandage${r.carried.bandage === 1 ? "" : "s"}.` : "You carry no bandages."}`)}`)
+  if (q.blighters.length) L.push(`- title: ${y(`They poison you: ${q.blighters.length}`)}`, `  kind: ${(r.carried.antivenom ?? 0) ? "works" : "risk"}`, `  body: ${y(`${q.blighters.join(", ")}. ${(r.carried.antivenom ?? 0) ? `You carry ${r.carried.antivenom} antivenom.` : "You carry no antivenom."}`)}`)
+  L.push("```", "")
+
+  // when to turn back
+  L.push("## When I would turn back {wide}", "")
+  L.push("My habits, nothing more; you are the one in the dark.", "")
+  L.push("```board-stickies")
+  L.push(`- title: ${y(`When ${RULE.turnBackBroken} of the four have broken`)}`, "  kind: gotcha", `  body: ${y("One broken hero can be carried home. Two, and the rest follow them down. Bring them home while you still can.")}`)
+  L.push(`- title: ${y("When the food and the light are both gone")}`, "  kind: gotcha", `  body: ${y("A hungry party in the dark is a party I bury. Whatever is left undone will still be there next week.")}`)
+  L.push("```", "")
+
+  L.push("## Go well {wide}", "")
+  L.push(`Go now. I will keep the gate, and a lamp in the window for ${names.length === 4 ? `all four of them` : "each of them"}. Come back with ${names.join(", ").replace(/, ([^,]*)$/, " and $1")}, and the ledgers will be open when you do.`, "")
+
+  const S = [`# Where each figure comes from, departure in week ${t.week}`, "", "Every number on the farewell beside the save field or game file it was read from (C14). Counts labelled my habit are RULE values.", "", "| Figure | What | Read from |", "|---|---|---|"]
+  for (const i of habit) rows.push([`${i.count}`, `${i.label}, my habit`, "RULE_FOOD in `board.ts`"])
+  rows.push([`${t.wallet.gold ?? 0}`, "gold in the coffers", "`persist.estate.json` wallet"])
+  for (const [n, what, from] of rows) S.push(`| ${n} | ${what} | ${from} |`)
+  return { board: L.join("\n"), sources: S.join("\n") }
+}
+
+/** Builds the farewell board for the expedition under way. */
+export async function buildFarewell(t: Town): Promise<string> {
+  mkdirSync(join(outDir, "img"), { recursive: true })
+  const f = Bun.file(join(outDir, "proposal.json"))
+  const proposal = (await f.exists()) ? ((await f.json()) as Proposal) : undefined
+  const { board, sources } = farewellSource(t, t.raid!, { proposal, checks: reconcile(await loadPicks(outDir), t), prices: await supplyPrices() })
+  return compile(board, sources)
 }

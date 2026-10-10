@@ -8,6 +8,7 @@ export const RULE = {
   restAbove: 45, // RULE: stress at which I want a hero relieved before going out again
   sendBelow: 45, // RULE: I only send heroes below this stress
   dismissNegatives: 3, // RULE: a level 0 hero with this many negative quirks is a candidate to let go
+  turnBackBroken: 2, // RULE: when this many of the four have broken, I bring them home
 }
 
 // quirk ids carry the dungeon they concern; the crypts are "ruins" in quirk names, the warrens "warren"

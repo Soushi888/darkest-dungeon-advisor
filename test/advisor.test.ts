@@ -1,7 +1,7 @@
 // Probes for the ISA's claims, run against a copy of the local profile. Skipped when no profile exists,
 // because a save is personal and is never committed (ISA A4).
 import { describe, expect, test } from "bun:test"
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs"
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { decode } from "../src/dson.ts"
 import { monster, dungeonMonsters, nameOf } from "../src/game.ts"
@@ -22,10 +22,13 @@ const fake = join(root, ".dd-runtime", "test-profile")
 const townOut = join(root, ".dd-runtime", "test-town")
 process.env.DD_TOWN_OUT = townOut
 
+/** A copy of the profile as it reads in the Hamlet, whatever Soushi is doing: an expedition under way is taken out of the copy. */
 function copyProfile(): string {
   rmSync(fake, { recursive: true, force: true })
   mkdirSync(fake, { recursive: true })
-  for (const f of readdirSync(profile)) if (f.startsWith("persist.")) cpSync(join(profile, f), join(fake, f))
+  for (const f of readdirSync(profile)) if (f.startsWith("persist.") && f !== "persist.raid.json") cpSync(join(profile, f), join(fake, f))
+  const p = join(fake, "persist.game.json"), buf = readFileSync(p), at = buf.indexOf("inraid\0")
+  if (at >= 0 && buf[at + 7]) { buf[at + 7] = 0; writeFileSync(p, buf) }
   return fake
 }
 
@@ -290,5 +293,26 @@ describe.skipIf(!has)("on the local save", () => {
     expect(o.get("Dismiss Cioches?")).toEqual(["Dismiss", "Keep"])
     const text = ["- **6. Where do the heirlooms go?** Recruit", "  - Note (refines or overrides the pick): mine", "- **7. Dismiss Cioches?** Recruit", "- **8. Dismiss Cioches?** Keep"].join("\n")
     expect(parseAnswers(text, o)).toEqual({ "Where do the heirlooms go?": { pick: "", note: "mine" }, "Dismiss Cioches?": { pick: "Keep" } })
+  })
+
+  // a dungeon save kept from a real departure (2026-10-10, the Cove); skipped where none was captured
+  const raidCopy = join(root, ".dd-runtime", "raid-capture")
+  test.skipIf(!existsSync(join(raidCopy, "persist.raid.json")))("C24: the first save on the road turns the board into a farewell, once per expedition, in his voice", async () => {
+    const dir = join(root, ".dd-runtime", "test-raid")
+    rmSync(dir, { recursive: true, force: true }); cpSync(raidCopy, dir, { recursive: true })
+    rmSync(join(townOut, "farewell.key"), { force: true })
+    const t = await town(await readSave(dir))
+    const run = () => Bun.spawnSync(["bun", "src/cli.ts", "town"], { cwd: root, env: { ...process.env, DD_PROFILE: dir } }).stdout.toString()
+    expect(run()).toContain("farewell")
+    const md = await Bun.file(join(townOut, "town.md")).text()
+    expect(md).toContain(`The coach has left for the *${t.raid!.quest.dungeonName}*`)
+    // the party front to back, as the save records it
+    const order = t.raid!.party.map((g) => t.heroes.find((h) => h.guid === g)!.name)
+    expect(order.map((n) => md.indexOf(`: ${n},`))).toEqual([...order.map((n) => md.indexOf(`: ${n},`))].sort((a, b) => a - b))
+    // a second save on the same road leaves the board as it is (C16)
+    expect(run()).toContain("You are not back yet")
+    // and the voice test holds on the farewell too
+    const seen = md.replace(/^```.*$/gm, "")
+    expect([/persist/i, /\.json/, /`/, /\bRULE\b/, /\bsav(e|ed|es)\b/i, /\bgame\b/i].filter((re) => re.test(seen)).map(String)).toEqual([])
   })
 })
