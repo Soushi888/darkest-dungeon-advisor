@@ -322,18 +322,36 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
 
   // roster
   L.push("## Who stays, who goes {wide}", "")
-  L.push(`${t.rosterSize} names on the roster, room for ${t.rosterCap} as the Stage Coach stands. My habit: a hero still at level 0 with ${RULE.dismissNegatives} or more bad quirks, outside the party, is worth letting go. The coach has brought these.`, "")
+  // C29: recruits share the places the roster has, counting the ones my dismissals would free (Soushi, 2026-10-10)
+  const worth = (h: HeroView) => h.quirks.filter((q) => q.positive).length - h.quirks.filter((q) => !q.positive && !q.disease).length
+  const ranked = [...a.recruits].sort((x, z) => worth(z.hero) - worth(x.hero) || z.hero.level - x.hero.level)
+  // a full roster still has choices: a recruit clearly better than a level 0 hero outside the party is worth the swap (RULE: by 2 or more)
+  const sendingNow = new Set(chosen?.seats.map((x) => x.hero.guid))
+  const named = new Set(a.dismiss.map((d) => d.hero.guid))
+  const weak = t.heroes.filter((h) => h.level === 0 && !h.busy && !sendingNow.has(h.guid) && !named.has(h.guid)).sort((x, z) => worth(x) - worth(z))
+  let free = Math.max(0, t.rosterCap - t.rosterSize) + a.dismiss.length
+  const dismiss = [...a.dismiss]
+  for (const r of ranked.filter((r) => worth(r.hero) > 0)) {
+    if (free > 0) { free--; continue }
+    const w = weak.shift()
+    if (!w || worth(r.hero) - worth(w) < 2) break
+    dismiss.push({ hero: w, why: `level 0 with ${w.quirks.filter((q) => !q.positive && !q.disease).length} bad quirks and ${w.quirks.filter((q) => q.positive).length} good; ${r.hero.name} at the coach would serve you better` })
+  }
+  const places = Math.max(0, t.rosterCap - t.rosterSize) + dismiss.length
+  const taken = ranked.filter((r) => worth(r.hero) >= 0).slice(0, places)
+  L.push(`${t.rosterSize} names on the roster, room for ${t.rosterCap} as the Stage Coach stands: ${t.rosterCap - t.rosterSize} place${t.rosterCap - t.rosterSize === 1 ? "" : "s"} free${dismiss.length ? `, ${places} if you let go of the ones I name` : ""}. My habit: a hero still at level 0 with ${RULE.dismissNegatives} or more bad quirks, outside the party, is worth letting go, and the coach's best take the places there are.`, "")
   const rcards: string[] = []
-  for (const d of a.dismiss) {
+  for (const d of dismiss) {
     rcards.push(`- q: ${y(`Dismiss ${d.hero.name}?`)}`, `  image: ${y(portrait(d.hero))}`, `  context: ${y(`${d.hero.clsName}, ${d.why}.`)}`, "  options:")
     rcards.push(`    - pick: "Dismiss"`, `      effect: ${y("Frees a place on the roster for a fresh recruit.")}`, `    - pick: "Keep"`, `      effect: ${y("They stay; their quirks can be treated at the Sanitarium for gold.")}`)
     rcards.push(`  lean: 0`, `  lean_why: ${y("a recruit costs nothing and comes without these quirks.")}`)
   }
-  for (const r of a.recruits) {
+  for (const r of ranked) {
     rcards.push(`- q: ${y(`Recruit ${r.hero.name}, ${r.hero.clsName}?`)}`, `  image: ${y(portrait(r.hero))}`, `  context: ${y(`${r.why}.`)}`, "  options:")
     rcards.push(`    - pick: "Recruit"`, `      effect: ${y(`Joins the roster at level ${r.hero.level}.`)}`, `    - pick: "Pass"`, `      effect: ${y(r.hero.from ? "Leave them at the coach." : "The coach brings others next week.")}`)
-    const good = r.hero.quirks.filter((q) => q.positive).length >= r.hero.quirks.filter((q) => !q.positive && !q.disease).length
-    rcards.push(`  lean: ${good ? 0 : 1}`, `  lean_why: ${y(good ? "more good quirks than bad." : "more bad quirks than good.")}`)
+    const take = taken.includes(r)
+    const why = take ? `${worth(r.hero) > 0 ? "more good quirks than bad" : "as many good quirks as bad"}, and there is a place for them` : worth(r.hero) < 0 ? "more bad quirks than good" : `no place left for them: ${places ? `the ${places === 1 ? "place goes" : `${places} places go`} to ${taken.map((x) => x.hero.name).join(" and ")}` : "the roster is full"}`
+    rcards.push(`  lean: ${take ? 0 : 1}`, `  lean_why: ${y(`${why}.`)}`)
   }
   if (rcards.length) L.push("```board-decisions", ...rcards, "```", "")
 

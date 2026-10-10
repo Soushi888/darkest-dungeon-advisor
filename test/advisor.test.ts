@@ -383,4 +383,22 @@ describe.skipIf(!has)("on the local save", () => {
     const worn = { ...p, seats: p.seats.map((s) => ({ ...s, hero: { ...s.hero, stress: 99 } })) }
     expect(readiness(t, worn, reserve).checks.find((c) => c.label === "Rested")!.met).toBe(false)
   })
+
+  test("C29: recruits share the roster's places; a full roster leans Pass unless a clear swap is worth it", async () => {
+    const t = await town(await readSave(copyProfile()))
+    const a = await advise(t)
+    const prices = await supplyPrices()
+    const leans = (md: string) => [...md.matchAll(/- q: "(Recruit|Dismiss) ([^,?]+)[^"]*"[\s\S]*?\n\s+lean: (\d)/g)].map((m) => ({ kind: m[1]!, name: m[2]!, lean: Number(m[3]) }))
+    // as many recruits taken as there are places, counting the dismissals the board leans on
+    const check = (tt: typeof t) => {
+      const md = source(tt, a, { foresight: false, answers: {}, prices }).board
+      const l = leans(md)
+      const takes = l.filter((x) => x.kind === "Recruit" && x.lean === 0).length
+      const lets = l.filter((x) => x.kind === "Dismiss" && x.lean === 0).length
+      expect(takes).toBeLessThanOrEqual(Math.max(0, tt.rosterCap - tt.rosterSize) + lets)
+    }
+    check(t)
+    check({ ...t, rosterCap: t.rosterSize })
+    check({ ...t, rosterCap: t.rosterSize + 1 })
+  })
 })
