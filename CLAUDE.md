@@ -68,7 +68,7 @@ When a change touches a claim, update its line in `ISA.md` with the new evidence
 
 When Soushi plays with the board open, watch the session yourself; he should never have to tell you that he pressed Send or that the game saved.
 
-- **Start:** check the watcher is up (`pgrep -af "src/cli.ts watch"`), then arm the Monitor tool on `bun run live` with the maximum timeout, and re-arm it on every expiry until he stops playing. It prints one line per event: `SEND <time> <n> picks` and `SAVE <time> town|dungeon`.
+- **Start:** check the watcher is up (`pgrep -af "src/cli.ts watch"`), then arm the Monitor tool on `bun run live` with the maximum timeout, and re-arm it on every expiry until he stops playing. It prints one line per event: `SEND <time> <n> picks`, `SAVE <time> town` only when a Hamlet save changed the rebuilt board (the game saves every few seconds in town), and `SAVE <time> dungeon` once per expedition.
 
 - **On SEND:** read `.local/town/answers.md`, `.local/town/picks.json` and the rebuilt `.local/town/town.md`, then tell him in a few lines what the Caretaker took from it: the expedition and party, picks dropped as not belonging to their card (the page keeps picks by card position), and anything the board now warns about (a road the coffers cannot pay for). His notes, stickies and general comments are requests: answer them, and build what they ask for when it is a change to the advisor.
 
