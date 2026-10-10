@@ -1,7 +1,7 @@
 // bun run town     build the town board once from the newest save
 // bun run watch    keep it live: every save made in the Hamlet rebuilds it; during an expedition it waits (C16)
 // flags: --foresight (experimental, C7), --port=<n> for watch (default 4317)
-import { watch as fsWatch } from "node:fs"
+import { existsSync, statSync, watch as fsWatch } from "node:fs"
 import { join } from "node:path"
 import { buildBoard, buildFarewell, outDir } from "./board.ts"
 import { profileDir } from "./paths.ts"
@@ -84,7 +84,11 @@ if (cmd === "town") {
       }
       if (path === "/" || path === "/town.html") {
         const html = await Bun.file(join(outDir, "town.html")).text()
-        return new Response(html.replace("</body>", `${reload}</body>`), { headers: { "content-type": "text/html; charset=utf-8" } })
+        // the last send's stamp: a page whose inputs predate it forgets them on load, even inputs kept from before this fix
+        const log = join(outDir, "answers-log.md")
+        const sent = existsSync(log) ? String(statSync(log).mtimeMs) : "none"
+        const forget = `<script>(()=>{try{const K=(window.BRAINSTORM_KEY||'brainstorm')+':v1';if(localStorage.getItem('ddSent')!==${JSON.stringify(sent)}){const had=localStorage.getItem(K);localStorage.removeItem(K);localStorage.setItem('ddSent',${JSON.stringify(sent)});if(had)location.reload()}}catch{}})()</script>`
+        return new Response(html.replace("</body>", `${forget}${reload}</body>`), { headers: { "content-type": "text/html; charset=utf-8" } })
       }
       const f = Bun.file(join(outDir, path.replace(/^\/+/, "")))
       return (await f.exists()) ? new Response(f) : new Response("not found", { status: 404 })
