@@ -61,8 +61,9 @@ if (cmd === "town") {
     clearTimeout(timer)
     timer = setTimeout(() => void rebuild(), 1500)
   })
-  // the served page reloads when the board changes, and can send its answers back to the Caretaker
-  const reload = `<button id="toCaretaker" class="btn">Send to the Caretaker</button><script>(()=>{let v=null;setInterval(async()=>{try{const r=await fetch('/version');const n=await r.text();if(v!==null&&n!==v)location.reload();v=n}catch{}},2000);const b=document.getElementById('toCaretaker');b.onclick=async()=>{b.textContent='Sent…';await fetch('/answers',{method:'POST',body:window.brainstormAnswers()});b.textContent='The Caretaker has your answers'}})()</script>`
+  // the served page reloads when the board changes, and can send its answers back to the Caretaker; once he has them,
+  // the page forgets them, so an old pick or sticky is never sent twice (the week's picks live on in picks.json, C18)
+  const reload = `<button id="toCaretaker" class="btn">Send to the Caretaker</button><script>(()=>{let v=null;setInterval(async()=>{try{const r=await fetch('/version');const n=await r.text();if(v!==null&&n!==v)location.reload();v=n}catch{}},2000);const b=document.getElementById('toCaretaker');b.onclick=async()=>{b.textContent='Sent…';const r=await fetch('/answers',{method:'POST',body:window.brainstormAnswers()});if(r.ok){try{localStorage.removeItem((window.BRAINSTORM_KEY||'brainstorm')+':v1')}catch{}b.textContent='The Caretaker has your answers';location.reload()}else{b.textContent='Not received; send again'}}})()</script>`
   Bun.serve({
     port, hostname: "127.0.0.1",
     async fetch(req) {
