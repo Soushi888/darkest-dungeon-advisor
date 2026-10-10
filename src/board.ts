@@ -5,7 +5,7 @@
 import { copyFileSync, existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { homedir } from "node:os"
-import { advise, road, seatParty, RULE, type Advice, type Party } from "./advise.ts"
+import { advise, readiness, road, seatParty, RULE, type Advice, type Party } from "./advise.ts"
 export { road, type RoadItem } from "./advise.ts"
 import { supplyPrices } from "./game.ts"
 import { install, root } from "./paths.ts"
@@ -117,6 +117,17 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
       for (const n of notes) L.push(`- title: ${y(n)}`, "  kind: idea")
       L.push("```", "")
     }
+  }
+
+  // C28: how ready the party is, by my conditions; it rises as the Hamlet prepares. Never presented as odds
+  if (chosen) {
+    const r = readiness(t, chosen, reserve)
+    L.push(`## How ready they are: ${r.met} of ${r.of} {wide}`, "")
+    L.push(`${r.verdict} This is my reckoning of what is ready for the road to the ${chosen.quest.dungeonName}, not a promise about the dark: rest them, cure them, buy what they need, and it rises.`, "")
+    L.push("```board-tally", `- n: ${r.pct}`, `  label: ${y("% of my conditions met")}`, `  pct: ${r.pct}`, "```", "")
+    L.push("| | Condition | Now |", "|---|---|---|")
+    for (const c of r.checks) L.push(`| ${c.met ? "Ready" : "**Not yet**"} | ${c.label} | ${c.why} |`)
+    L.push("")
   }
 
   // C26: what the saves show was done this week, sent from the board or not

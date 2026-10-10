@@ -244,3 +244,30 @@ export async function seatParty(order: HeroView[], q: Quest): Promise<Party> {
   if (!stunner) notes.push("no stun in this four")
   return { quest: q, seats, score: 0, healer, stunner, notes }
 }
+
+/** How ready a party is for its road, by my conditions for sending one (C28). Not odds of success: nothing in the save
+ *  measures those. Each condition is read from the save or the game's files, so the share rises as the Hamlet prepares. */
+export interface Readiness { met: number; of: number; pct: number; verdict: string; checks: { label: string; met: boolean; why: string }[] }
+export function readiness(t: Town, p: Party, reserve: number): Readiness {
+  const gold = t.wallet.gold ?? 0, n = (x: number) => x.toLocaleString("en-US")
+  const tired = p.seats.filter((s) => s.hero.stress >= RULE.sendBelow).map((s) => s.hero.name)
+  const unfit = p.seats.filter((s) => s.hero.affliction || s.hero.quirks.some((q) => q.disease) || s.hero.busy).map((s) => s.hero.name)
+  const short = p.seats.filter((s) => s.skills.length < 2).map((s) => s.hero.name)
+  const against = p.seats.filter((s) => s.notes.some((n) => n.startsWith("−"))).map((s) => s.hero.name)
+  const checks = [
+    { label: "The road is paid for", met: gold >= reserve, why: gold >= reserve ? `the provisions cost ${n(reserve)} of your ${n(gold)} gold` : `the provisions cost ${n(reserve)} and you have ${n(gold)}` },
+    { label: "Rested", met: !tired.length, why: tired.length ? `${tired.join(", ")} at ${RULE.sendBelow} stress or more` : `all four under ${RULE.sendBelow} stress` },
+    { label: "Sound in mind and body", met: !unfit.length, why: unfit.length ? `${unfit.join(", ")} afflicted, ill or still in a building` : "nobody afflicted, ill or held in town" },
+    { label: "A healer goes with them", met: p.healer, why: p.healer ? "someone can mend the others" : "nobody in the four heals another" },
+    { label: "A stun goes with them", met: p.stunner, why: p.stunner ? "someone can stop a foe's turn" : "nobody in the four can stun" },
+    { label: "Every rank can fight", met: !short.length, why: short.length ? `${short.join(", ")} with fewer than two skills that reach from their rank` : "each has at least two skills that reach from their rank" },
+    { label: "A road you have walked", met: p.quest.walked, why: p.quest.walked ? `${p.quest.known.length} foes there you know` : "you have never walked it" },
+    { label: "No quirk turns against them there", met: !against.length, why: against.length ? `${against.join(", ")} carry a quirk that works against this road` : "no quirk in the four works against this road" },
+    { label: "Seasoned enough for its length", met: !(p.green && p.quest.length > 1), why: p.green && p.quest.length > 1 ? "most of them untried, on a road longer than short" : p.green ? "untried, but the road is short" : "enough of them have seen the dark" },
+  ]
+  const met = checks.filter((c) => c.met).length, pct = Math.round((met / checks.length) * 100)
+  // RULE: my words for how ready they are
+  const verdict = pct >= 85 ? "I would send them." : pct >= 65 ? "Nearly ready; see what is left below." : "Not yet: I would not send them like this."
+  return { met, of: checks.length, pct, verdict, checks }
+}
+

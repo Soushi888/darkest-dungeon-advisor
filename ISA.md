@@ -2,7 +2,7 @@
 name: darkest-dungeon-advisor
 principal_stated_goal: "J'aimerais qu'on étudie l'idée de faire un projet darkest-dungeon-advisor, comme on a fait pour factorio. C'est un jeu asser complexe et de l'aide stratégique entre deux quêtes serait utile!"
 phase: climbing
-progress: 24/27 claims, 4/4 anti-claims (counted by checkbox grep, never typed)
+progress: 25/28 claims, 4/4 anti-claims (counted by checkbox grep, never typed)
 frozen: false
 ---
 
@@ -55,6 +55,7 @@ Soushi comes back from an expedition, saves, and opens the town board. A village
 - [x] **C25: The Treatment Ward is advised, by habit.** One quirk per hero, in RULE order: a quirk that keeps the party's loot (`keep_loot` in the quirk library), then one that bars a place of relief (an activity's `not_have_quirks`), then one that turns against the next road (its dungeon in the quirk's id); quirks the ward cannot touch (`can_modify_in_activity` false) are skipped and nothing else is ranked. A locked quirk is priced from `permanent_negative_quirk_cost_upgrades`, the week's event applied. Cards only for free seats, the party first; the rest wait on one note. A level 0 thief outside the party is offered for dismissal instead. Asked by Soushi on 2026-10-10 after Fecamp stole the Cove's loot. *Evidence: test "C25".*
 - [x] **C26: The board follows what was actually done this week.** The week's first board keeps the Hamlet as it found it (`.local/town/week-start.json`); every later board opens with "This week so far": heroes in buildings, who joined or left the roster, what was bought, gold spent, read from the saves whether or not anything was sent from the page. Asked by Soushi on 2026-10-10. *Evidence: test "C26"; week 10 showed four heroes placed and two recruits who were never on a card.*
 - [x] **C27: The road is chosen with its cost and the party's experience in mind.** Two RULE habits join the party score (Soushi, 2026-10-10): the gold the road leaves after its provisions counts for a point per 500 up to 4, and a road the coffers cannot provision counts 20 against itself; when three or more of the four are level 0, every step beyond a short road counts 6 against it. The expedition card's lean says how much the road leaves and when a green party is kept short. *Evidence: test "C27"; on week 10 the Weald (53 gold left, three level 0 heroes) fell from first to fourth, behind the short Ruins, Cove and Warrens.*
+- [x] **C28: The Caretaker says how ready the party is.** A readiness gauge for the proposed party: the share of nine RULE conditions met (road paid for, rested, sound, a healer, a stun, every rank can fight, a walked road, no quirk against the road, seasoned enough for its length), each read from the save or the game's files, with his verdict (send, nearly, not yet). It is presented as his reckoning, never as odds of success: nothing in the save measures those. Asked by Soushi on 2026-10-10. *Evidence: test "C28"; the Ruins party read 9 of 9 on week 10.*
 
 ## Anti-claims
 
@@ -74,6 +75,7 @@ Soushi comes back from an expedition, saves, and opens the town board. A village
 - 2026-10-10, Soushi: the save is decoded by **our own TypeScript reader** (card 5).
 - 2026-10-10, Soushi: the save folder is **watched** (card 6). His note, clarified: the board stays live through every town save and does not reload during an expedition (C16).
 - 2026-10-10, Soushi: the repository is **public** on GitHub (card 7).
+- 2026-10-10, Soushi: a confidence status on the board that rises with preparation (C28), shown as readiness against the Caretaker's conditions, since the save holds no odds.
 - 2026-10-10, Soushi: the road is chosen counting the gold it leaves, and a green party keeps to short roads (C27).
 - 2026-10-10, Soushi: the Treatment Ward joins the advice, cure first and dismiss second (C25); the board reflects what was actually done in game, sent or not (C26).
 - 2026-10-10, Soushi: once the expedition starts, the board shows a final state: the verdict on the choices, a last recommendation and good luck (C24).

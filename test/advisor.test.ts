@@ -12,7 +12,7 @@ import { profileDir, root } from "../src/paths.ts"
 import { boardOptions, mergePicks, parseAnswers, reconcile } from "../src/reconcile.ts"
 import { road, source, weekSoFar } from "../src/board.ts"
 import { supplyPrices } from "../src/game.ts"
-import { advise } from "../src/advise.ts"
+import { advise, readiness } from "../src/advise.ts"
 
 let profile = ""
 try { profile = profileDir() } catch {}
@@ -363,5 +363,22 @@ describe.skipIf(!has)("on the local save", () => {
     const broke = { ...t, wallet: { ...t.wallet, gold: 0 } }
     const b = await advise(broke)
     expect(b.parties.every((p) => p.left! < 0)).toBe(true)
+  })
+
+  test("C28: readiness counts my conditions from the save, and falls when one of them fails", async () => {
+    const t = await town(await readSave(copyProfile()))
+    const a = await advise(t)
+    const p = a.best!
+    const reserve = road(t, p, await supplyPrices()).reduce((x, i) => x + i.count * i.price, 0)
+    const r = readiness(t, p, reserve)
+    expect(r.met).toBe(r.checks.filter((c) => c.met).length)
+    expect(r.pct).toBe(Math.round((r.met / r.of) * 100))
+    // no gold: the road is not paid for, and readiness drops by exactly that condition
+    const poor = readiness({ ...t, wallet: { ...t.wallet, gold: 0 } }, p, reserve)
+    expect(poor.checks.find((c) => c.label === "The road is paid for")!.met).toBe(reserve <= 0)
+    if (reserve > 0) expect(poor.met).toBe(r.met - (r.checks[0]!.met ? 1 : 0))
+    // a worn-out party is not rested
+    const worn = { ...p, seats: p.seats.map((s) => ({ ...s, hero: { ...s.hero, stress: 99 } })) }
+    expect(readiness(t, worn, reserve).checks.find((c) => c.label === "Rested")!.met).toBe(false)
   })
 })
