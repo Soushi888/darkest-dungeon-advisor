@@ -10,6 +10,7 @@ import { readSave } from "../src/read.ts"
 import { town } from "../src/town.ts"
 import { profileDir, root } from "../src/paths.ts"
 import { mergePicks, parseAnswers, reconcile } from "../src/reconcile.ts"
+import { advise } from "../src/advise.ts"
 
 let profile = ""
 try { profile = profileDir() } catch {}
@@ -205,5 +206,29 @@ describe.skipIf(!has)("on the local save", () => {
     expect(meta.flatMap((re) => md.match(new RegExp(`.{0,30}${re.source}.{0,10}`, re.flags)) ?? [])).toEqual([])
     // the sources still exist, off the board (C14)
     expect(await Bun.file(join(root, ".local", "town", "sources.md")).text()).toContain("`persist.estate.json` wallet")
+  })
+
+  test("C20: this week's town event is read, its bonus recruits offered, and its prices and closed doors applied", async () => {
+    const save = await readSave(copyProfile())
+    const t = await town(save)
+    const te = save.town_event as any
+    const bonus = Object.values<any>(te?.bonus_hero_entries ?? {}).map((h) => h.actor.name)
+    if (t.event) for (const n of bonus) expect(t.recruits.find((r) => r.name === n)?.from).toBe(t.event.title)
+    // the same save, as if the week's event had been Tavern Troubles: the Bar shut, the rest half price
+    const chapters = Object.values<any>((save.campaign_log as any).chapters)
+    const week = Object.values<any>(chapters[chapters.length - 1]).find((x) => x && typeof x === "object" && "town_event_result_id" in x)
+    if (!week) return
+    week.town_event_result_id = te.current_result_event_id = "lock_bar_discount_tavern"
+    const u = await town(save)
+    const bar = u.activities.find((a) => a.activity === "bar")!, gamble = u.activities.find((a) => a.activity === "gambling")!
+    expect(bar.locked).toBe(true)
+    expect(gamble.cost).toBe(Math.round(gamble.baseCost * 0.5))
+    expect(u.event?.lines).toContain(`${bar.name} is Locked`)
+    expect(u.event?.lines.some((l) => l.startsWith(gamble.name) && l.includes("-50%"))).toBe(true)
+    const a = await advise(u)
+    expect(a.relief.flatMap((r) => r.options.map((o) => o.activity.activity))).not.toContain("bar")
+    // an event from another week is not this week's
+    week.town_event_result_id = "arena_first"
+    expect((await town(save)).event).toBeUndefined()
   })
 })

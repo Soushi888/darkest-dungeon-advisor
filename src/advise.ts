@@ -112,12 +112,12 @@ export async function advise(t: Town): Promise<Advice> {
   const relief: Relief[] = []
   for (const h of free.filter((h) => h.affliction || h.stress >= RULE.restAbove).sort((x, y) => y.stress - x.stress)) {
     const why = [h.affliction ? `afflicted (${h.affliction})` : "", `${h.stress} stress`].filter(Boolean)
-    const allowedHere = t.activities.filter((a) => a.heal > 0 && allowed(a, h))
+    const allowedHere = t.activities.filter((a) => a.heal > 0 && !a.locked && allowed(a, h))
     const full = allowedHere.filter((a) => a.slots <= a.used)
     if (full.length && allowedHere.every((a) => a.slots <= a.used)) why.push(`every place they accept is full (${full.map((a) => a.name).join(", ")})`)
     const options = allowedHere.filter((a) => a.slots > a.used)
       .sort((x, y) => x.cost - y.cost)
-      .map((a) => ({ activity: a, note: `${a.cost} gold, relieves ${a.heal}` }))
+      .map((a) => ({ activity: a, note: `${a.cost ? `${a.cost} gold` : "free"}${a.cost !== a.baseCost ? ` this week (${a.baseCost} as a rule)` : ""}, relieves ${a.heal}` }))
     relief.push({ hero: h, why, options })
   }
 
@@ -140,7 +140,7 @@ export async function advise(t: Town): Promise<Advice> {
   const room = t.rosterCap - t.rosterSize
   const recruits = t.recruits.map((h) => {
     const pos = h.quirks.filter((q) => q.positive).map((q) => q.name), neg = negatives(h).map((q) => q.name)
-    return { hero: h, why: `${pos.length ? `good: ${pos.join(", ")}` : "no good quirk"}; ${neg.length ? `bad: ${neg.join(", ")}` : "no bad quirk"}${room <= 0 ? "; the roster is full" : ""}` }
+    return { hero: h, why: `${h.from ? `came with the ${h.from}; ` : ""}${pos.length ? `good: ${pos.join(", ")}` : "no good quirk"}; ${neg.length ? `bad: ${neg.join(", ")}` : "no bad quirk"}${room <= 0 ? "; the roster is full" : ""}` }
   })
 
   // what to buy for the party first: affordable, unblocked, cheapest first

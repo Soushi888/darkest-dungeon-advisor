@@ -14,6 +14,7 @@ export const P = {
   building: (b: string) => `campaign/town/buildings/${b}/${b}.building.json`,
   mash: (d: string, level: number) => `dungeons/${d}/${d}.${level}.mash.darkest`,
   portrait: (c: string) => `heroes/${c}/${c}_A/${c}_portrait_roster.png`,
+  townEvents: "campaign/town_events/base.town_events.events.json",
 }
 
 const json = async (rel: string) => Bun.file(join(install, rel)).json()
@@ -166,4 +167,13 @@ export async function dungeonMonsters(d: string, level: number, kinds?: string[]
     for (const t of m[2]!.trim().split(/\s+/)) out.add(t)
   }
   return [...out]
+}
+
+// ---------- town events ----------
+export interface TownEventDef { id: string; data: { type: string; string_data: string; number_data: number }[] }
+let eventLib: Map<string, TownEventDef> | undefined
+export async function townEvents(): Promise<Map<string, TownEventDef>> {
+  if (eventLib) return eventLib
+  eventLib = new Map((await json(P.townEvents)).events.map((e: any) => [e.id, { id: e.id, data: e.data ?? [] }]))
+  return eventLib
 }

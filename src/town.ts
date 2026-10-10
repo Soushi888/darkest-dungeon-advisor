@@ -4,7 +4,7 @@ import type { Dson } from "./dson.ts"
 import type { Save } from "./read.ts"
 import {
   P, applied, buildingData, buildingTrees, describeQuirk, dungeonMonsters, heroClass, heroTrees, levelOf, levelThresholds,
-  monster, nameOf, quirks, strings, trinkets, type Cost,
+  monster, nameOf, quirks, strings, townEvents, trinkets, type Cost,
 } from "./game.ts"
 
 const raw = (h: any) => h.hero_file_data?.raw_data ?? h
@@ -14,8 +14,9 @@ export interface HeroView {
   guid: number; name: string; cls: string; clsName: string; level: number; xp: number; stress: number
   affliction: string; busy: string; quirks: QuirkView[]; skills: { id: string; name: string; level: number }[]
   weapon: number; armour: number; trinkets: string[]; dungeons: string[]; portrait: string
+  from?: string // the town event that brought a recruit
 }
-export interface Activity { building: string; activity: string; name: string; cost: number; heal: number; cure: number; slots: number; used: number; barred: string[] }
+export interface Activity { building: string; activity: string; name: string; locked: boolean; baseCost: number; cost: number; heal: number; cure: number; slots: number; used: number; barred: string[] }
 export interface Quest { unknownTypes: string[]; bleeders: string[]; blighters: string[]; walked: boolean; idx: number; dungeon: string; dungeonName: string; type: string; difficulty: number; length: number; plot: boolean; rewards: string[]; known: string[]; unknownCount: number; types: string[] }
 export interface Upgrade { hero?: string; toLevel?: number; where?: string; tree: string; label: string; code: string; cost: Cost[]; affordable: boolean; blockedBy: string }
 export interface Town {
@@ -27,7 +28,10 @@ export interface Town {
   heroUpgrades: Upgrade[]; buildingUpgrades: Upgrade[]; estateTrinkets: { id: string; name: string; classes: string[] }[]
   bought: Set<string>
   supply: Record<string, string>
+  event?: TownEvent
 }
+/** This week's town event, as the game rolled it: its own title and text, and what it changes, in the game's own effect lines. */
+export interface TownEvent { id: string; title: string; description: string; lines: string[]; provisions: { item: string; cost: number; amount: number }[] }
 
 async function supplies(): Promise<Record<string, string>> {
   const s = await strings()
@@ -41,6 +45,7 @@ const TREE_WORDS: Record<string, string> = {
   cost: "lower prices", disease_quirk_cost: "cheaper cures for disease", slots: "more beds", weapon: "better weapons", armour: "better armour",
   skill_levels: "higher teachings", numrecruits: "more recruits each week", rostersize: "a larger roster", upgraded_recruits: "seasoned recruits", numitems: "more wares",
 }
+const titleWord = (w: string) => w.charAt(0).toUpperCase() + w.slice(1)
 const LENGTH = ["", "Short", "Medium", "Long"]
 const DIFFICULTY: Record<number, string> = { 1: "Apprentice", 3: "Veteran", 5: "Champion", 6: "Darkest" }
 
@@ -94,16 +99,51 @@ export async function town(save: Save): Promise<Town> {
       const cure = d.affliction_cure_upgrades ? (applied(d.affliction_cure_upgrades, tree, bought) as any).chance ?? 0 : 0
       const barred = (d.requirements ?? []).filter((r: any) => r.type === "not_have_quirks").flatMap((r: any) => r.data.quirk_library_names)
       activities.push({
-        building: b, activity: a.id, name: await nameOf("activity", a.id), cost: cost?.cost_currency?.amount ?? 0,
+        building: b, activity: a.id, name: await nameOf("activity", a.id), locked: false,
+        baseCost: cost?.cost_currency?.amount ?? 0, cost: cost?.cost_currency?.amount ?? 0,
         heal: heal?.heal_high ?? 0, cure, slots: slot.number_of_slots ?? 0, used, barred,
       })
     }
+  }
+
+  // this week's town event (persist.town_event.json), active when the week's own log chapter records it
+  const te = save.town_event as any
+  const chapters = Object.values<any>((save.campaign_log as any)?.chapters ?? {})
+  const thisWeek = chapters.length ? Object.values<any>(chapters[chapters.length - 1]).find((x) => x && typeof x === "object" && "town_event_result_id" in x)?.town_event_result_id : undefined
+  let event: TownEvent | undefined
+  if (te?.current_result_event_id && te.current_result_event_id === thisWeek) {
+    const id: string = te.current_result_event_id
+    const s = await strings()
+    const def = (await townEvents()).get(id)
+    const pct = (n: number) => Math.round(n * 100)
+    const fmt = (key: string, ...args: (string | number)[]) => {
+      let i = 0
+      return (s.get(`town_event_info_format_${key}`) ?? "").replace(/\{\?[a-z_]+\}/g, "").replace(/%%/g, "\u0000").replace(/%[sd]/g, () => String(args[i++] ?? "")).replace(/\u0000/g, "%")
+    }
+    const ITEM: Record<string, string> = { supply: "Supplies", provision: "Food" }
+    const lines: string[] = [], provisions: TownEvent["provisions"] = []
+    if (s.get(`town_event_info_${id}`)) lines.push(s.get(`town_event_info_${id}`)!)
+    for (const d of def?.data ?? []) {
+      const act = activities.find((a) => a.activity === d.string_data)
+      if (d.type === "activity_lock" && act) { act.locked = true; lines.push(fmt(d.type, act.name)) }
+      else if (d.type === "activity_cost_change" && act) { act.cost = Math.round(act.baseCost * (1 + d.number_data)); lines.push(fmt(d.type, act.name, pct(d.number_data))) }
+      else if (d.type === "free_activity" && act) { act.cost = 0; if (!s.get(`town_event_info_${id}`)) lines.push(fmt(d.type, act.name)) }
+      else if (d.type === "provision_item_type_cost_change") { provisions.push({ item: d.string_data, cost: d.number_data, amount: 0 }); lines.push(fmt(d.type, ITEM[d.string_data] ?? d.string_data, pct(d.number_data))) }
+      else if (d.type === "provision_item_type_amount_change") { provisions.push({ item: d.string_data, cost: 0, amount: d.number_data }); lines.push(fmt(d.type, ITEM[d.string_data] ?? d.string_data, pct(d.number_data))) }
+      else if (d.type === "idle_resolve_level") lines.push(fmt(d.type, await nameOf("class", d.string_data), d.number_data))
+      else if (d.type === "upgrade_tag_free") lines.push(fmt(d.type, titleWord(d.string_data), d.number_data))
+      else if (d.type === "upgrade_tag_discount") lines.push(fmt(d.type, titleWord(d.string_data), pct(d.number_data)))
+      else if (d.type === "trinket_retention_add_from_storage") lines.push(fmt(d.type, d.number_data))
+    }
+    event = { id, title: s.get(`town_event_title_${id}`) ?? id, description: s.get(`town_event_description_${id}`) ?? "", lines: [...new Set(lines.filter(Boolean))], provisions }
   }
 
   const heroes: HeroView[] = []
   for (const [g, h] of Object.entries<any>((save.roster as any)?.heroes ?? {})) heroes.push(await heroView(Number(g), h, thr, busy))
   const recruits: HeroView[] = []
   for (const [g, h] of Object.entries<any>(tb.stage_coach?.store?.hero_recruit?.generated ?? {})) recruits.push(await heroView(Number(g), h, thr, new Map()))
+  // a town event's bonus recruits wait at the coach beside the usual offer
+  if (event) for (const [g, h] of Object.entries<any>(te.bonus_hero_entries ?? {})) recruits.push({ ...(await heroView(Number(g), h, thr, new Map())), from: event.title })
 
   // roster cap from the stage coach's own upgrade list
   const coach = await buildingData("stage_coach")
@@ -233,7 +273,7 @@ export async function town(save: Save): Promise<Town> {
     quests_done: prog?.total_quests_finished ?? 0, quests_won: prog?.total_successful_quests_finished ?? 0,
     lastQuest: typeof prog?.last_quest_played_id === "string" ? prog.last_quest_played_id : "", lastWon: !!prog?.last_raid_success,
     skillDiscount, gearDiscount, visited: [...visited], knownVariants: [...knownVariants],
-    heroUpgrades, buildingUpgrades, estateTrinkets, bought, supply: await supplies(),
+    heroUpgrades, buildingUpgrades, estateTrinkets, bought, supply: await supplies(), event,
   }
 }
 

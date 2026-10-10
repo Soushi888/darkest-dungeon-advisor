@@ -73,6 +73,22 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   L.push(`detail: ${y(a.afflicted.length ? `${a.afflicted.map((h) => h.name).join(" and ")} cannot be trusted in the dark until the Abbey or the Tavern has had them.` : "Nobody is afflicted. Spend on the party first, the estate second.")}`)
   L.push("```", "")
 
+  // C20: this week's town event, in the game's own words, and what it changes for my advice
+  if (t.event) {
+    const ev = t.event, bonus = t.recruits.filter((r) => r.from)
+    L.push(`## This week in the Hamlet: ${ev.title} {wide}`, "")
+    L.push(`${ev.description}`, "")
+    const notes = [...ev.lines]
+    if (bonus.length) notes.push(`${bonus.map((r) => `${r.name}, a ${r.clsName},`).join(" and ").replace(/,$/, "")}${bonus.length === 1 ? "," : ""} came with it and wait${bonus.length === 1 ? "s" : ""} at the coach; I weigh ${bonus.length === 1 ? "them" : "each"} under Who stays, who goes.`)
+    if (t.activities.some((a) => a.locked || a.cost !== a.baseCost)) notes.push("The prices and closed doors below are this week's, not the usual ones.")
+    if (ev.provisions.length) notes.push("I have counted the Provisioner's change into the road below.")
+    if (notes.length) {
+      L.push("```board-stickies")
+      for (const n of notes) L.push(`- title: ${y(n)}`, "  kind: idea")
+      L.push("```", "")
+    }
+  }
+
   // C18: the picks sent this week against what the save shows. Stickies, not cards, so card numbers never move.
   const checks = opts.checks ?? []
   if (checks.length) {
@@ -178,6 +194,11 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     L.push("## Provisions for the road {wide}", "")
     L.push(`What to buy at the Provisioner for the ${q.dungeonName}. The counts are my habit for a ${LENGTH[len]?.toLowerCase()} expedition, nothing more; I ask for bandages and antivenom only where foes you know there have already bled or poisoned you.`, "")
     L.push("```board-stickies")
+    for (const pv of t.event?.provisions ?? []) {
+      const what = pv.item === "provision" ? "Food" : "Torches, shovels and the rest"
+      const change = pv.cost ? `cost ${pv.cost <= -1 ? "nothing" : `${Math.round(-pv.cost * 100)}% less`}` : `come in ${Math.round(-pv.amount * 100)}% smaller lots`
+      L.push(`- title: ${y(`${what} ${change} this week`)}`, "  kind: idea", `  body: ${y(`The ${t.event!.title}. Buy accordingly.`)}`)
+    }
     L.push(`- title: ${y(`Food: ${RULE_FOOD[len]} ${HABIT}`)}`, "  kind: works", `  body: ${y(t.supply.provision ?? "")}`)
     L.push(`- title: ${y(`Torches: ${RULE_FOOD[len]} ${HABIT}`)}`, "  kind: works", `  body: ${y(t.supply.torch ?? "")}`)
     L.push(`- title: ${y(`Shovels: ${len} ${HABIT}`)}`, "  kind: works", `  body: ${y(t.supply.shovel ?? "")}`)
@@ -218,7 +239,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   }
   for (const r of a.recruits) {
     rcards.push(`- q: ${y(`Recruit ${r.hero.name}, ${r.hero.clsName}?`)}`, `  image: ${y(portrait(r.hero))}`, `  context: ${y(`${r.why}.`)}`, "  options:")
-    rcards.push(`    - pick: "Recruit"`, `      effect: ${y("Joins the roster at level 0.")}`, `    - pick: "Pass"`, `      effect: ${y("The coach brings others next week.")}`)
+    rcards.push(`    - pick: "Recruit"`, `      effect: ${y(`Joins the roster at level ${r.hero.level}.`)}`, `    - pick: "Pass"`, `      effect: ${y(r.hero.from ? "Leave them at the coach." : "The coach brings others next week.")}`)
     const good = r.hero.quirks.filter((q) => q.positive).length >= r.hero.quirks.filter((q) => !q.positive && !q.disease).length
     rcards.push(`  lean: ${good ? 0 : 1}`, `  lean_why: ${y(good ? "more good quirks than bad." : "more bad quirks than good.")}`)
   }
