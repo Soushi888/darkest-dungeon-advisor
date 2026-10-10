@@ -234,4 +234,22 @@ describe.skipIf(!has)("on the local save", () => {
     week.town_event_result_id = "arena_first"
     expect((await town(save)).event).toBeUndefined()
   })
+
+  test("C21: the fallen are never advised: every hero the campaign log records as died is off the roster and off the board", async () => {
+    const dir = copyProfile()
+    const save = await readSave(dir)
+    const died = new Set<number>()
+    const scan = (o: any): void => { if (o && typeof o === "object") { if (o.died === true) died.add(o.guid); Object.values(o).forEach(scan) } }
+    scan(save.campaign_log)
+    const t = await town(save)
+    expect(t.heroes.filter((h) => died.has(h.guid))).toEqual([])
+    expect(t.fallen.map((h) => h.guid).sort()).toEqual([...died].filter((g) => (save.roster as any).heroes[g]).sort())
+    // the save's own mark agrees: status 3 is exactly the fallen
+    const three = Object.entries<any>((save.roster as any).heroes).filter(([, h]) => h.hero_file_data.raw_data["roster.status"] === 3).map(([g]) => Number(g)).sort()
+    expect(three).toEqual(t.fallen.map((h) => h.guid).sort())
+    const proc = Bun.spawnSync(["bun", "src/cli.ts", "town"], { cwd: root, env: { ...process.env, DD_PROFILE: dir } })
+    expect(proc.exitCode).toBe(0)
+    const md = await Bun.file(join(townOut, "town.md")).text()
+    for (const h of t.fallen) expect(t.heroes.some((x) => x.name === h.name) || !md.includes(h.name)).toBe(true)
+  })
 })

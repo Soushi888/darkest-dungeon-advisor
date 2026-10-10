@@ -21,7 +21,7 @@ export interface Quest { unknownTypes: string[]; bleeders: string[]; blighters: 
 export interface Upgrade { hero?: string; toLevel?: number; where?: string; tree: string; label: string; code: string; cost: Cost[]; affordable: boolean; blockedBy: string }
 export interface Town {
   week: number; inRaid: boolean; raidDungeon: string; estate: string
-  wallet: Record<string, number>; heroes: HeroView[]; recruits: HeroView[]; rosterSize: number; rosterCap: number
+  wallet: Record<string, number>; heroes: HeroView[]; fallen: HeroView[]; recruits: HeroView[]; rosterSize: number; rosterCap: number
   activities: Activity[]; quests: Quest[]; witnessedSkills: number; dungeonsUnlocked: string[]
   quests_done: number; quests_won: number; lastQuest: string; lastWon: boolean
   skillDiscount: number; gearDiscount: number; visited: string[]; knownVariants: string[]
@@ -138,8 +138,12 @@ export async function town(save: Save): Promise<Town> {
     event = { id, title: s.get(`town_event_title_${id}`) ?? id, description: s.get(`town_event_description_${id}`) ?? "", lines: [...new Set(lines.filter(Boolean))], provisions }
   }
 
-  const heroes: HeroView[] = []
-  for (const [g, h] of Object.entries<any>((save.roster as any)?.heroes ?? {})) heroes.push(await heroView(Number(g), h, thr, busy))
+  // the roster file keeps the fallen: a hero the campaign log records as died is mourned, never advised
+  const died = new Set<number>()
+  const deaths = (o: any): void => { if (o && typeof o === "object") { if (o.died === true && typeof o.guid === "number") died.add(o.guid); Object.values(o).forEach(deaths) } }
+  deaths(save.campaign_log)
+  const heroes: HeroView[] = [], fallen: HeroView[] = []
+  for (const [g, h] of Object.entries<any>((save.roster as any)?.heroes ?? {})) (died.has(Number(g)) ? fallen : heroes).push(await heroView(Number(g), h, thr, busy))
   const recruits: HeroView[] = []
   for (const [g, h] of Object.entries<any>(tb.stage_coach?.store?.hero_recruit?.generated ?? {})) recruits.push(await heroView(Number(g), h, thr, new Map()))
   // a town event's bonus recruits wait at the coach beside the usual offer
@@ -161,7 +165,7 @@ export async function town(save: Save): Promise<Town> {
 
   // a dungeon counts as walked when a living hero's history or the progression record names it
   const visited = new Set<string>(Object.keys((save.progression as any)?.dungeon ?? {}))
-  for (const h of heroes) h.dungeons.forEach((d) => visited.add(d))
+  for (const h of [...heroes, ...fallen]) h.dungeons.forEach((d) => visited.add(d))
   // the levels walked in each dungeon, from every expedition the campaign log records
   const walkedLevels = new Map<string, Set<number>>()
   const scan = (o: any) => {
@@ -268,7 +272,7 @@ export async function town(save: Save): Promise<Town> {
   const g = save.game as any, prog = save.progression as any
   return {
     week: (save.campaign_log as any)?.total_weeks ?? 0, inRaid: !!g?.inraid, raidDungeon: typeof g?.raiddungeon === "string" ? g.raiddungeon : "",
-    estate: g?.estatename ?? "", wallet, heroes, recruits, rosterSize: heroes.length, rosterCap,
+    estate: g?.estatename ?? "", wallet, heroes, fallen, recruits, rosterSize: heroes.length, rosterCap,
     activities, quests, witnessedSkills: known.size, dungeonsUnlocked,
     quests_done: prog?.total_quests_finished ?? 0, quests_won: prog?.total_successful_quests_finished ?? 0,
     lastQuest: typeof prog?.last_quest_played_id === "string" ? prog.last_quest_played_id : "", lastWon: !!prog?.last_raid_success,

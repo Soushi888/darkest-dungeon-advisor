@@ -2,7 +2,7 @@
 name: darkest-dungeon-advisor
 principal_stated_goal: "J'aimerais qu'on étudie l'idée de faire un projet darkest-dungeon-advisor, comme on a fait pour factorio. C'est un jeu asser complexe et de l'aide stratégique entre deux quêtes serait utile!"
 phase: climbing
-progress: 17/20 claims, 4/4 anti-claims (counted by checkbox grep, never typed)
+progress: 18/21 claims, 4/4 anti-claims (counted by checkbox grep, never typed)
 frozen: false
 ---
 
@@ -48,6 +48,7 @@ Soushi comes back from an expedition, saves, and opens the town board. A village
 - [ ] **C18: Picks are checked against what the save shows.** The board never acts in the game (A1), so every pick is carried out by hand; each pick sent this week is kept in `.local/town/picks.json` (merged across sends, cleared when the week turns) and the next Hamlet save shows a "Did you do what you chose?" zone: one sticky per pick the save can confirm, Done, Not yet, or Not as chosen. Covered: relief (`roster` heroes against the buildings' activity slots), the Medical Ward, dismissals and recruits (the roster), Guild and Blacksmith tiers (`persist.upgrades.json`), heirloom upgrades (the bought code). Not checkable: "Keep the gold" and "Save them". Stickies, never cards, so the expedition cards keep numbers 1 and 2. *Evidence: tests "C18" (statuses from the real save, merge, new week; `/answers` round trip to the zone). Open: the zone not yet viewed in Chrome (deferred while Soushi was in game, 2026-10-10).* *Falsifier: a pick carried out in game still reads Not yet after the next Hamlet save; a contrary move reads Done.*
 - [ ] **C19: The expedition and party picks are checked on setting out.** (after: C18) The save made on leaving the Hamlet records the dungeon (`persist.game.json` `raiddungeon`) and, in a file not yet read, the party. Open: no raid save decoded yet; a capture of the first one is taken while Soushi plays (2026-10-10). *Falsifier: a party that left in another order or with another hero than picked reads as matching.*
 - [x] **C20: This week's town event is read and folded into the advice.** `persist.town_event.json` `current_result_event_id` counts only when the week's own chapter of `persist.campaign_log.json` records it; its title and text come from the game's string table and open the board as "This week in the Hamlet". Bonus recruits (`bonus_hero_entries`) get recruit cards beside the coach's offer; closed activities leave the relief options; cost changes and free activities change the prices shown; provision changes appear on the road; other effects are listed in the game's own effect lines. Out-of-week events are ignored. *Evidence: test "C20" (Herbard the Vestal from Holy Gathering offered; a Tavern Troubles week shuts the Bar, halves the Gambling Hall, and drops the Bar from relief).*
+- [x] **C21: The fallen are never advised.** `persist.roster.json` keeps dead heroes; a hero the campaign log records as `died` is set apart (`Town.fallen`) and never offered relief, treatment, a seat, a dismissal or an upgrade. Their dungeon histories still count toward what has been walked. *Evidence: test "C21"; on 2026-10-10 Vesci (died week 2) and Reynauld (died week 8) had been advised as living until Soushi caught it.*
 
 ## Anti-claims
 
@@ -74,7 +75,7 @@ Soushi comes back from an expedition, saves, and opens the town board. A village
 - 2026-10-10, Soushi: niceboards from day one; the advisor may ask questions and the board is interactive.
 - Sibling of `factorio-advisor` and `wesnoth-advisor`. Unlike Factorio, no engine run is needed: the game data is text and the save decodes directly.
 - 2026-10-10, independent review (fresh-context agent, read-only), five findings and four smaller ones, all adopted: (1) tier spoiler through shared attack ids, fixed by the walked-level rule in C5; (2) quirk matching by substring ("man" in Photomania), fixed by whole-word matching; (3) answers drifting between cards, fixed by putting the two expedition cards first so their numbers never move, keeping the party card's title stable, and accepting a party note only when it names four heroes on the roster; (4) the Medical Ward offered to more heroes than it has beds, fixed by giving free beds by experience; (5) the watcher dropping a save that arrived mid-build and racing with `/answers`, fixed by one serialized rebuild with a single queued rerun. Smaller: busy heroes are no longer offered for dismissal, bleed and blight lines no longer claim where they happened, weapon and armour tiers are labelled from level 2 and priced at the Blacksmith, unmet foes are counted as distinct kinds from hall and room lines only.
-- Roster status codes 1 and 3 in `roster.status` are not interpreted: only 2 (in a building) is confirmed, by matching the town's activity slots. The advisor reads occupancy from the slots, never from the code.
+- Roster status codes in `roster.status`: 2 (in a building) is confirmed by the town's activity slots, 3 (fallen) by the campaign log's deaths (C21 test). 1 is not interpreted. The advisor reads occupancy from the slots and deaths from the log, never from the code.
 
 ## Not yet specified
 
@@ -94,6 +95,7 @@ Soushi comes back from an expedition, saves, and opens the town board. A village
 | C12 | Chrome through Interceptor: answers sent from the page come back as a rebuilt board |
 | C18 | `bun test`: statuses on the real save, merge and week reset, `/answers` to the zone; Chrome view of the zone |
 | C20 | `bun test`: the save's event and bonus recruits; a substituted event's locks and prices |
+| C21 | `bun test`: logged deaths and status 3 agree, and no fallen hero is advised |
 | C19 | a raid save copy: dungeon and party read and compared to the picks |
 
 ## Progress
