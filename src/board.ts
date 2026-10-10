@@ -58,8 +58,10 @@ export async function readAnswers(): Promise<Answers> {
 
 export function questLabel(p: Party): string {
   const q = p.quest
-  // the trinket reward tells two quests to the same dungeon apart
-  return [q.dungeonName, `${LENGTH[q.length] ?? q.length} ${q.type}`, q.rewards[0], q.rewards[q.rewards.length - 1]].filter(Boolean).join(", ")
+  // what the road pays leads, so two roads to the same dungeon read apart at a glance (Soushi, 2026-10-10)
+  const gold = q.rewards.find((r) => / gold$/.test(r)), trinket = q.rewards[q.rewards.length - 1]
+  const pays = [trinket, ...q.rewards.filter((r) => r !== gold && r !== trinket), gold].filter(Boolean)
+  return `${q.dungeonName}, ${(LENGTH[q.length] ?? String(q.length)).toLowerCase()} ${q.type}: ${pays.join(", ")}`
 }
 
 /** The Hamlet as the week found it, kept on the first board of each week, so later boards can say what was done since (C26). */
@@ -174,7 +176,9 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   L.push(`The roads the estate can send you down this week. I name only the foes your heroes have fought, in places they have walked; of the rest I say nothing. ${opts.foresight ? "Travellers' tales do reach me, though, and where I repeat one I say so." : ""}`.trim(), "")
   if (a.parties.length) {
     L.push("```board-decisions")
-    L.push(`- q: "Which expedition next?"`, `  context: ${y(`Your heroes able to go now (under ${RULE.sendBelow} stress, not afflicted, not ill, not in a building): ${a.ready.map((h) => h.name).join(", ")}.`)}`, "  options:")
+    const twins = [...new Set(a.parties.map((p) => p.quest.dungeon))].filter((d) => a.parties.filter((p) => p.quest.dungeon === d).length > 1)
+    const twinNote = twins.map((d) => { const ps = a.parties.filter((p) => p.quest.dungeon === d); return ` ${ps.length} roads go to the ${ps[0]!.quest.dungeonName}: ${ps.map((p) => `the ${(LENGTH[p.quest.length] ?? "").toLowerCase()} ${p.quest.type} pays ${p.quest.rewards[p.quest.rewards.length - 1]}`).join(", ")}.` }).join("")
+    L.push(`- q: "Which expedition next?"`, `  context: ${y(`${twinNote.trim()}${twinNote ? " " : ""}Your heroes able to go now (under ${RULE.sendBelow} stress, not afflicted, not ill, not in a building): ${a.ready.map((h) => h.name).join(", ")}.`)}`, "  options:")
     for (const p of a.parties) {
       const q = p.quest
       const foes = q.walked ? (q.known.length ? `foes you know: ${q.known.slice(0, 6).join(", ")}${q.known.length > 6 ? ` and ${q.known.length - 6} more` : ""}; ${q.unknownCount} kind${q.unknownCount === 1 ? "" : "s"} you have not met` : `${q.unknownCount} kind${q.unknownCount === 1 ? "" : "s"} of foe you have not met`) : "you have never walked it; I will not speak of what lives there"
