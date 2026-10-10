@@ -306,9 +306,11 @@ describe.skipIf(!has)("on the local save", () => {
     expect(run()).toContain("farewell")
     const md = await Bun.file(join(townOut, "town.md")).text()
     expect(md).toContain(`The coach has left for the *${t.raid!.quest.dungeonName}*`)
-    // the party front to back, as the save records it
+    // the party as it stands in the game, rank 4 first on the page and rank 1 last
     const order = t.raid!.party.map((g) => t.heroes.find((h) => h.guid === g)!.name)
-    expect(order.map((n) => md.indexOf(`: ${n},`))).toEqual([...order.map((n) => md.indexOf(`: ${n},`))].sort((a, b) => a - b))
+    const at = order.map((n) => md.indexOf(`: ${n},`))
+    expect(at.every((x) => x > 0)).toBe(true)
+    expect(at).toEqual([...at].sort((a, b) => b - a))
     // a second save on the same road leaves the board as it is (C16)
     expect(run()).toContain("You are not back yet")
     // and the voice test holds on the farewell too

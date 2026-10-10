@@ -197,8 +197,10 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   }
   if (chosen) {
     L.push("```board-stickies")
-    for (const s of chosen.seats) {
-      L.push(`- title: ${y(`Rank ${s.rank}: ${s.hero.name}`)}`, `  kind: ${s.notes.some((n) => n.startsWith("−")) ? "gotcha" : "works"}`)
+    // as the party stands in the game: rank 4 at the left, rank 1 at the front on the right (Soushi, 2026-10-10). One
+    // colour for all four, because the board groups stickies by colour and would break the order otherwise
+    for (const s of [...chosen.seats].reverse()) {
+      L.push(`- title: ${y(`Rank ${s.rank}: ${s.hero.name}${s.notes.some((n) => n.startsWith("−")) ? " (mind the quirk)" : ""}`)}`, "  kind: works")
       L.push(`  body: ${y(`${s.hero.clsName}, level ${s.hero.level}, ${s.hero.stress} stress. Skills that reach from here: ${s.skills.join(", ")}.${s.notes.length ? ` Quirks that matter here: ${s.notes.join(", ")}.` : ""}`)}`)
     }
     for (const n of chosen.notes) L.push(`- title: ${y("Mind this")}`, "  kind: risk", `  body: ${y(n)}`)
@@ -452,11 +454,12 @@ export function farewellSource(t: Town, r: NonNullable<Town["raid"]>, opts: { pr
   L.push("## How you sent them {wide}", "")
   L.push("Who left, front to back, against what I proposed and what you told me.", "")
   L.push("```board-stickies")
-  who.forEach((h, i) => {
+  // rank 4 at the left, rank 1 at the front on the right, as in the game; one colour so the order holds
+  ;[...who.entries()].reverse().forEach(([i, h]) => {
     // the first save on the road can follow a fight, so this is how they stand now, not how they left
     const worry = [h.stress >= RULE.sendBelow ? "past the stress I send them at" : "", h.affliction ? `afflicted (${h.affliction})` : "", h.quirks.some((x) => x.disease) ? `ill (${h.quirks.filter((x) => x.disease).map((x) => x.name).join(", ")})` : ""].filter(Boolean)
     const was = p && p.party[i] !== h.guid ? ` I had placed ${t.heroes.find((x) => x.guid === p.party[i])?.name ?? "another"} here.` : ""
-    L.push(`- title: ${y(`Rank ${i + 1}: ${h.name}, ${h.clsName}`)}`, `  kind: ${worry.length ? "risk" : was ? "model" : "works"}`, `  body: ${y(`Level ${h.level}, ${h.stress} stress.${worry.length ? ` Already ${worry.join(" and ")}; watch them first.` : ""}${was}`)}`)
+    L.push(`- title: ${y(`Rank ${i + 1}: ${h.name}, ${h.clsName}${worry.length ? " (watch them)" : ""}`)}`, "  kind: works", `  body: ${y(`Level ${h.level}, ${h.stress} stress.${worry.length ? ` Already ${worry.join(" and ")}; watch them first.` : ""}${was}`)}`)
     rows.push([`${h.stress}`, `${h.name}'s stress on the road`, `\`persist.roster.json\` heroes.${h.guid}.m_Stress; seat from \`persist.raid.json\` party.heroes`])
   })
   const contrary = opts.checks.filter((c) => c.status === "contrary"), pending = opts.checks.filter((c) => c.status === "pending")
