@@ -5,7 +5,8 @@
 import { copyFileSync, existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { homedir } from "node:os"
-import { advise, seatParty, RULE, type Advice, type Party } from "./advise.ts"
+import { advise, road, seatParty, RULE, type Advice, type Party } from "./advise.ts"
+export { road, type RoadItem } from "./advise.ts"
 import { supplyPrices } from "./game.ts"
 import { install, root } from "./paths.ts"
 import { DIFFICULTY, LENGTH, type HeroView, type Town } from "./town.ts"
@@ -16,7 +17,6 @@ import { loadPicks, reconcile, type Check } from "./reconcile.ts"
 export const outDir = process.env.DD_TOWN_OUT ?? join(root, ".local", "town")
 const BOARD = process.env.NICEBOARD ?? join(homedir(), ".claude/skills/Niceboard/Tools/Board.ts")
 const y = (s: string) => JSON.stringify(s) // a JSON string is a valid YAML scalar, quotes and colons included
-const RULE_FOOD = [0, 8, 12, 16] // RULE: food and torches by expedition length
 const HABIT = "(my habit)" // how a RULE number is labelled on the board, in his voice (A2)
 const coin = (n: number) => `${n.toLocaleString("en-US")} gold`
 
@@ -60,19 +60,6 @@ export function questLabel(p: Party): string {
   const q = p.quest
   // the trinket reward tells two quests to the same dungeon apart
   return [q.dungeonName, `${LENGTH[q.length] ?? q.length} ${q.type}`, q.rewards[0], q.rewards[q.rewards.length - 1]].filter(Boolean).join(", ")
-}
-
-export interface RoadItem { id: string; label: string; count: number; price: number }
-/** What the road to a quest asks of the Provisioner (counts are RULE), priced from the game's list with this week's event applied (C22). */
-export function road(t: Town, p: Party | undefined, prices: Map<string, number>): RoadItem[] {
-  if (!p) return []
-  const q = p.quest, len = Math.max(1, Math.min(3, q.length))
-  const change = (id: string) => (t.event?.provisions ?? []).filter((v) => v.item === (id === "provision" ? "provision" : "supply")).reduce((x, v) => x + v.cost, 0)
-  const item = (id: string, label: string, count: number): RoadItem => ({ id, label, count, price: Math.max(0, Math.round((prices.get(id) ?? 0) * (1 + change(id)))) })
-  const out = [item("provision", "Food", RULE_FOOD[len]!), item("torch", "Torches", RULE_FOOD[len]!), item("shovel", "Shovels", len)]
-  if (q.bleeders.length) out.push(item("bandage", "Bandages", len + 1))
-  if (q.blighters.length) out.push(item("antivenom", "Antivenom", len + 1))
-  return out
 }
 
 /** The Hamlet as the week found it, kept on the first board of each week, so later boards can say what was done since (C26). */
@@ -185,7 +172,8 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
       L.push(`    - pick: ${y(questLabel(p))}`, `      effect: ${y(`${DIFFICULTY[q.difficulty] ?? `level ${q.difficulty}`}; rewards ${q.rewards.join(", ")}; ${foes}.${rumour}`)}`)
     }
     const leanIdx = chosen ? a.parties.indexOf(chosen) : 0
-    L.push(`  lean: ${Math.max(0, leanIdx)}`, `  lean_why: ${y(`the four I would send fit it best: ${chosen ? chosen.seats.flatMap((s) => s.notes).join(", ") || "ranks and skills line up" : ""}.`)}`)
+    const longer = a.parties.filter((p) => p !== chosen && p.quest.length > (chosen?.quest.length ?? 1) && p.green).length
+    L.push(`  lean: ${Math.max(0, leanIdx)}`, `  lean_why: ${y(`the four I would send fit it best: ${chosen ? chosen.seats.flatMap((s) => s.notes).join(", ") || "ranks and skills line up" : ""}${chosen?.left !== undefined ? `; it leaves ${coin(Math.max(0, chosen.left))} in the coffers after the road` : ""}${longer ? "; with so many of them untried, I keep them to shorter roads" : ""} (my habits).`)}`)
     if (chosen) {
       L.push(`- q: ${y(`Take this party to the ${chosen.quest.dungeonName}?`)}`)
       L.push(`  context: ${y(`${opts.own ? "The four you named, seated as you gave them. " : ""}Front to back: ${chosen.seats.map((s) => `${s.rank}. ${s.hero.name} (${s.hero.clsName}, ${s.hero.stress} stress)`).join("; ")}. ${chosen.healer ? "A healer is in it." : "No healer in it."} ${chosen.stunner ? "So is a stun." : "No stun."}`)}`, "  options:")
@@ -505,7 +493,7 @@ export function farewellSource(t: Town, r: NonNullable<Town["raid"]>, opts: { pr
   L.push(`Go now. I will keep the gate, and a lamp in the window for ${names.length === 4 ? `all four of them` : "each of them"}. Come back with ${names.join(", ").replace(/, ([^,]*)$/, " and $1")}, and the ledgers will be open when you do.`, "")
 
   const S = [`# Where each figure comes from, departure in week ${t.week}`, "", "Every number on the farewell beside the save field or game file it was read from (C14). Counts labelled my habit are RULE values.", "", "| Figure | What | Read from |", "|---|---|---|"]
-  for (const i of habit) rows.push([`${i.count}`, `${i.label}, my habit`, "RULE_FOOD in `board.ts`"])
+  for (const i of habit) rows.push([`${i.count}`, `${i.label}, my habit`, "RULE_FOOD in `advise.ts`"])
   rows.push([`${t.wallet.gold ?? 0}`, "gold in the coffers", "`persist.estate.json` wallet"])
   for (const [n, what, from] of rows) S.push(`| ${n} | ${what} | ${from} |`)
   return { board: L.join("\n"), sources: S.join("\n") }

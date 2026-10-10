@@ -1,13 +1,33 @@
 // The Caretaker's reading of a Town: who rests where, which expedition, which party, who stays, what to buy.
 // Figures come from the Town (save + game files). Thresholds marked RULE are the Caretaker's own judgement,
 // stated as such on the board, never presented as the game's numbers (ISA A2).
-import { heroClass, quirks } from "./game.ts"
+import { heroClass, quirks, supplyPrices } from "./game.ts"
 import type { Activity, HeroView, Quest, QuirkView, Town, Upgrade } from "./town.ts"
+
+export const RULE_FOOD = [0, 8, 12, 16] // RULE: food and torches by expedition length
+
+export interface RoadItem { id: string; label: string; count: number; price: number }
+/** What the road to a quest asks of the Provisioner (counts are RULE), priced from the game's list with this week's event applied (C22). */
+export function road(t: Town, p: Party | undefined, prices: Map<string, number>): RoadItem[] {
+  if (!p) return []
+  const q = p.quest, len = Math.max(1, Math.min(3, q.length))
+  const change = (id: string) => (t.event?.provisions ?? []).filter((v) => v.item === (id === "provision" ? "provision" : "supply")).reduce((x, v) => x + v.cost, 0)
+  const item = (id: string, label: string, count: number): RoadItem => ({ id, label, count, price: Math.max(0, Math.round((prices.get(id) ?? 0) * (1 + change(id)))) })
+  const out = [item("provision", "Food", RULE_FOOD[len]!), item("torch", "Torches", RULE_FOOD[len]!), item("shovel", "Shovels", len)]
+  if (q.bleeders.length) out.push(item("bandage", "Bandages", len + 1))
+  if (q.blighters.length) out.push(item("antivenom", "Antivenom", len + 1))
+  return out
+}
 
 export const RULE = {
   restAbove: 45, // RULE: stress at which I want a hero relieved before going out again
   sendBelow: 45, // RULE: I only send heroes below this stress
   dismissNegatives: 3, // RULE: a level 0 hero with this many negative quirks is a candidate to let go
+  greenParty: 3, // RULE: when this many of the four are level 0, a longer road counts against itself
+  greenPerStep: 6, // RULE: how much, per step beyond a short road
+  goldPerPoint: 500, // RULE: every 500 gold the road leaves in the coffers counts for one point, up to goldCap
+  goldCap: 4,
+  brokeRoad: 20, // RULE: a road the coffers cannot provision counts this much against itself
   turnBackBroken: 2, // RULE: when this many of the four have broken, I bring them home
 }
 
@@ -16,7 +36,7 @@ const DUNGEON_TOKEN: Record<string, string[]> = { weald: ["weald"], cove: ["cove
 
 export interface Relief { hero: HeroView; why: string[]; options: { activity: Activity; note: string }[] }
 export interface Seat { hero: HeroView; rank: number; skills: string[]; notes: string[] }
-export interface Party { quest: Quest; seats: Seat[]; score: number; healer: boolean; stunner: boolean; notes: string[] }
+export interface Party { quest: Quest; seats: Seat[]; score: number; healer: boolean; stunner: boolean; notes: string[]; left?: number; green?: boolean }
 export interface Advice {
   relief: Relief[]; disease: HeroView[]; afflicted: HeroView[]
   ready: HeroView[]; parties: Party[]; best?: Party
@@ -134,6 +154,15 @@ export async function advise(t: Town): Promise<Advice> {
   }
   // RULE: while the roster is young, a walked dungeon and a short expedition break ties
   for (const p of parties) p.score += (p.quest.walked ? 1 : 0) + (p.quest.length === 1 ? 0.5 : 0)
+  // RULE (Soushi, 2026-10-10): count the gold the road leaves, and keep a green party on short roads
+  const prices = await supplyPrices(), coffers = t.wallet.gold ?? 0
+  for (const p of parties) {
+    const cost = road(t, p, prices).reduce((x, i) => x + i.count * i.price, 0)
+    p.left = coffers - cost
+    p.score += p.left < 0 ? -RULE.brokeRoad : Math.min(RULE.goldCap, p.left / RULE.goldPerPoint)
+    p.green = p.seats.filter((s) => s.hero.level === 0).length >= RULE.greenParty
+    if (p.green) p.score -= RULE.greenPerStep * Math.max(0, p.quest.length - 1)
+  }
   parties.sort((a, b) => b.score - a.score)
   const best = parties[0]
 

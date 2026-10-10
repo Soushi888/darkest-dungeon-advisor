@@ -279,11 +279,14 @@ describe.skipIf(!has)("on the local save", () => {
       }
       return total
     }
+    // the gold in the coffers changes which road is chosen (C27), so each case is held to its own road's reserve
     for (const gold of [t.wallet.gold ?? 0, reserve - 1, reserve + 2000, 100_000]) {
       const rich = { ...t, wallet: { ...t.wallet, gold } }
-      const md = source(rich, await advise(rich), { foresight: false, answers: {}, prices }).board
-      expect(spent(md)).toBeLessThanOrEqual(Math.max(0, gold - reserve))
-      expect(md).toContain(gold >= reserve ? "kept for the road" : "cannot pay for the road")
+      const ra = await advise(rich)
+      const own = road(rich, ra.best, prices).reduce((x, i) => x + i.count * i.price, 0)
+      const md = source(rich, ra, { foresight: false, answers: {}, prices }).board
+      expect(spent(md)).toBeLessThanOrEqual(Math.max(0, gold - own))
+      expect(md).toContain(gold >= own ? "kept for the road" : "cannot pay for the road")
     }
   })
 
@@ -346,5 +349,19 @@ describe.skipIf(!has)("on the local save", () => {
     expect(lines).not.toMatch(/:0\b|\b0 step/)
     // another week's baseline says nothing but who is in the buildings
     expect(weekSoFar(t, { ...start, week: t.week - 1 }).every((l) => l.startsWith("In the buildings"))).toBe(true)
+  })
+
+  test("C27: the road is chosen with the gold it leaves and the party's experience in mind", async () => {
+    const t = await town(await readSave(copyProfile()))
+    const a = await advise(t)
+    for (const p of a.parties) expect(p.left).toBeDefined()
+    // a green party never gets a longer road where a short one scores within the habit's penalty
+    const best = a.best!
+    if (best.green) expect(best.quest.length).toBe(Math.min(...a.parties.filter((p) => p.green).map((p) => p.quest.length)))
+    // a road the coffers cannot provision is never first while one they can is on offer
+    if (a.parties.some((p) => p.left! >= 0)) expect(best.left!).toBeGreaterThanOrEqual(0)
+    const broke = { ...t, wallet: { ...t.wallet, gold: 0 } }
+    const b = await advise(broke)
+    expect(b.parties.every((p) => p.left! < 0)).toBe(true)
   })
 })
