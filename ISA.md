@@ -99,3 +99,5 @@ Soushi comes back from an expedition, saves, and opens the town board. A village
 ## Progress
 - a238076 The Caretaker checks each pick against the next Hamlet save: done, not yet, or not as chosen
 - 282f630 The board stays in the fiction: the Caretaker never names a save, a file or a code; the sources move to sources.md
+- 34fbda4 The Caretaker reads the week's town event: its recruits, closed doors and prices
+- e212f47 Tests build their boards in .dd-runtime/test-town, never over the live board and its picks
