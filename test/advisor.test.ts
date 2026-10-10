@@ -265,7 +265,9 @@ describe.skipIf(!has)("on the local save", () => {
     expect(prices.get("provision")).toBeGreaterThan(0)
     const items = road(t, a.best, prices)
     const reserve = items.reduce((x, i) => x + i.count * i.price, 0)
-    for (const i of items) expect(i.price).toBe(prices.get(i.id)!)
+    // the file's price, with this week's event applied when one changes the Provisioner's prices (C20)
+    const change = (id: string) => (t.event?.provisions ?? []).filter((v) => v.item === (id === "provision" ? "provision" : "supply")).reduce((x, v) => x + v.cost, 0)
+    for (const i of items) expect(i.price).toBe(Math.max(0, Math.round(prices.get(i.id)! * (1 + change(i.id)))))
     // what a board leans on, in gold: every lean must fit in what the road leaves
     const spent = (md: string) => {
       let total = 0
