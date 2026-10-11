@@ -159,6 +159,27 @@ export async function capture(save: Save): Promise<string | undefined> {
   return f
 }
 
+/** What each recorded trip brought home of one heirloom (U22): carried home (the last page's packs against the first) and the
+ *  quest's own reward of it when the quest was done. Read from the chronicle, since the campaign log keeps no loot. */
+export async function heirloomTrips(kind: string): Promise<{ trips: number; got: number }> {
+  const root = chronicleDir()
+  if (!existsSync(root)) return { trips: 0, got: 0 }
+  let trips = 0, got = 0
+  for (const d of readdirSync(root).map((x) => join(root, x)).filter((x) => statSync(x).isDirectory())) {
+    const pages = readdirSync(d).filter((f) => /^\d+\.json$/.test(f)).sort()
+    if (pages.length < 2) continue
+    const first = (await Bun.file(join(d, pages[0]!)).json()) as Snap, last = (await Bun.file(join(d, pages.at(-1)!)).json()) as Snap
+    const raws = readdirSync(d).filter((f) => /^\d+\.raw\.json$/.test(f)).sort()
+    const raw = raws.length ? await Bun.file(join(d, raws.at(-1)!)).json().catch(() => undefined) : undefined
+    const { questStatus } = await import("./quest.ts")
+    const q = await questStatus(raw)
+    const reward = q?.complete ? Object.values<any>(raw?.raid?.raid_instance?.completion_reward?.items_definition?.items ?? {}).filter((i) => i.type === "heirloom" && i.id === kind).reduce((t, i) => t + Number(i.amount ?? 0), 0) : 0
+    trips++
+    got += Math.max(0, (last.supplies[kind] ?? 0) - (first.supplies[kind] ?? 0)) + reward
+  }
+  return { trips, got }
+}
+
 /** The chronicle of the expedition the coach just brought back: the latest one for that dungeon and those four. */
 export async function chronicleFor(back: { dungeon: string; heroes: { guid: number }[] }): Promise<Snap[]> {
   const root = chronicleDir()
