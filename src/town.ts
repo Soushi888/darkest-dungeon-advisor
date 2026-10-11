@@ -32,7 +32,7 @@ export interface Town {
   // the expedition the coach just brought back, as the campaign log's latest chapter records it (C37)
   trips: { dungeon: string; difficulty: number }[] // every expedition the campaign log records
   ledger?: Lesson[] // the lessons kept from past expeditions (C42), loaded by the board before it advises
-  back?: { dungeon: string; dungeonName: string; quest: string; length: number; success: boolean; heroes: { guid: number; name: string; cls: string; died: boolean }[] }
+  back?: { dungeon: string; dungeonName: string; quest: string; goal?: string; length: number; success: boolean; heroes: { guid: number; name: string; cls: string; died: boolean }[] }
   skillDiscount: number; gearDiscount: number; campDiscount: number; visited: string[]; knownVariants: string[]
   heroUpgrades: Upgrade[]; buildingUpgrades: Upgrade[]; estateTrinkets: { id: string; name: string; classes: string[]; rank: number }[]
   worn: Record<string, { id: string; name: string; rank: number }[]>; trinketSlots: number
@@ -138,7 +138,7 @@ export async function town(save: Save): Promise<Town> {
   const trip = chapters.length ? Object.values<any>(chapters[chapters.length - 1]).find((x) => x && typeof x === "object" && x.heroes && typeof x.dungeon_type === "string") : undefined
   const trips = chapters.flatMap((c) => Object.values<any>(c).filter((x) => x && typeof x === "object" && x.heroes && typeof x.dungeon_type === "string").map((x) => ({ dungeon: String(x.dungeon_type), difficulty: Number(x.difficulty ?? 0) })))
   const back = trip ? {
-    dungeon: trip.dungeon_type, dungeonName: await nameOf("dungeon", trip.dungeon_type), quest: String(trip.quest ?? ""), length: Number(trip.length ?? 0), success: !!trip.success,
+    dungeon: trip.dungeon_type, dungeonName: await nameOf("dungeon", trip.dungeon_type), quest: String(trip.quest ?? ""), goal: trip.quest ? await questGoal(String(trip.quest), trip.dungeon_type, Number(trip.length ?? 0)) : undefined, length: Number(trip.length ?? 0), success: !!trip.success,
     heroes: Object.values<any>(trip.heroes).map((h) => ({ guid: Number(h.guid), name: String(h.name), cls: String(h.class), died: !!h.died })),
   } : undefined
   let event: TownEvent | undefined
