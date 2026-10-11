@@ -18,6 +18,7 @@ import { profileDir } from "./paths.ts"
 import { messagesFile } from "./road.ts"
 import { newlySeen, whereLine } from "./map.ts"
 import { effectWords, plain, wrap } from "./words.ts"
+import { turnKind } from "./turns.ts"
 
 const log = join(outDir(), "answers-log.md")
 const game = join(profileDir(), "persist.game.json")
@@ -94,7 +95,13 @@ setInterval(async () => {
         for (const h of p.heroes ?? []) { const w = (prev.heroes ?? []).find((x: any) => x.guid === h.guid); if (w && (h.turns ?? 0) > (w.turns ?? 0)) acted.push(h.name) }
         const pf: any[] = prev.battle?.foes ?? [], nf: any[] = p.battle?.foes ?? []
         for (const e of nf) { const w = pf.find((x) => x.guid && x.guid === e.guid); if (w && (e.turns ?? 0) > (w.turns ?? 0)) acted.push(e.name) }
-        if (acted.length) delta.push(`acted: ${acted.join(", ")}`)
+        // one turn between two pages is told by what it did: a hit, a dodge, a move, a buff, a heal, or unknown (C53)
+        if (acted.length === 1) {
+          const dodges = async (file?: string) => { try { return Number((await Bun.file(file!).json()).raid?.battle?.consecutive_monster_dodges ?? 0) } catch { return 0 } }
+          const side = (p.heroes ?? []).some((h: any) => h.name === acted[0]) ? "hero" : "foe"
+          const turn = turnKind({ heroes: prev.heroes ?? [], foes: pf }, { heroes: p.heroes ?? [], foes: nf }, { name: acted[0]!, side }, [await dodges(prevRaw), await dodges(f.replace(/\.json$/, ".raw.json"))])
+          delta.push(`turn: ${turn.said}`)
+        } else if (acted.length) delta.push(`acted: ${acted.join(", ")}`)
         for (const e of nf) {
           const w = pf.find((x) => x.guid && x.guid === e.guid)
           if (!w) continue
