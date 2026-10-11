@@ -11,6 +11,7 @@
     "skin": "bun src/skin.ts",
     "live": "bun src/live.ts",
     "say": "bun src/road.ts say",
+    "now": "bun src/now.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },

@@ -161,7 +161,7 @@ setInterval(async () => {
       if (!noted && !delta.length && body === lastBody.get(trip)) continue
       lastBody.set(trip, body)
       const map = `${where ? ` || ${where}` : ""}${seen.length ? ` || newly seen: ${seen.join(", ")}` : ""}`
-      console.log(wrap(`${noted ? "CHRON" : "PAGE"} ${now()} #${f.match(/(\d+)\.json$/)![1]} light ${p.torch}, rooms ${tl.ROOM_VISITED ?? 0}, battles ${tl.BATTLE_COMPLETED ?? 0}, food ${p.supplies?.food ?? 0}, torches ${p.supplies?.torch ?? 0} | ${who}${fight}${change}${map}`).join("\n")) // one write, so a notification carries the whole page
+      console.log(wrap(`${noted ? "CHRON" : "PAGE"} ${now()} #${f.match(/(\d+)\.json$/)![1]} saved ${new Date(statSync(f).mtimeMs).toLocaleTimeString("en-GB", { hour12: false })} light ${p.torch}, rooms ${tl.ROOM_VISITED ?? 0}, battles ${tl.BATTLE_COMPLETED ?? 0}, food ${p.supplies?.food ?? 0}, torches ${p.supplies?.torch ?? 0} | ${who}${fight}${change}${map}`).join("\n")) // one write, so a notification carries the whole page
     } catch {}
   }
   if (existsSync(messagesFile())) {

@@ -32,7 +32,8 @@ export async function effectWords(s: string): Promise<string> {
   const m = s.match(/^(.+?) (-?[\d.]+)(?: \((\d+)\))?(?: from (\S+))?$/)
   if (!m) return words(s)
   const [, what, amt, dur, from] = m, n = Number(amt), rounds = dur ? ` for ${dur} round${dur === "1" ? "" : "s"}` : ""
-  const by = from ? `, from the ${await nameOf("class", from)}` : ""
+  // a foe that laid it is named as the game names monsters, a hero by calling
+  const by = from ? `, from the ${/_[A-Z]$/.test(from) ? await nameOf("monster", from) : await nameOf("class", from)}` : ""
   // damage over time: the amount is what it deals each round
   if (what === "blight" || what === "bleed") return `${what} ${n} a round${rounds}${by}`
   let type = "", sub = "", rule = ""
