@@ -13,6 +13,7 @@
     "say": "bun src/road.ts say",
     "now": "bun src/now.ts",
     "caretaker": "bun src/caretaker.ts",
+    "ship": "bun src/ship.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
