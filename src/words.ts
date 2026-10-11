@@ -29,11 +29,12 @@ function amount(key: string, kind: "pct" | "pts" | "abs", n: number) {
 
 /** One effect as a page keeps it, in words: "speed +1 for 3 rounds", "blight resist +20% for 3 rounds". */
 export async function effectWords(s: string): Promise<string> {
-  const m = s.match(/^(.+?) (-?[\d.]+)(?: \((\d+)\))?(?: from (\S+))?$/)
+  const m = s.match(/^(.+?) (-?[\d.]+)(?: \((\d+)\))?(?: from (.+))?$/)
   if (!m) return words(s)
   const [, what, amt, dur, from] = m, n = Number(amt), rounds = dur ? ` for ${dur} round${dur === "1" ? "" : "s"}` : ""
   // a foe that laid it is named as the game names monsters, a hero by calling
-  const by = from ? `, from the ${/_[A-Z]$/.test(from) ? await nameOf("monster", from) : await nameOf("class", from)}` : ""
+  // a curio or a trap is kept already named ("the Knife Rack", pm#18)
+  const by = !from ? "" : /^(the|a) /.test(from) ? `, from ${from}` : `, from the ${/_[A-Z]$/.test(from) ? await nameOf("monster", from) : await nameOf("class", from)}`
   // damage over time: the amount is what it deals each round
   if (what === "blight" || what === "bleed") return `${what} ${n} a round${rounds}${by}`
   let type = "", sub = "", rule = ""

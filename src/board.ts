@@ -633,6 +633,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     ["When this many of the four have broken, I bring them home", RULE.turnBackBroken],
     ["Below this light I count them as walking in the dark", CHRONICLE_RULE.darkTorch],
     ["This much stress between two pages is a blow worth telling", CHRONICLE_RULE.stressSpike],
+    ["This share of a hero's health lost or regained between two pages is a wound or a mending worth telling", `${Math.round(CHRONICLE_RULE.woundShare * 100)}%`],
   ])
   H("Learning from the road", [
     ["Torches a lesson about the dark adds on its dungeon", `+${CHRONICLE_RULE.lessonTorches}`],
@@ -682,6 +683,7 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
     // a leap of stress already told by its cause (a trap, a curio, an obstacle by hand) is not told a second time (U7)
     const told = (x: Beat) => extra.some((e) => Math.abs(e.i - x.i) <= 1 && (e.who === x.who || (!!x.who && e.text.includes(`${x.who} `) && /stress/.test(e.text))))
     const all = [...beats(snaps, fellNames).filter((x) => !(x.kind === "dark" && extra.some((e) => e.kind === "obstacle" && e.i === x.i))
+      && !(x.kind === "battle" && extra.some((e) => e.kind === "battle" && e.i === x.i))
       && !(x.kind === "spike" && told(x))), ...extra].sort((x, y) => x.i - y.i)
     // C55: the tale checks itself against the pages, and a step that does not match is dropped and reported
     const classes = await Promise.all([...new Set(snaps.flatMap((s) => s.heroes.map((h) => h.cls)))].map((c) => nameOf("class", c)))

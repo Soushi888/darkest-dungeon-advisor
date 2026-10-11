@@ -15,6 +15,7 @@ export const CHRONICLE_RULE = {
   lessonTorches: 2, // RULE: torches a light lesson adds on its dungeon
   lessonFood: 2, // RULE: food a hunger lesson adds on its dungeon
   untriedMargin: 1, // RULE: one more torch and food on a road harder than any in the ledger
+  woundShare: 0.25, // RULE: this share of a hero's health lost or regained between two pages is a wound or a mending worth telling (#12)
 }
 
 export interface SnapHero { guid: number; name: string; cls: string; hp: number; maxHp: number; stress: number; affliction: string; virtue: string; deathsDoor: boolean; lastBlow: string
@@ -32,12 +33,24 @@ export interface Snap {
 }
 
 // an actor's state in a fight: turns taken, stun, each buff or mark with who laid it, each damage over time
-function fx(a: any) {
+// what laid a bleed or a blight out of a fight on a hero: the game records the hero's own calling as its source (pm#18: the
+// Knife Rack that cut Azor read "from the Vestal"), and no hero bleeds or blights themselves, so it is the trap the narrator
+// last spoke of, or else the curio last searched
+async function environment(save: Save): Promise<string> {
+  const said = Object.values<any>((save.narration as any)?.raid_entry_log ?? {}).map((e) => String(e.entry_type ?? "")).at(-1)
+  if (said === "trap") return "a trap"
+  const last = Object.values<any>((save.raid as any)?.stat_database?.CURIO_INVESTIGATED?.entries ?? {}).at(-1)
+  const id = last ? Object.values<any>(last.parameters ?? {}).map((x) => x.data).filter((x) => typeof x === "string").pop() : undefined
+  return id ? `the ${(await strings()).get(`str_curio_title_${id}`) ?? String(id).replace(/_/g, " ")}` : ""
+}
+
+function fx(a: any, self = "", env = "") {
   const effects = Object.values<any>(a?.buff_group ?? {}).map((b) => {
     // the game keeps damage over time as buffs: stat 4 is blight, stat 5 bleed, their amount the damage each round
     // (read against base.effects.darkest: "Blight 1" deals 2 for 3 rounds, and stat 4 amount 2 counted down 3, 2, 1)
     const what = b.id || [b.stat_sub_type, b.ruledata_string].filter(Boolean).join(" vs ") || (b.stat_type === 4 ? "blight" : b.stat_type === 5 ? "bleed" : `stat ${b.stat_type}`)
-    const src = typeof b.source_class_id === "string" ? ` from ${b.source_class_id}` : ""
+    const dot = b.stat_type === 4 || b.stat_type === 5 || /^(blight|bleed)/.test(what)
+    const src = typeof b.source_class_id !== "string" ? "" : dot && self && b.source_class_id === self ? (env ? ` from ${env}` : "") : ` from ${b.source_class_id}`
     return `${what} ${Math.round(Number(b.amount) * 100) / 100}${b.duration > 0 ? ` (${b.duration})` : ""}${src}`
   })
   const dots = Object.entries<any>(a?.actor_dot ?? {}).map(([k, v]) => `${k} ${JSON.stringify(v)}`)
@@ -79,7 +92,7 @@ export async function snapshot(save: Save): Promise<Snap | undefined> {
       guid, name: h.actor?.name ?? `#${guid}`, cls: h.heroClass, hp: Math.max(0, f32(h.actor?.current_hp)), maxHp: await maxHp(h.heroClass, h.armour_rank ?? 0),
       stress: Math.round(f32(h.m_Stress)), affliction: h.affliction_type_id ? await nameOf("affliction", h.affliction_type_id) : "", virtue: h.virtue_type_id ? await nameOf("affliction", h.virtue_type_id) : "",
       deathsDoor: !!h.visited_deaths_door, lastBlow: blow && /_[A-Z]$/.test(blow) ? await nameOf("monster", blow) : "",
-      blowCls: blow && /_[A-Z]$/.test(blow) ? blow : "", ...fx(h.actor),
+      blowCls: blow && /_[A-Z]$/.test(blow) ? blow : "", ...fx(h.actor, h.heroClass, r.inbattle ? "" : await environment(save)),
     })
   }
   const b = r.inbattle ? r.battle : undefined
@@ -142,7 +155,7 @@ export async function chronicleFor(back: { dungeon: string; heroes: { guid: numb
   return []
 }
 
-export interface Beat { i: number; kind: "battle" | "ambush" | "curio" | "dark" | "hunger" | "spike" | "affliction" | "virtue" | "deathsdoor" | "fell" | "trap" | "obstacle" | "crit" | "quirk" | "shuffle" | "meal" | "close"; who?: string; text: string; bad: boolean; from?: number }
+export interface Beat { i: number; kind: "battle" | "ambush" | "curio" | "dark" | "hunger" | "spike" | "affliction" | "virtue" | "deathsdoor" | "fell" | "trap" | "obstacle" | "crit" | "quirk" | "shuffle" | "meal" | "close" | "wound" | "mend"; who?: string; text: string; bad: boolean; from?: number }
 
 /** The trip in order, from one snapshot to the next (C40). */
 const i0 = (snaps: Snap[]) => snaps.length > 1
@@ -165,6 +178,10 @@ export function beats(snaps: Snap[], fell: string[] = []): Beat[] {
       if (!was.virtue && h.virtue) out.push({ i, kind: "virtue", who: h.name, text: `${h.name} rose to the occasion (${h.virtue})`, bad: false })
       if (!was.deathsDoor && h.deathsDoor) out.push({ i, kind: "deathsdoor", who: h.name, text: `${h.name} stood at Death's Door${h.lastBlow ? `, struck by a ${h.lastBlow}` : ""}`, bad: true })
       else if (h.stress - was.stress >= CHRONICLE_RULE.stressSpike && !h.affliction) out.push({ i, kind: "spike", who: h.name, text: `${h.name}'s stress leapt to ${h.stress}`, bad: true })
+      // a wound or a mending of a large share of the bar between two pages (#12)
+      const dh = Math.round(h.hp) - Math.round(was.hp), share = CHRONICLE_RULE.woundShare * (h.maxHp || 1)
+      if (h.hp > 0 && -dh >= share) out.push({ i, kind: "wound", who: h.name, text: `${h.name} took a heavy wound: health fell from ${Math.round(was.hp)} to ${Math.round(h.hp)}`, bad: true })
+      if (dh >= share) out.push({ i, kind: "mend", who: h.name, text: `${h.name} was mended: health rose from ${Math.round(was.hp)} to ${Math.round(h.hp)}`, bad: false })
     }
     // C44: the four are kept front to back, so a change of order among those on both pages is a shuffle; a run of shuffled
     // pages within one battle (its knockbacks and moves) is told once, as the net change from before it, and not at all if it undid itself
@@ -254,12 +271,13 @@ export interface FoeRecord { name: string; blows: number; hp: number; crits: num
 export interface Debrief { foes: FoeRecord[]; beats: Beat[]; loot: Record<string, number>; costs: { by: string; to: string; hp: number; kind: string }[] }
 
 const word = (id: string) => (/^\d+$/.test(id) ? "journal page" : id.replace(/_/g, " "))
+const plural = (w: string) => /[^aeiou]y$/i.test(w) ? `${w.slice(0, -1)}ies` : /(s|x|ch|sh)$/i.test(w) ? `${w}es` : `${w}s`
 const an = (w: string) => `${/^[aeiou]/i.test(w) ? "an" : "a"} ${w}`
 async function rawPage(s: Snap, i: number): Promise<any> { try { return await Bun.file(join(chronicleDir(s.key), `${String(i).padStart(4, "0")}.raw.json`)).json() } catch { return undefined } }
 const quirksOf = (r: any) => new Map<number, { name: string; q: string[] }>(Object.entries<any>(r?.heroes ?? {}).map(([g, h]) => { const d = h?.hero_file_data?.raw_data ?? h; return [Number(g), { name: d?.actor?.name ?? g, q: Object.keys(d?.quirks ?? {}) }] }))
 
 export async function debrief(snaps: Snap[]): Promise<Debrief> {
-  const str = await strings(), foes = new Map<string, FoeRecord>(), out: Beat[] = [], costs: Debrief["costs"] = []
+  const str = await strings(), foes = new Map<string, FoeRecord>(), out: Beat[] = [], costs: Debrief["costs"] = [], slain: string[] = []
   const foe = (n: string) => { if (!foes.has(n)) foes.set(n, { name: n, blows: 0, hp: 0, crits: 0, attacks: {}, victims: {}, blight: 0, bleed: 0 }); return foes.get(n)! }
   const hit = (f: FoeRecord, who: string, n: number) => { f.victims[who] = (f.victims[who] ?? 0) + n }
   const stale = new Map((snaps[0]?.heroes ?? []).map((h) => [h.guid, h.lastBlow]))
@@ -277,12 +295,14 @@ export async function debrief(snaps: Snap[]): Promise<Debrief> {
       if (!w) continue
       const loss = Math.round(w.hp) - Math.round(h.hp)
       if (loss <= 0) continue
-      const stacks = (w.effects ?? []).map((x) => x.match(/^(blight|bleed|stat 4|stat 5) (\d+)(?:.*? from (\S+))?/)).filter((m): m is RegExpMatchArray => !!m)
+      const stacks = (w.effects ?? []).map((x) => x.match(/^(blight|bleed|stat 4|stat 5) (\d+)(?:.*? from (.+))?$/)).filter((m): m is RegExpMatchArray => !!m)
       const one = stacks.find((m) => Number(m[2]) === loss), sum = stacks.reduce((t, m) => t + Number(m[2]), 0)
       const ticked = one ? [one] : stacks.length > 1 && sum === loss ? stacks : []
       if (ticked.length) {
         for (const m of ticked) {
           const kind = /blight|4/.test(m[1]!) ? "blight" : "bleed", ally = m[3] ? b.heroes.find((x) => x.cls === m[3]) : undefined
+          // laid by a curio or a trap, already named: no foe's and no ally's (pm#18)
+          if (m[3] && /^(the|a) /.test(m[3])) continue
           // a hero's own skill that wounds as it heals (the Occultist's) is its cost, never a foe's blow (U7)
           if (ally) { const c = costs.find((x) => x.by === ally.name && x.to === h.name && x.kind === kind); if (c) c.hp += Number(m[2]); else costs.push({ by: ally.name, to: h.name, hp: Number(m[2]), kind }); continue }
           const f = foe(m[3] ? await nameOf("monster", m[3]) : "an unknown foe"); f[kind] += Number(m[2]); hit(f, h.name, Number(m[2]))
@@ -318,6 +338,16 @@ export async function debrief(snaps: Snap[]): Promise<Debrief> {
         if (v?.blow) foe(v.blow).crits++
         out.push({ i, kind: "crit", who: v?.name, text: v ? `${v.blow ? an(v.blow) : "a foe"} landed a critical blow on ${v.name} for ${v.hp}` : "a critical blow landed on one of them", bad: true })
       } else if (e === "hunger_starve") out.push({ i, kind: "hunger", text: "they went hungry with nothing to eat", bad: true })
+    }
+    // the foes slain, by name, gathered until the battle is won and told with it (#12); a corpse cleared is not a foe slain
+    const ids = (k: string, n: number) => n > 0 ? Object.values<any>(r?.raid?.stat_database?.[k]?.entries ?? {}).slice(-n).map((e) => Object.values<any>(e.parameters ?? {}).map((x) => x.data).filter((x) => typeof x === "string").pop()) : []
+    for (const id of ids("MONSTER_DEFEATED", (b.tally.MONSTER_DEFEATED ?? 0) - (a.tally.MONSTER_DEFEATED ?? 0))) if (id && !/^corpse/.test(id)) slain.push(await nameOf("monster", id))
+    const won = (b.tally.BATTLE_COMPLETED ?? 0) - (a.tally.BATTLE_COMPLETED ?? 0)
+    if (won > 0) {
+      const named = [...new Set(slain)].map((n) => { const c = slain.filter((x) => x === n).length; return c > 1 ? `${c} ${plural(n)}` : an(n) })
+      const list = named.length > 1 ? `${named.slice(0, -1).join(", ")} and ${named.at(-1)}` : named[0]
+      out.push({ i, kind: "battle", text: `${won > 1 ? `${won} battles` : "a battle"} won${list ? ` against ${list}` : ""}`, bad: false })
+      slain.length = 0
     }
     // each curio searched, with what it left: provisions or riches found, quirks caught or shed, health and stress
     const quirks = quirksOf(r), changed: { who: string; text: string }[] = []
