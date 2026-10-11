@@ -16,7 +16,7 @@ const chron = () => join(town(), "chronicle")
 export const messagesFile = () => join(roadDir(), "messages.jsonl")
 export const commentsFile = () => join(roadDir(), "comments.jsonl")
 
-export type Line = { at: string; from: "caretaker" | "soushi"; text: string; page?: string; trip?: string }
+export type Line = { at: string; from: "caretaker" | "soushi"; text: string; page?: string; trip?: string; gameAt?: string }
 
 /** The expedition being walked: the chronicle folder saved to last, and its newest page. */
 export function current(): { trip?: string; page?: string; file?: string } {
@@ -37,9 +37,10 @@ const read = async (path: string): Promise<Line[]> => existsSync(path)
   ? (await Bun.file(path).text()).split("\n").filter(Boolean).flatMap((l) => { try { return [JSON.parse(l) as Line] } catch { return [] } })
   : []
 
+/** The Caretaker's line, tied to the page it answers; the page the game had reached is kept beside it, so a late line shows (C56). */
 export function say(text: string, page?: string) {
-  const c = current()
-  append(commentsFile(), { at: new Date().toISOString(), from: "caretaker", text, page: page ?? c.page, trip: c.trip })
+  const c = current(), about = page ? page.padStart(4, "0") : c.page
+  append(commentsFile(), { at: new Date().toISOString(), from: "caretaker", text, page: about, trip: c.trip, ...(about && c.page && about !== c.page ? { gameAt: c.page } : {}) })
 }
 
 export function ask(text: string) {
@@ -119,7 +120,7 @@ const busy=asked&&fresh(asked.at)?say(["reading your message","thinking over wha
 :s&&fresh(s.pageAt)?say(s.foes?["watching the fight on page "+esc(s.page),"counting who struck whom","looking up the foes' blows","weighing the next turn"]:["reading page "+esc(s.page),"checking the packs","watching the light","tracing the map","noting it for the report"]):"";
 B.hidden=!busy;B.textContent=busy;
 const key=JSON.stringify(d.lines);if(key===shown)return;shown=key;const T=document.getElementById("roadThread");
-T.innerHTML=d.lines.length?[...d.lines].reverse().map(l=>'<div class="msg '+l.from+'"><div class="who">'+(l.from==="soushi"?"You":"The Caretaker")+' · '+time(l.at)+(l.page?' · page '+esc(l.page):'')+'</div>'+esc(l.text)+'</div>').join(""):'<div class="empty">Nothing said yet on this road.</div>';para(T);
+T.innerHTML=d.lines.length?[...d.lines].reverse().map(l=>'<div class="msg '+l.from+'"><div class="who">'+(l.from==="soushi"?"You":"The Caretaker")+' · '+time(l.at)+(l.page?(l.gameAt?' · about page '+esc(l.page)+', the game was at '+esc(l.gameAt):' · page '+esc(l.page)):'')+'</div>'+esc(l.text)+'</div>').join(""):'<div class="empty">Nothing said yet on this road.</div>';para(T);
 }catch{}}
 tick();setInterval(tick,2000);
 const t=document.getElementById("roadText");document.getElementById("roadForm").onsubmit=async e=>{e.preventDefault();const v=t.value.trim();if(!v)return;t.value="";await fetch("/road/message",{method:"POST",body:v});tick()};
@@ -127,6 +128,8 @@ t.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefau
 
 if (import.meta.main) {
   const [cmd, ...rest] = process.argv.slice(2)
-  if (cmd === "say" && rest.join(" ").trim()) { say(rest.join(" ").trim()); console.log(`said on page ${current().page ?? "?"}`) }
-  else console.log('usage: bun run say "<text>"')
+  // bun run say --page 142 "<text>": the line answers page 142, whatever page the game has reached since
+  const at = rest.indexOf("--page"), page = at >= 0 ? rest[at + 1] : undefined, words = at >= 0 ? [...rest.slice(0, at), ...rest.slice(at + 2)] : rest
+  if (cmd === "say" && words.join(" ").trim()) { say(words.join(" ").trim(), page); const c = current(); console.log(`said about page ${page ?? c.page ?? "?"}${page && c.page && page.padStart(4, "0") !== c.page ? `, the game is at ${c.page}` : ""}`) }
+  else console.log('usage: bun run say [--page N] "<text>"')
 }

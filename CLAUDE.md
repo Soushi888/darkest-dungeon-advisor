@@ -15,6 +15,8 @@ bun run watch                # serve on http://127.0.0.1:4317/, rebuild on every
 bun run read                 # decode the save to data/state.json, for inspecting fields
 bun run skin                 # build .local/state/theme.css from skin/darkest.css plus art from the install
 bun run live                 # one line per board send or game save, for a live session (see below)
+bun run now                  # the latest page in full: the four and the foes front to back, who has acted, where they stand
+bun run say --page N "<t>"   # the Caretaker's line on the road thread, tied to the page it answers
 bun test                     # all claim probes
 bun test -t "C6"             # one test, by its claim id
 bun run typecheck            # tsc --noEmit
@@ -74,13 +76,15 @@ When Soushi plays with the board open, watch the session yourself; he should nev
 
 - **Start:** check the watcher is up (`pgrep -af "src/cli.ts watch"`), then arm the Monitor tool on `bun run live` with the maximum timeout, and re-arm it on every expiry until he stops playing. It prints one line per event: `SEND <time> <n> picks`, `SAVE <time> town` only when a Hamlet save changed the rebuilt board (the game saves every few seconds in town), and `SAVE <time> dungeon` once per expedition. A chronicle page prints as `CHRON` or `PAGE`, and a page over 400 characters continues on `MORE` lines printed in the same write, so the Monitor's filter must keep `MORE` too.
 
+- **Read the page before you speak.** Before any comment, run `bun run now` and comment with `bun run say --page <that page> "<text>"`. A claim about who has acted, the ranks or anyone's health comes from that snapshot, never from memory of the stream; a line about a page the game has since left shows in the thread as late.
+
 - **On SEND:** read `.local/town/answers.md`, `.local/town/picks.json` and the rebuilt `.local/town/town.md`, then tell him in a few lines what the Caretaker took from it: the expedition and party, picks dropped as not belonging to their card (the page keeps picks by card position), and anything the board now warns about (a road the coffers cannot pay for). His notes, stickies and general comments are requests: answer them, and build what they ask for when it is a change to the advisor.
 
 - **On SAVE town:** the board has rebuilt. Read its "Did you do what you chose?" zone and name anything Not as chosen.
 
 - **On WARN:** the rebuilt board advises two things that cannot both be done (C38, `src/coherence.ts`). Fix the advice at its source before Soushi acts on it, and add a check to `contradictions()` for any new kind of clash he catches.
 
-- **On ASK:** Soushi wrote from the road zone at the top of the farewell board (C49). Answer there with `bun run say "<text>"`, and keep commenting every dungeon page there too, so the thread is the whole conversation.
+- **On ASK:** Soushi wrote from the road zone at the top of the farewell board (C49). Answer there with `bun run say --page <page> "<text>"` after reading `bun run now`, and keep commenting every dungeon page there too, so the thread is the whole conversation.
 
 - **On SAVE dungeon:** the board has turned into the farewell (C24), once per expedition, and then waits (C16). Read `.local/town/town.md` and give him its verdict and its warnings in two or three lines, then say nothing until he is back unless asked.
 
