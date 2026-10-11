@@ -58,3 +58,12 @@ export async function campBrief(p: Snap, raw: any): Promise<string> {
   const pts = Number(camp.camping_skill_points ?? 0)
   return [`CAMPING SKILLS THEY TOOK TO THE FIRE${pts ? ` (${pts} camp points to spend)` : ""}`, ...lines].join("\n")
 }
+
+/** How much a camping skill is worth at the fire, by my habit (RULE in advise.ts): stress relieved by how many it reaches,
+ *  health healed, a cure, a guard on the camp, a boon for the next fight. */
+export function campWorth(k: CampSkill, R: { campStress: number; campHealth: number; campCure: number; campGuard: number; campBoon: number }): number {
+  const reach = (sel: string) => (sel === "party_other" ? 3 : sel === "party" ? 4 : 1)
+  return k.effects.reduce((v, e) => v + (e.type === "stress_heal_amount" ? e.amount * reach(e.selection) * R.campStress
+    : e.type === "stress_damage_amount" ? -e.amount * reach(e.selection) * R.campStress / 2 : e.type === "health_heal_max_health_percent" ? e.amount * R.campHealth * reach(e.selection)
+    : /^remove_/.test(e.type) ? R.campCure : e.type === "reduce_ambush_chance" ? R.campGuard : e.type === "buff" ? R.campBoon : 0), 0)
+}
