@@ -1,5 +1,8 @@
 // The Hamlet as the save describes it, and the Caretaker's reading of it. Pure derivation: every figure
 // is a save field or a game-file value, and every piece of advice carries the paths it came from (C14).
+import { existsSync } from "node:fs"
+import { join } from "node:path"
+import { install } from "./paths.ts"
 import type { Dson } from "./dson.ts"
 import type { Save } from "./read.ts"
 import type { Lesson } from "./chronicle.ts"
@@ -86,7 +89,7 @@ async function heroView(guid: number, h: any, thr: number[], busy: Map<number, s
     affliction: r.affliction_type_id ? await nameOf("affliction", r.affliction_type_id) : "",
     busy: busy.get(guid) ?? "", quirks: qs, skills, weapon: r.weapon_rank ?? 0, armour: r.armour_rank ?? 0,
     trinkets: Object.values<any>(r.trinkets?.items ?? {}).map((t) => t.id).filter(Boolean),
-    dungeons: (r.dungeon_history ?? []).filter((d: unknown) => typeof d === "string"), portrait: P.portrait(r.heroClass),
+    dungeons: (r.dungeon_history ?? []).filter((d: unknown) => typeof d === "string"), portrait: existsSync(join(install, P.portrait(r.heroClass, Number(r.actor?.colour_variation ?? 0)))) ? P.portrait(r.heroClass, Number(r.actor?.colour_variation ?? 0)) : P.portrait(r.heroClass),
     campEquipped: Object.keys(r.skills?.selected_camping_skills ?? {}),
   }
 }
