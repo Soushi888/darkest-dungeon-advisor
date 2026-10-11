@@ -3,7 +3,7 @@
 import { describe, expect, spyOn, test } from "bun:test"
 import { mkdirSync, rmSync } from "node:fs"
 import { join } from "node:path"
-import { comment, SYSTEM } from "../src/caretaker.ts"
+import { comment, promptFor, SYSTEM, streamFlow } from "../src/caretaker.ts"
 import { feed } from "../src/road.ts"
 import { root } from "../src/paths.ts"
 
@@ -100,4 +100,48 @@ describe("C64: the Caretaker comments by himself", () => {
     expect(lines.map((l) => l.page)).toEqual(["0001"])
     expect(left).toBe("")
   }, 20_000)
+})
+
+// C73: one report per CHRON page, its prompt holding every page told since his last word (pm#36; Soushi, 05:59: "It should see
+// all the pages, but only make one report"). From page 0106 of the Weald, where Guernon's loss went unexplained.
+describe("C73: he sees every page since his last word, and makes one report", () => {
+  const pages = [
+    "PAGE 05:56:04 #0101 saved 05:56:04 light 72 | Guernon 15/19hp 41st || changed: light -6; hallway step completed +1",
+    "PAGE 05:56:10 #0102 saved 05:56:10 light 72 | Guernon 15/19hp 58st || changed: narrated: trap; Guernon +17st; Guernon gains blight 2 a round for 3 rounds, from a trap",
+    "MORE   4. Guernon 15/19 health, 58 stress",
+    "PAGE 05:56:12 #0103 saved 05:56:12 light 66 | Guernon 13/19hp 58st || changed: light -6; Guernon -2hp (blight ticking)",
+    "CHRON 05:56:30 #0106 saved 05:56:30 light 54 | Guernon 11/19hp 58st || changed: Guernon -2hp (blight ticking); room visited +1",
+  ]
+  test("three plain pages then one CHRON give exactly one post, whose prompt holds all four pages' events", async () => {
+    const posts: { kind: string; text: string; page: string; since: string[] }[] = []
+    const flow = streamFlow(async (kind, text, page, _q = "", since = []) => { posts.push({ kind, text, page, since: [...since] }); return true }, async () => undefined)
+    for (const l of pages) await flow.line(l)
+    await flow.end()
+    expect(posts.length).toBe(1)
+    expect(posts[0]!.page).toBe("0106")
+    expect(posts[0]!.since.map((s) => s.match(/#(\d+)/)?.[1])).toEqual(["0101", "0102", "0103"])
+    const prompt = await promptFor("page", posts[0]!.text, "", posts[0]!.since)
+    expect(prompt).toMatch(/WHAT HAPPENED SINCE MY LAST WORD\n[\s\S]*#0101[\s\S]*Guernon \+17st; Guernon gains blight 2 a round for 3 rounds, from a trap[\s\S]*Guernon -2hp \(blight ticking\)[\s\S]*THE PAGE\nCHRON[^\n]*#0106/)
+    expect(prompt).toContain("Guernon 15/19 health, 58 stress") // a page's MORE lines go with it
+    // the kept pages are spent once he has spoken: the next CHRON sees only what came after
+    await flow.line("CHRON 05:57:00 #0107 saved 05:57:00 light 48 | Guernon 9/19hp 58st || changed: Guernon -2hp (blight ticking)")
+    await flow.end()
+    expect(posts.length).toBe(2)
+    expect(posts[1]!.since).toEqual([])
+  })
+
+  test("a report that failed keeps its page for the next one, and an answer to the Heir sees the kept pages too", async () => {
+    const posts: { kind: string; since: string[] }[] = []
+    let ok = false
+    const flow = streamFlow(async (kind, _t, _p, _q = "", since = []) => { posts.push({ kind, since: [...since] }); return ok }, async () => ({ text: "PAGE 0106", page: "0106" }))
+    await flow.line(pages[1]!); await flow.line(pages[4]!); await flow.end() // the CHRON fails
+    ok = true
+    await flow.line("ASK 05:58:35 page 0106: why did Guernon lose health?")
+    expect(posts.map((p) => p.kind)).toEqual(["page", "ask"])
+    expect(posts[1]!.since.map((s) => s.match(/#(\d+)/)?.[1])).toEqual(["0102", "0106"])
+  })
+
+  test("he is told that every change he names carries its cause, and when he may say it is unknown", () => {
+    expect(SYSTEM).toMatch(/Every change you name.*carries its cause.*WHAT HAPPENED SINCE MY LAST WORD.*unknown only when no page there holds one/)
+  })
 })
