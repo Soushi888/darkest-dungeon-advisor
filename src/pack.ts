@@ -4,7 +4,7 @@
 // into consideration."
 import { P, text } from "./game.ts"
 
-export interface PackRules { slots: number; stack: Map<string, number>; value: Map<string, number> }
+export interface PackRules { slots: number; stack: Map<string, number>; value: Map<string, number>; quest: Set<string> }
 
 // the chronicle's keys: food for the provision, gold for the coin, the id for the rest
 const keyOf = (type: string, id: string) => (type === "provision" ? "food" : type === "gold" ? "gold" : id || type)
@@ -13,16 +13,17 @@ let rules: PackRules | undefined
 export async function packRules(): Promise<PackRules> {
   if (rules) return rules
   const slots = Number((await text(P.inventoryConfigs)).match(/\.type\s+"raid"\s+\.max_slots\s+(\d+)/)?.[1] ?? 0)
-  const stack = new Map<string, number>(), value = new Map<string, number>()
+  const stack = new Map<string, number>(), value = new Map<string, number>(), quest = new Set<string>()
   for (const f of P.inventoryItems) {
     for (const m of (await text(f)).matchAll(/\.type\s+"(\w+)"\s+\.id\s+"(\w*)"\s+\.base_stack_limit\s+(\d+)[^\n]*?\.sell_gold_value\s+(\d+)/g)) {
       const k = keyOf(m[1]!, m[2]!)
+      if (m[1] === "quest_item") quest.add(k)
       // the supply comes first, so a quest item sharing its id (holy water, antivenom) does not change its stack
       if (stack.has(k)) continue
       stack.set(k, Number(m[3])); value.set(k, Number(m[4]))
     }
   }
-  return (rules = { slots, stack, value })
+  return (rules = { slots, stack, value, quest })
 }
 
 /** The slots these items take: each kind fills its stacks to its limit, and a kind the files do not list takes a slot each. */
@@ -35,7 +36,8 @@ const KEEP = new Set(["food", "torch", "shovel", "bandage", "antivenom", "medici
 
 /** When the pack is full: the loot to leave behind first, the least gold per slot first, from the files' sell values. */
 export function dropFirst(items: Record<string, number>, r: PackRules): { key: string; n: number; worth: number; perSlot: number }[] {
-  return Object.entries(items).filter(([k, n]) => n > 0 && !KEEP.has(k) && !/^journal/.test(k))
+  // a quest item is what the road is for: never left behind (U39: the medicines of Stave off Sickness were offered at 0 gold)
+  return Object.entries(items).filter(([k, n]) => n > 0 && !KEEP.has(k) && !r.quest.has(k) && !/^journal/.test(k))
     .map(([key, n]) => { const worth = key === "gold" ? n : n * (r.value.get(key) ?? 0), slots = Math.ceil(n / (r.stack.get(key) ?? 1)); return { key, n, worth, perSlot: Math.round(worth / slots) } })
     .sort((a, b) => a.perSlot - b.perSlot)
 }

@@ -17,8 +17,12 @@ export async function questStatus(raw: any): Promise<QuestStatus | undefined> {
   const g = goals.get(id), d = g?.data ?? {}, s = await strings()
   // the progress: the target, and the count beside it, whatever the goal calls them
   const prog = ri[id] ?? {}, nums = Object.entries<any>(prog).filter(([, v]) => typeof v === "number")
-  const of = Number(nums.find(([k]) => /^target/.test(k))?.[1] ?? d.amount ?? 0)
-  const done = Number(nums.find(([k]) => !/^target/.test(k))?.[1] ?? 0)
+  // a gather goal keeps no count of its own (raid_instance.gather_medicines is {} on the Weald's page 0089, 2026-10-11): its target
+  // is the goal's item amount, and what is gathered is what the party carries of that item (U39)
+  const want = g?.type === "gather" ? d.item : undefined
+  const carried = want ? Object.values<any>(raw?.raid?.party?.inventory?.items ?? {}).filter((i) => i.type === want.type && i.id === want.id).reduce((t, i) => t + Number(i.amount ?? 0), 0) : 0
+  const of = Number(nums.find(([k]) => /^target/.test(k))?.[1] ?? want?.amount ?? d.amount ?? 0)
+  const done = want && !nums.length ? carried : Number(nums.find(([k]) => !/^target/.test(k))?.[1] ?? 0)
   const pct = (p: number) => `${Math.round(p * 100)}%`
   const asks = g?.type === "explore_room" ? `explore ${d.percentage >= 1 ? "every room" : `${pct(d.percentage)} of the rooms`}`
     : g?.type === "battle_room" ? (d.percentage >= 1 ? "win the battle in every room" : `win ${pct(d.percentage)} of the room battles`)
