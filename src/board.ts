@@ -10,7 +10,7 @@ import { advise, fills, readiness, road, seatParty, RULE, RULE_FOOD, type Advice
 export { road, type RoadItem } from "./advise.ts"
 import { campingSkills, supplyPrices, type CampSkill, nameOf } from "./game.ts"
 import { install, root } from "./paths.ts"
-import { DIFFICULTY, LENGTH, type HeroView, type Town } from "./town.ts"
+import { DIFFICULTY, LENGTH, type HeroView, type Town, type Upgrade } from "./town.ts"
 import { buildSkin } from "./skin.ts"
 import { loadPicks, reconcile, type Check } from "./reconcile.ts"
 import { contradictions } from "./coherence.ts"
@@ -543,17 +543,25 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     L.push("What the family's heirlooms could build tonight, and the trinkets in the estate's stores with who may wear them.", "")
     // what the estate holds, as the Hamlet's own bar shows it: the icons are set beside each count when the page is built (U9)
     L.push(`**What the estate holds.** ${PURSE.map(([k, w]) => `${(k === "gold" ? gold : t.wallet[k] ?? 0).toLocaleString("en-US")} ${w}`).join(", ")}.`, "")
-    if (a.heirlooms.length) {
+    // the Stage Coach's upgrades are always named, each with its cost and what is missing when the estate cannot pay yet (U10)
+    const short = (u: Upgrade) => u.cost.filter((c) => c.amount > (t.wallet[c.type] ?? 0)).map((c) => `${c.amount - (t.wallet[c.type] ?? 0)} ${c.type}s`).join(" and ")
+    const cost = (u: Upgrade) => u.cost.map((c) => `${c.amount} ${c.type}s`).join(" and ")
+    const coachOut = a.coach.filter((u) => !u.affordable)
+    const coachNote = coachOut.length ? ` Out of reach at the Stage Coach: ${coachOut.map((u) => `${u.label.replace(/^[^:]+: /, "")} (${cost(u)}; ${short(u)} short)`).join("; ")}.` : ""
+    if (a.heirlooms.length || coachOut.length) {
       L.push("```board-decisions")
-      L.push(`- q: "Where do the heirlooms go?"`, `  context: ${y(`The estate holds ${t.wallet.crest ?? 0} crests, ${t.wallet.bust ?? 0} busts, ${t.wallet.portrait ?? 0} portraits, ${t.wallet.deed ?? 0} deeds.`)}`, "  options:")
+      L.push(`- q: "Where do the heirlooms go?"`, `  context: ${y(`The estate holds ${t.wallet.crest ?? 0} crests, ${t.wallet.bust ?? 0} busts, ${t.wallet.portrait ?? 0} portraits, ${t.wallet.deed ?? 0} deeds.${coachNote}`)}`, "  options:")
       for (const u of a.heirlooms) L.push(`    - pick: ${y(u.label)}`, `      effect: ${y(`costs ${u.cost.map((c) => `${c.amount} ${c.type}s`).join(" and ")}.`)}`)
       L.push(`    - pick: "Save them"`, `      effect: ${y("Keep the heirlooms for a bigger upgrade later.")}`)
       // an affordable building upgrade that opens the party's own waiting upgrades comes first (Soushi, 2026-10-10)
       const opens = a.heirlooms.map((u) => a.blocked.filter((b) => b.blockedBy.includes(`${u.tree} ${u.code}`)))
       const most = opens.reduce((best, o, i) => (o.length > (opens[best]?.length ?? 0) ? i : best), -1)
       const san = a.heirlooms.findIndex((u) => u.tree === "sanitarium.disease_quirk_cost" || u.tree === "sanitarium.cost")
-      const lean = most >= 0 ? most : san >= 0 ? san : a.heirlooms.length
-      const why = most >= 0 ? `it opens what the party is waiting for: ${opens[most]!.map((b) => `${b.hero} ${b.label}`).join(", ")}.` : san >= 0 ? `${a.disease.length} of your heroes are ill; cheaper treatment pays back quickly.` : "nothing affordable opens anything the party is waiting for."
+      // my habit: a roster mostly at level 1 or lower wants seasoned recruits before anything else the heirlooms can buy
+      const seasoned = a.coach.find((u) => u.tree === "stage_coach.upgraded_recruits"), si = seasoned ? a.heirlooms.indexOf(seasoned) : -1
+      const youngWhy = a.young && seasoned ? `my habit: ${a.young.low} of your ${a.young.of} heroes are level 1 or lower, so the Stage Coach's seasoned recruits come first` : ""
+      const lean = youngWhy ? (si >= 0 ? si : a.heirlooms.length) : most >= 0 ? most : san >= 0 ? san : a.heirlooms.length
+      const why = youngWhy ? (si >= 0 ? `${youngWhy}.` : `${youngWhy}; I keep the heirlooms for them, ${cost(seasoned!)}, ${short(seasoned!)} short.`) : most >= 0 ? `it opens what the party is waiting for: ${opens[most]!.map((b) => `${b.hero} ${b.label}`).join(", ")}.` : san >= 0 ? `${a.disease.length} of your heroes are ill; cheaper treatment pays back quickly.` : "nothing affordable opens anything the party is waiting for."
       L.push(`  lean: ${lean}`, `  lean_why: ${y(why)}`)
       L.push("```", "")
     }
@@ -599,6 +607,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     ["A hero at this much stress or more rests before going out again", RULE.restAbove],
     ["I only send heroes under this much stress", RULE.sendBelow],
     ["A level 0 hero with this many bad quirks is one I would let go", RULE.dismissNegatives],
+    ["When this share of the roster is level 1 or lower, the heirlooms go to the Stage Coach's seasoned recruits first", `${Math.round(RULE.youngRoster * 100)}%`],
     ["A heal restoring this many hit points a cast, at its first level, makes a healer; less is a light heal", RULE.realHeal],
   ])
   H("Choosing the road", [
