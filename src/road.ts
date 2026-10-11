@@ -52,7 +52,8 @@ export async function sayRecap(page: string | undefined, words: { advice: string
   if (!file || !existsSync(file)) throw new Error(`no page ${n} on this road`)
   const p = await Bun.file(file).json(), raw = await Bun.file(file.replace(/\.json$/, ".raw.json")).json().catch(() => undefined)
   const r = buildRecap(p, raw, n, statSync(file).mtimeMs, words, town())
-  say(`The road so far, page ${Number(n)}: ${words.advice}`, n, r)
+  // the line is his words alone; the card shows the page, its tally and the road so far (pm#34)
+  say(words.advice, n, r)
   return r
 }
 

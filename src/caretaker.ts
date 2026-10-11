@@ -6,10 +6,11 @@
 // It never imports a model SDK and never spawns claude; it only writes the road thread (ISA A1).
 import { homedir } from "node:os"
 import { join } from "node:path"
-import { statSync } from "node:fs"
+import { appendFileSync, statSync } from "node:fs"
 import { nowText } from "./now.ts"
 import { current, feed, say, sayRecap } from "./road.ts"
 import type { Snap } from "./chronicle.ts"
+import { outDir } from "./board.ts"
 
 // read at call time, so a test can point them at a stub (the same pattern as NICEBOARD)
 const inference = () => process.env.DD_INFERENCE ?? join(homedir(), ".claude/PAI/Tools/Inference.ts")
@@ -18,17 +19,27 @@ const limit = () => Number(process.env.DD_CARETAKER_TIMEOUT ?? 60_000)
 const clock = () => new Date().toLocaleTimeString("en-GB", { hour12: false })
 
 export const SYSTEM = [
-  "You are the Caretaker of the Hamlet in Darkest Dungeon, speaking to the Heir in the first person, in English, in character, while the party is on the road.",
+  "You are the Caretaker of the Hamlet in Darkest Dungeon. You stay in the Hamlet and speak to the Heir, in the first person, in English, in character, about the four on the road: say \"your four\", \"they\", their names; never \"we\" for the party.",
   // the report beside your words already shows the numbers as bars, icons and a map (C66), so speak, do not tabulate (pm#26)
-  "Write two to four short paragraphs, one subject each, separated by a blank line: what just happened; how the four are holding, naming whoever worries you; what the packs allow; what you would do next, and why. Plain prose, no headings, no capitals for emphasis, no lists.",
+  "Length follows what happened: a quiet page, nothing fought, found or lost, gets one or two short paragraphs; up to four short paragraphs, one subject each, only after a fight, a curio searched or a crisis. Separate paragraphs with a blank line. Plain prose: no headings, no lists, no capitals for emphasis, and never open with a tally or a page number, the card above your words already shows them.",
+  "Write every number as digits (33 health, 38 stress), never in words.",
   "Use only what the page and the thread say. Never name a foe, a trap, a curio or what lies ahead unless the page names it; never say what a curio would give before it was searched; never give a number that is not on the page.",
   "Never use an em dash. Never name a save, a file, a field, a page number, a tool or a model: stay in the Hamlet's words.",
+  "THE HEIR'S WAYS are habits he has told you; follow them in what you advise, and never advise against one.",
 ].join(" ")
 
 /** The prompt for one page or one question: the page whole, then the last lines of the thread, then what to answer. */
 export async function promptFor(kind: "page" | "ask", snapshot: string, ask = ""): Promise<string> {
   const thread = (await feed()).lines.slice(-10).map((l) => `${l.from === "soushi" ? "The Heir" : "The Caretaker"}: ${l.text}`).join("\n")
-  return [`THE PAGE\n${snapshot}`, thread ? `THE THREAD SO FAR\n${thread}` : "", kind === "ask" ? `THE HEIR ASKS\n${ask}\nAnswer him.` : "Comment this page."].filter(Boolean).join("\n\n")
+  const ways = await readWays()
+  return [ways.length ? `THE HEIR'S WAYS\n${ways.map((w) => `- ${w}`).join("\n")}` : "", `THE PAGE\n${snapshot}`, thread ? `THE THREAD SO FAR\n${thread}` : "",
+    kind === "ask" ? `THE HEIR ASKS\n${ask}\nAnswer him. If he states a standing habit of his own, end with one last line \"WAY: <the habit, in one short line>\"; otherwise do not.` : "Comment this page."].filter(Boolean).join("\n\n")
+}
+
+// the Heir's ways, one habit a line, kept beside the board (pm#35); the PM writes it, and an answer to a stated habit adds to it
+export const waysFile = () => join(outDir(), "ways.md")
+export async function readWays(): Promise<string[]> {
+  return (await Bun.file(waysFile()).text().catch(() => "")).split("\n").map((l) => l.replace(/^\s*[-*]\s*/, "").trim()).filter(Boolean)
 }
 
 /** One inference call; the text, or undefined when it failed, timed out or said nothing. */
@@ -48,8 +59,16 @@ export async function comment(kind: "page" | "ask", snapshot: string, page: stri
   const r = await ask(SYSTEM, await promptFor(kind, snapshot, question))
   if (!r.text) { console.log(`WARN ${clock()} caretaker: no comment on page ${page} (${r.error})`); return false }
   // a page's comment is his recap, the report beside the conversation (C66); an answer to the Heir is a plain line
-  if (kind === "page") await sayRecap(page, { advice: r.text })
-  else say(r.text, page)
+  // a tally opener is the card's job, not his (pm#34); a stated habit goes to his ways (pm#35)
+  let text = r.text.replace(/^\s*the road so far[^:\n]*:\s*/i, "")
+  const way = text.match(/\n?\s*WAY:\s*(.+)\s*$/)
+  if (way) {
+    text = text.slice(0, way.index).trimEnd()
+    const ways = await readWays()
+    if (!ways.some((w) => w.toLowerCase() === way[1]!.trim().toLowerCase())) appendFileSync(waysFile(), `- ${way[1]!.trim()}\n`)
+  }
+  if (kind === "page") await sayRecap(page, { advice: text })
+  else say(text, page)
   console.log(`SAID ${clock()} page ${page}: ${r.text.replace(/\s+/g, " ").slice(0, 160)}`)
   return true
 }

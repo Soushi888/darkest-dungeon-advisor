@@ -47,7 +47,7 @@ describe("C66: the recap, built from the page, shown as the report", () => {
     process.env.DD_TOWN_OUT = was
     rmSync(out, { recursive: true, force: true })
     expect(line.recap).toMatchObject({ page: "0115", tally: { rooms: 8, battles: 3 }, advice: "Light a torch." })
-    expect(line.text).toBe("The road so far, page 115: Light a torch.")
+    expect(line.text).toBe("Light a torch.") // his words alone; the card carries the page and the tally
     // the report (card, foes, map) beside the conversation (form, busy line, thread); one column on a phone
     for (const id of ['id="roadReport"', 'id="roadCard"', 'id="roadFoes"', 'id="roadMap"', 'id="roadTalk"', 'id="roadThread"']) expect(roadPanel).toContain(id)
     expect(roadPanel).toMatch(/@media \(max-width:900px\)\{#road \.roadgrid\{grid-template-columns:minmax\(0,1fr\)\}\}/)

@@ -31,14 +31,37 @@ describe("C64: the Caretaker comments by himself", () => {
       expect(args[2]).toBe(SYSTEM)
       expect(SYSTEM).toMatch(/Never name a foe, a trap, a curio or what lies ahead unless the page names it/)
       expect(SYSTEM).toMatch(/Never use an em dash/)
-      expect(SYSTEM).toMatch(/two to four short paragraphs, one subject each.*what just happened.*how the four are holding.*what the packs allow.*what you would do next, and why/)
-      expect(SYSTEM).toMatch(/no headings/)
+      // pm#34: from the Hamlet, digits, length by events, no tally opener
+      expect(SYSTEM).toMatch(/your four/)
+      expect(SYSTEM).toMatch(/never \\"we\\" for the party|never "we" for the party/)
+      expect(SYSTEM).toMatch(/every number as digits/)
+      expect(SYSTEM).toMatch(/a quiet page.*one or two short paragraphs.*up to four/)
+      expect(SYSTEM).toMatch(/never open with a tally/)
       expect(args[3]).toContain("THE PAGE\nPAGE 0000")
       // a page's comment is posted as his recap, the report card (C66), its numbers from the page
       const said = (await feed()).lines.at(-1)!
       expect(said).toMatchObject({ from: "caretaker", page: "0000" })
       expect(said.recap?.advice).toBe("The Shaman is down, press the last Grouper before it heals.")
       expect(said.recap?.four[0]).toMatchObject({ name: "Reynauld", hp: 18, stress: 40 })
+    })
+    rmSync(out, { recursive: true, force: true })
+  })
+
+  test("his ways reach every prompt, a habit he states is kept once, and a tally opener is cut", async () => {
+    await fresh()
+    await Bun.write(join(out, "ways.md"), "- keeps antivenom and bandages for the walk, heals in battle\n")
+    const log = join(out, "args.json")
+    await withEnv({ DD_TOWN_OUT: out, DD_INFERENCE: stub("way"), STUB_LOG: log }, async () => {
+      const { promptFor, readWays } = await import("../src/caretaker.ts")
+      expect(await promptFor("page", "PAGE 0000")).toContain("THE HEIR'S WAYS\n- keeps antivenom and bandages for the walk, heals in battle")
+      expect(await comment("ask", "PAGE 0000", "0000", "I keep antivenom and bandages for the walk.")).toBe(true)
+      const said = (await feed()).lines.at(-1)!
+      expect(said.text).toBe("Keep the antivenom for the walk, then.")
+      // the same habit is not written twice
+      expect(await readWays()).toEqual(["keeps antivenom and bandages for the walk, heals in battle"])
+      await Bun.write(join(out, "ways.md"), "")
+      await comment("ask", "PAGE 0000", "0000", "I keep antivenom for the walk.")
+      expect(await readWays()).toEqual(["keeps antivenom and bandages for the walk, heals in battle"])
     })
     rmSync(out, { recursive: true, force: true })
   })
