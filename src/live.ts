@@ -65,7 +65,10 @@ setInterval(async () => {
           // the game keeps the last foe that struck each hero; named on the page where the hero lost health, with the attacks
           // of that foe (witnessed ones only, C5) whose damage fits the blow: in range, or up to half again as a critical
           let by = ""
-          if (dh < 0 && h.lastBlow) {
+          // a loss equal to the blight or bleed the hero carried on the last page is that damage ticking, not a new blow
+          const tick = dh < 0 ? (w.effects ?? []).map((x: string) => x.match(/^(blight|bleed|stat [45]) (\d+)/)).find((m: any) => m && Number(m[2]) === -dh) : undefined
+          if (tick) by = ` (${tick[1].replace("stat 4", "blight").replace("stat 5", "bleed")} ticking)`
+          else if (dh < 0 && h.lastBlow) {
             const m = h.blowCls ? await monster(h.blowCls) : undefined, loss = -dh, known = new Set<string>(p.known ?? [])
             const fits = [...(m?.dmg ?? [])].filter(([id]) => !p.known || known.has(id)).flatMap(([id, [lo, hi]]) =>
               loss >= lo && loss <= hi ? [`${id.replace(/_/g, " ")} ${lo}-${hi}`] : loss > hi && loss <= Math.ceil(hi * 1.5) ? [`${id.replace(/_/g, " ")} ${lo}-${hi}, a critical`] : [])

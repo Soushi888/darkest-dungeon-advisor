@@ -32,7 +32,9 @@ export interface Snap {
 // an actor's state in a fight: turns taken, stun, each buff or mark with who laid it, each damage over time
 function fx(a: any) {
   const effects = Object.values<any>(a?.buff_group ?? {}).map((b) => {
-    const what = b.id || [b.stat_sub_type, b.ruledata_string].filter(Boolean).join(" vs ") || `stat ${b.stat_type}`
+    // the game keeps damage over time as buffs: stat 4 is blight, stat 5 bleed, their amount the damage each round
+    // (read against base.effects.darkest: "Blight 1" deals 2 for 3 rounds, and stat 4 amount 2 counted down 3, 2, 1)
+    const what = b.id || [b.stat_sub_type, b.ruledata_string].filter(Boolean).join(" vs ") || (b.stat_type === 4 ? "blight" : b.stat_type === 5 ? "bleed" : `stat ${b.stat_type}`)
     const src = typeof b.source_class_id === "string" ? ` from ${b.source_class_id}` : ""
     return `${what} ${Math.round(Number(b.amount) * 100) / 100}${b.duration > 0 ? ` (${b.duration})` : ""}${src}`
   })
