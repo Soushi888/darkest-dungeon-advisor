@@ -7,7 +7,7 @@ import type { Snap } from "./chronicle.ts"
 import { monster } from "./game.ts"
 import { whereLine } from "./map.ts"
 import { current } from "./road.ts"
-import { effectWords, plain } from "./words.ts"
+import { effectWords, plain, wrap } from "./words.ts"
 
 const time = (ms: number) => new Date(ms).toLocaleTimeString("en-GB", { hour12: false })
 
@@ -44,6 +44,13 @@ export async function nowText(p: Snap, raw: any, page: string, savedAt: number):
   if (where) out.push(`WHERE ${where}`)
   out.push(`SUPPLIES ${Object.entries(p.supplies).filter(([, n]) => n > 0).map(([k, n]) => `${plain(k)} ${n}`).join(", ") || "none"}; light ${p.torch}`)
   return out.join("\n")
+}
+
+/** A CHRON line and the page it tells, whole, in one block (C63): the agent comments from the line alone, so the line carries
+ *  everything bun run now would print for that page, each line of it as a MORE line under 400 characters. */
+export async function chronBlock(head: string[], p: Snap, raw: any, page: string, savedAt: number): Promise<string[]> {
+  const snap = (await nowText(p, raw, page, savedAt)).split("\n")
+  return [...head, ...snap.flatMap((l) => wrap(`MORE ${l.trim()}`))]
 }
 
 if (import.meta.main) {

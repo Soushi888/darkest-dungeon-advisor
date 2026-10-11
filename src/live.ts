@@ -20,6 +20,7 @@ import { newlySeen, whereLine } from "./map.ts"
 import { effectWords, plain, wrap } from "./words.ts"
 import { turnKind } from "./turns.ts"
 import { alreadyTold, inOrder } from "./livemark.ts"
+import { chronBlock } from "./now.ts"
 
 const log = join(outDir(), "answers-log.md")
 const game = join(profileDir(), "persist.game.json")
@@ -164,7 +165,10 @@ setInterval(async () => {
       if (!noted && !delta.length && body === lastBody.get(trip)) continue
       lastBody.set(trip, body)
       const map = `${where ? ` || ${where}` : ""}${seen.length ? ` || newly seen: ${seen.join(", ")}` : ""}`
-      console.log(wrap(`${noted ? "CHRON" : "PAGE"} ${now()} #${f.match(/(\d+)\.json$/)![1]} saved ${new Date(statSync(f).mtimeMs).toLocaleTimeString("en-GB", { hour12: false })} light ${p.torch}, rooms ${tl.ROOM_VISITED ?? 0}, battles ${tl.BATTLE_COMPLETED ?? 0}, food ${p.supplies?.food ?? 0}, torches ${p.supplies?.torch ?? 0} | ${who}${fight}${change}${map}`).join("\n")) // one write, so a notification carries the whole page
+      const lines = wrap(`${noted ? "CHRON" : "PAGE"} ${now()} #${f.match(/(\d+)\.json$/)![1]} saved ${new Date(statSync(f).mtimeMs).toLocaleTimeString("en-GB", { hour12: false })} light ${p.torch}, rooms ${tl.ROOM_VISITED ?? 0}, battles ${tl.BATTLE_COMPLETED ?? 0}, food ${p.supplies?.food ?? 0}, torches ${p.supplies?.torch ?? 0} | ${who}${fight}${change}${map}`)
+      // a CHRON page carries the page whole, as bun run now prints it, so the agent comments from the line alone (C63)
+      const out = noted ? await chronBlock(lines, p, await Bun.file(f.replace(/\.json$/, ".raw.json")).json().catch(() => undefined), f.match(/(\d+)\.json$/)![1]!, statSync(f).mtimeMs) : lines
+      console.log(out.join("\n")) // one write, so a notification carries the whole page
     } catch {}
   }
   if (existsSync(messagesFile())) {
