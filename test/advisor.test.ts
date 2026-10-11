@@ -34,6 +34,17 @@ function copyProfile(): string {
   return fake
 }
 
+/** The copy with every hero rested (stress 0), for a probe that needs a four fit to send whatever the live roster is this week:
+ *  on 2026-10-11 the four were out in the Cove and everyone else over the habit's stress, so no road was offered and five
+ *  probes failed on the save rather than on the code. Stress is a float after its name, aligned to four bytes, as dson.ts reads it. */
+function restedProfile(): string {
+  const dir = copyProfile(), p = join(dir, "persist.roster.json"), buf = readFileSync(p), dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
+  const needle = Buffer.from("m_Stress\0")
+  for (let i = buf.indexOf(needle); i >= 0; i = buf.indexOf(needle, i + 1)) { const s = i + needle.length; dv.setFloat32(s + ((4 - (s % 4)) % 4), 0, true) }
+  writeFileSync(p, buf)
+  return dir
+}
+
 /** Flips persist.game.json's `inraid` bool in a copy, the way a save taken mid-expedition reads. */
 async function setInRaid(dir: string, value: boolean) {
   const p = join(dir, "persist.game.json")
@@ -65,10 +76,12 @@ describe.skipIf(!has)("on the local save", () => {
   })
 
   test("A1: a town build never writes to the profile", async () => {
-    const before = readdirSync(profile).map((f) => statSync(join(profile, f)).mtimeMs)
-    const proc = Bun.spawnSync(["bun", "src/cli.ts", "town"], { cwd: root, env: { ...process.env } })
+    // the build reads a copy, so the game saving the real profile mid-test (Soushi playing, 2026-10-11) cannot look like a write
+    const dir = copyProfile()
+    const before = readdirSync(dir).map((f) => statSync(join(dir, f)).mtimeMs)
+    const proc = Bun.spawnSync(["bun", "src/cli.ts", "town"], { cwd: root, env: { ...process.env, DD_PROFILE: dir } })
     expect(proc.exitCode).toBe(0)
-    const after = readdirSync(profile).map((f) => statSync(join(profile, f)).mtimeMs)
+    const after = readdirSync(dir).map((f) => statSync(join(dir, f)).mtimeMs)
     expect(after).toEqual(before)
   })
 
@@ -203,7 +216,7 @@ describe.skipIf(!has)("on the local save", () => {
   })
 
   test("C18: answers sent from the page come back as a checked list on the next board", async () => {
-    const dir = copyProfile()
+    const dir = restedProfile()
     const port = 4392
     const out = join(townOut)
     rmSync(join(out, "picks.json"), { force: true })
@@ -242,7 +255,7 @@ describe.skipIf(!has)("on the local save", () => {
   })
 
   test("C47: the Survivalist section names each of the four's camping skills and leans to keep the gold on a road that does not camp", async () => {
-    const proc = Bun.spawnSync(["bun", "src/cli.ts", "town"], { cwd: root, env: { ...process.env, DD_PROFILE: copyProfile() } })
+    const proc = Bun.spawnSync(["bun", "src/cli.ts", "town"], { cwd: root, env: { ...process.env, DD_PROFILE: restedProfile() } })
     expect(proc.exitCode).toBe(0)
     const md = await Bun.file(join(townOut, "town.md")).text()
     const from = md.indexOf("## The Survivalist"), sec = md.slice(from, md.indexOf("\n## ", from + 5))
@@ -318,7 +331,7 @@ describe.skipIf(!has)("on the local save", () => {
   })
 
   test("C22: the road is priced from the Provisioner's list and paid for first; no lean spends what it needs", async () => {
-    const t = await town(await readSave(copyProfile()))
+    const t = await town(await readSave(restedProfile()))
     const a = await advise(t)
     const prices = await supplyPrices()
     expect(prices.get("provision")).toBeGreaterThan(0)
@@ -413,7 +426,7 @@ describe.skipIf(!has)("on the local save", () => {
   })
 
   test("C27: the road is chosen with the gold it leaves and the party's experience in mind", async () => {
-    const t = await town(await readSave(copyProfile()))
+    const t = await town(await readSave(restedProfile()))
     const a = await advise(t)
     for (const p of a.parties) expect(p.left).toBeDefined()
     // a green party never gets a longer road where a short one scores within the habit's penalty
@@ -427,7 +440,7 @@ describe.skipIf(!has)("on the local save", () => {
   })
 
   test("C28: readiness counts my conditions from the save, and falls when one of them fails", async () => {
-    const t = await town(await readSave(copyProfile()))
+    const t = await town(await readSave(restedProfile()))
     const a = await advise(t)
     const p = a.best!
     const reserve = road(t, p, await supplyPrices()).reduce((x, i) => x + i.count * i.price, 0)
