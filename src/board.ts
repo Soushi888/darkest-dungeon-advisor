@@ -500,7 +500,9 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   // a full roster still has choices: a recruit clearly better than a level 0 hero outside the party is worth the swap (RULE: by 2 or more)
   const sendingNow = new Set(chosen?.seats.map((x) => x.hero.guid))
   const named = new Set(a.dismiss.map((d) => d.hero.guid))
-  const weak = t.heroes.filter((h) => h.level === 0 && !h.busy && !sendingNow.has(h.guid) && !named.has(h.guid)).sort((x, z) => worth(x) - worth(z))
+  // a hero this board sends to the Abbey, the Tavern or the Sanitarium is not one it lets go
+  const tended = new Set([...a.relief.map((r) => r.hero.guid), ...a.treat.map((x) => x.hero.guid), ...a.disease.map((h) => h.guid)])
+  const weak = t.heroes.filter((h) => h.level === 0 && !h.busy && !sendingNow.has(h.guid) && !named.has(h.guid) && !tended.has(h.guid)).sort((x, z) => worth(x) - worth(z))
   let free = Math.max(0, t.rosterCap - t.rosterSize) + a.dismiss.length
   const dismiss = [...a.dismiss]
   for (const r of ranked.filter((r) => fillOf(r) || worth(r.hero) > 0)) {
