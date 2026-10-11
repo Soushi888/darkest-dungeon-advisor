@@ -691,7 +691,11 @@ describe.skipIf(!has)("on the local save", () => {
     // the falsifier: one of the four also leaned into a building, and a trinket for someone left home
     const four = [...(md.match(/Front to back: ([^"]+)/)?.[1] ?? "").matchAll(/\d\. ([^(;]+?) \(/g)].map((m) => m[1]!.trim())
     if (!four.length) return
-    const bad = md.replace(/- q: "Where does (.+?) go\?"([\s\S]*?)\n  lean: \d+/, `- q: "Where does ${four[0]} go?"$2\n  lean: 0`) + `\n\n\`\`\`board-stickies\n- title: "Bleed Stone to Nobody"\n  kind: idea\n\`\`\`\n`
+    // a week where nobody needs relief has no "Where does ... go?" card to turn (week 18, every hero rested), so the falsifier
+    // plants its own: one of the four leaned into the Abbey
+    const relief = /- q: "Where does (.+?) go\?"/.test(md) ? md.replace(/- q: "Where does (.+?) go\?"([\s\S]*?)\n  lean: \d+/, `- q: "Where does ${four[0]} go?"$2\n  lean: 0`)
+      : `${md}\n\n\`\`\`board-decisions\n- q: "Where does ${four[0]} go?"\n  context: "planted"\n  options:\n    - pick: "The Abbey"\n      effect: "planted"\n    - pick: "Leave them be"\n      effect: "planted"\n  lean: 0\n  lean_why: "planted"\n\`\`\`\n`
+    const bad = relief + `\n\n\`\`\`board-stickies\n- title: "Bleed Stone to Nobody"\n  kind: idea\n\`\`\`\n`
     const found = contradictions(bad)
     expect(found.some((f) => f.includes(`${four[0]} is in the four`))).toBe(true)
     expect(found.some((f) => f.includes("Nobody, who is not in the four"))).toBe(true)
