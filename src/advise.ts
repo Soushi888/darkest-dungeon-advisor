@@ -84,13 +84,27 @@ export interface Party {
 export interface Advice {
   relief: Relief[]; disease: HeroView[]; afflicted: HeroView[]
   ready: HeroView[]; parties: Party[]; best?: Party
-  dismiss: { hero: HeroView; why: string }[]; recruits: { hero: HeroView; why: string }[]
+  dismiss: { hero: HeroView; why: string }[]; recruits: Recruit[]
   buys: Upgrade[]; blocked: Upgrade[]; heirlooms: Upgrade[]
   // every living hero who has learned a true heal, by what it restores (C37: what a fallen healer leaves behind)
   healers: { name: string; skill: string; avg: number }[]; lostHealers: string[]
   trinkets: { trinket: string; to: string; why: string }[]
   treat: Treat[]
   spend: number
+}
+/** A hero at the coach, with the true heal and the stun they bring: carried now (`own`), or in their class to learn (C43). */
+export interface Recruit { hero: HeroView; why: string; heal?: { skill: string; avg: number; own: boolean }; stun?: { skill: string; own: boolean } }
+export interface Fill { gap: "healer" | "stun"; text: string }
+/** What the four lack that a recruit brings (C43): a true healer, then a stun. Each gap goes to the first recruit, in the
+ *  order given, who brings it; a recruit who carries it beats one who would have to learn it. */
+export function fills(p: Party | undefined, recruits: Recruit[]): Map<number, Fill> {
+  const out = new Map<number, Fill>()
+  if (!p) return out
+  const pick = <T extends { own: boolean }>(get: (r: Recruit) => T | undefined) => [...recruits].filter((r) => get(r) && !out.has(r.hero.guid)).sort((x, y) => Number(get(y)!.own) - Number(get(x)!.own))[0]
+  const has = (r: Recruit, skill: string, own: boolean) => own ? `${r.hero.name} carries ${skill}` : `${r.hero.name} could learn ${skill} at the Guild`
+  if (!p.healer) { const r = pick((r) => r.heal); if (r) out.set(r.hero.guid, { gap: "healer", text: `the four have no true healer, and ${has(r, r.heal!.skill, r.heal!.own)}, about ${r.heal!.avg} hit points a cast` }) }
+  if (!p.stunner) { const r = pick((r) => r.stun); if (r) out.set(r.hero.guid, { gap: "stun", text: `the four have no stun, and ${has(r, r.stun!.skill, r.stun!.own)}` }) }
+  return out
 }
 /** A quirk worth the Treatment Ward by my habit (C25): one per hero, the worst by the order in RULE_TREAT. */
 export interface Treat { hero: HeroView; quirk: QuirkView; why: string; cost: number; inParty: boolean }
@@ -262,10 +276,20 @@ export async function advise(t: Town): Promise<Advice> {
   const dismiss = free.filter((h) => h.level === 0 && !inParty.has(h.guid) && negatives(h).length >= RULE.dismissNegatives)
     .map((h) => ({ hero: h, why: `level 0 with ${negatives(h).length} negative quirks: ${negatives(h).map((q) => q.name).join(", ")}` }))
   const room = t.rosterCap - t.rosterSize
-  const recruits = t.recruits.map((h) => {
+  const recruits: Recruit[] = []
+  for (const h of t.recruits) {
     const pos = h.quirks.filter((q) => q.positive).map((q) => q.name), neg = negatives(h).map((q) => q.name)
-    return { hero: h, why: `${h.from ? `came with the ${h.from}; ` : ""}${pos.length ? `good: ${pos.join(", ")}` : "no good quirk"}; ${neg.length ? `bad: ${neg.join(", ")}` : "no bad quirk"}${room <= 0 ? "; the roster is full" : ""}` }
-  })
+    // C43: the true heal and the stun they bring, from the class file: one they carry first, else one they could learn
+    const sk = (await heroClass(h.cls)).skills, mine = new Set((h.learned ?? h.skills).map((s) => s.id))
+    const carriedFirst = (x: Skill, y: Skill) => Number(mine.has(y.id)) - Number(mine.has(x.id))
+    const heal = [...sk.values()].filter((k) => k.heal && k.targetsAllies && k.healAvg >= RULE.realHeal).sort((x, y) => carriedFirst(x, y) || y.healAvg - x.healAvg)[0]
+    const stun = [...sk.values()].filter((k) => k.stun).sort(carriedFirst)[0]
+    recruits.push({
+      hero: h, why: `${h.from ? `came with the ${h.from}; ` : ""}${pos.length ? `good: ${pos.join(", ")}` : "no good quirk"}; ${neg.length ? `bad: ${neg.join(", ")}` : "no bad quirk"}${room <= 0 ? "; the roster is full" : ""}`,
+      heal: heal && { skill: await nameOf("skill", heal.id, h.cls), avg: heal.healAvg, own: mine.has(heal.id) },
+      stun: stun && { skill: await nameOf("skill", stun.id, h.cls), own: mine.has(stun.id) },
+    })
+  }
 
   // what to buy for the party first: affordable, unblocked, cheapest first
   const partyNames = new Set(best?.seats.map((s) => s.hero.name))
