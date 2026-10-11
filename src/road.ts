@@ -64,7 +64,7 @@ export async function feed() {
 
 // C49: the road zone. While the party is out, the farewell board turns into the road: this zone opens it, above the
 // farewell's own zones, in the same page (Soushi, 2026-10-11: "it could be a transformation of the 'The coach has left'
-// page"). It shows only while the party is out, and draws from /road/feed every two seconds.
+// page"). The box to write sits on top and the newest line under it (Soushi's pin, 2026-10-11). It shows only while the party is out, and draws from /road/feed every two seconds.
 export const roadPanel = `<style>
 #road .meta{color:var(--dim);font-size:.9rem;margin:.2rem 0 .4rem}
 #road .seat{display:grid;grid-template-columns:7rem 1fr 1fr;gap:.6rem;align-items:center;margin:.2rem 0;font-size:.95rem}
@@ -82,7 +82,7 @@ export const roadPanel = `<style>
 @media (max-width:520px){#road .seat{grid-template-columns:5rem 1fr 1fr}}
 </style><script>(()=>{const nav=document.querySelector('nav.bar');
 const z=document.createElement('section');z.className='zone wide';z.id='road';z.hidden=true;
-z.innerHTML='<h2>On the road, with the Caretaker</h2><div id="roadParty"></div><div id="roadThread"></div><form id="roadForm"><textarea id="roadText" placeholder="Write to the Caretaker (Enter sends, Shift+Enter breaks the line)"></textarea><button class="btn primary">Send</button></form>';
+z.innerHTML='<h2>On the road, with the Caretaker</h2><div id="roadParty"></div><form id="roadForm"><textarea id="roadText" placeholder="Write to the Caretaker (Enter sends, Shift+Enter breaks the line)"></textarea><button class="btn primary">Send</button></form><div id="roadThread"></div>';
 const first=document.querySelector('section.zone');if(first)first.before(z);else document.body.append(z);
 let link=null;
 const esc=s=>String(s??"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"})[c]);
@@ -94,9 +94,9 @@ if(s)document.getElementById("roadParty").innerHTML='<div class="meta">Page '+es
 s.heroes.map(h=>'<div class="seat"><div>'+esc(h.name)+(h.affliction?' <span class="tag">'+esc(h.affliction)+'</span>':'')+(h.virtue?' <span class="tag">'+esc(h.virtue)+'</span>':'')+(h.deathsDoor?' <span class="tag">Death\\'s Door</span>':'')+'</div>'+
 '<div class="bar hp" title="health"><i style="width:'+Math.max(0,Math.min(100,100*h.hp/h.maxHp))+'%"></i><span>'+h.hp+'/'+h.maxHp+'</span></div>'+
 '<div class="bar st" title="stress, of 200; the line is 100"><i style="width:'+Math.min(100,h.stress/2)+'%"></i><span>'+h.stress+'</span></div></div>').join("");
-const key=JSON.stringify(d.lines);if(key===shown)return;shown=key;const T=document.getElementById("roadThread");const atEnd=T.scrollHeight-T.scrollTop-T.clientHeight<40;
-T.innerHTML=d.lines.length?d.lines.map(l=>'<div class="msg '+l.from+'"><div class="who">'+(l.from==="soushi"?"You":"The Caretaker")+' · '+time(l.at)+(l.page?' · page '+esc(l.page):'')+'</div>'+esc(l.text)+'</div>').join(""):'<div class="empty">Nothing said yet on this road.</div>';
-if(atEnd||d.lines.at(-1)?.from==="soushi")T.scrollTop=T.scrollHeight}catch{}}
+const key=JSON.stringify(d.lines);if(key===shown)return;shown=key;const T=document.getElementById("roadThread");
+T.innerHTML=d.lines.length?[...d.lines].reverse().map(l=>'<div class="msg '+l.from+'"><div class="who">'+(l.from==="soushi"?"You":"The Caretaker")+' · '+time(l.at)+(l.page?' · page '+esc(l.page):'')+'</div>'+esc(l.text)+'</div>').join(""):'<div class="empty">Nothing said yet on this road.</div>';
+}catch{}}
 tick();setInterval(tick,2000);
 const t=document.getElementById("roadText");document.getElementById("roadForm").onsubmit=async e=>{e.preventDefault();const v=t.value.trim();if(!v)return;t.value="";await fetch("/road/message",{method:"POST",body:v});tick()};
 t.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();document.getElementById("roadForm").requestSubmit()}})})()</script>`
