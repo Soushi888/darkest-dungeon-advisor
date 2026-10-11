@@ -50,6 +50,7 @@ export const RULE = {
   campStress: 1, campHealth: 10, campCure: 4, campGuard: 6, campBoon: 2,
   frontHp: 1.5, // RULE: per hit point above the four's average, at the front; rank 1 counts twice, rank 4 twice against (Soushi, 2026-10-11: "an occultist on front line? he is not really resistant")
   lessonHeal: 4, // RULE: a true healer's extra weight on a road where healing failed before (C42)
+  youngRoster: 0.6, // RULE: when this share of the roster is level 1 or lower, the heirlooms go to the Stage Coach's seasoned recruits first (Soushi, 2026-10-11)
   healerWorth: 8, lightHealWorth: 2, stunWorth: 3, sameClass: 2, levelWorth: 3, stressWeight: 0.1, // RULE: a party's healer, light heal, stun, a doubled class against, each level, each point of stress against
 }
 
@@ -86,6 +87,8 @@ export interface Advice {
   ready: HeroView[]; parties: Party[]; best?: Party
   dismiss: { hero: HeroView; why: string }[]; recruits: Recruit[]
   buys: Upgrade[]; blocked: Upgrade[]; heirlooms: Upgrade[]
+  // the Stage Coach's next upgrade in each tree, bought or not yet affordable, and whether the roster is young by my habit
+  coach: Upgrade[]; young: { low: number; of: number } | undefined
   // every living hero who has learned a true heal, by what it restores (C37: what a fallen healer leaves behind)
   healers: { name: string; skill: string; avg: number }[]; lostHealers: string[]
   trinkets: { trinket: string; to: string; why: string }[]
@@ -299,6 +302,9 @@ export async function advise(t: Town): Promise<Advice> {
   const buys = forParty.filter((u) => u.affordable && !u.blockedBy).sort((a, b) => gold(a) - gold(b))
   const blocked = forParty.filter((u) => u.blockedBy)
   const heirlooms = t.buildingUpgrades.filter((u) => u.affordable)
+  const coach = t.buildingUpgrades.filter((u) => u.tree.startsWith("stage_coach."))
+  const low = t.heroes.filter((h) => h.level <= 1).length
+  const young = t.heroes.length && low / t.heroes.length >= RULE.youngRoster ? { low, of: t.heroes.length } : undefined
 
   // trinkets in the estate that a party member may wear
   // a trinket goes to an open slot, or replaces a worn one only when it is rarer by the game's own list; class trinkets
@@ -356,7 +362,7 @@ export async function advise(t: Town): Promise<Advice> {
     const top = (h.learned ?? h.skills).map((s) => ({ name: h.name, skill: s.name, avg: sk.get(s.id)?.targetsAllies ? sk.get(s.id)!.healAvg : 0 })).sort((x, y) => y.avg - x.avg)[0]
     if (top && top.avg >= RULE.realHeal) healers.push(top)
   }
-  return { relief, disease, afflicted, ready, parties, best, dismiss, recruits, buys, blocked, heirlooms, trinkets, treat, healers, lostHealers, spend: t.wallet.gold ?? 0 }
+  return { relief, disease, afflicted, ready, parties, best, dismiss, recruits, buys, blocked, heirlooms, coach, young, trinkets, treat, healers, lostHealers, spend: t.wallet.gold ?? 0 }
 }
 
 /** Seats a party Soushi named, front to back, and says what is wrong with it rather than refusing it. */
