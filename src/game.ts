@@ -188,7 +188,7 @@ export async function trinkets(): Promise<Map<string, Trinket>> {
 }
 
 // ---------- monsters ----------
-export interface Monster { id: string; base: string; type: string; skills: string[]; effects: Map<string, string[]>; dmg: Map<string, [number, number]>; multi: Set<string>; bleedResist: number; blightResist: number }
+export interface Monster { id: string; base: string; type: string; skills: string[]; effects: Map<string, string[]>; dmg: Map<string, [number, number]>; multi: Set<string>; bleedResist: number; blightResist: number; hp: number }
 const monsterCache = new Map<string, Monster>()
 export async function monster(variant: string): Promise<Monster | undefined> {
   if (monsterCache.has(variant)) return monsterCache.get(variant)
@@ -199,6 +199,7 @@ export async function monster(variant: string): Promise<Monster | undefined> {
   const m = {
     id: variant, base, type: info.match(/^enemy_type: \.id "([^"]+)"/m)?.[1] ?? "",
     bleedResist: Number(info.match(/^stats:[^\n]*\.bleed_resist (\d+)/m)?.[1] ?? 0) / 100,
+    hp: Number(info.match(/^stats:[^\n]*\.hp (\d+)/m)?.[1] ?? 0),
     blightResist: Number(info.match(/^stats:[^\n]*\.poison_resist (\d+)/m)?.[1] ?? 0) / 100,
     skills: [...info.matchAll(/^skill: \.id "([^"]+)"/gm)].map((x) => x[1]!),
     // each skill's named effects ("Minor Bleed 1", "Blight 2"), for what a supply counters

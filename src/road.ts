@@ -6,6 +6,7 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs"
 import { join } from "node:path"
 import { outDir } from "./board.ts"
+import { monster } from "./game.ts"
 
 // read at call time (outDir() is), so a test that sets DD_TOWN_OUT after its imports never writes into the live thread
 const town = () => outDir()
@@ -56,14 +57,11 @@ export async function feed() {
       page: c.page, pageAt: new Date(statSync(c.file!).mtimeMs).toISOString(), dungeon: p.dungeon, torch: p.torch, food: p.supplies?.food ?? 0, torches: p.supplies?.torch ?? 0,
       rooms: p.tally?.ROOM_VISITED ?? 0, battles: p.tally?.BATTLE_COMPLETED ?? 0,
       heroes: (p.heroes ?? []).map((h: any) => ({ name: h.name, cls: h.cls, hp: Math.round(h.hp), maxHp: h.maxHp, stress: h.stress, affliction: h.affliction, virtue: h.virtue, deathsDoor: h.deathsDoor })),
-      // a foe's full health is the most it ever showed this trip (pages keep no maximum); stuns and dots ride along
-      foes: p.battle ? await (async () => {
-        const most = new Map<number, number>()
-        for (const f of readdirSync(join(chron(), c.trip!)).filter((f) => /^\d+\.json$/.test(f))) {
-          try { for (const e of (await Bun.file(join(chron(), c.trip!, f)).json()).battle?.foes ?? []) if (e.guid != null) most.set(e.guid, Math.max(most.get(e.guid) ?? 0, e.hp)) } catch {}
-        }
-        return p.battle.foes.map((f: any) => ({ name: f.name, hp: f.hp, maxHp: Math.max(f.hp, most.get(f.guid) ?? f.hp), stunned: !!f.stunned, dots: f.dots ?? [] }))
-      })() : null, round: p.battle?.round,
+      // a foe's full health is the .hp of its own monster file; pages keep no maximum, and a foe's id is reused across fights
+      foes: p.battle ? await Promise.all(p.battle.foes.map(async (f: any) => {
+        const max = f.cls ? (await monster(f.cls))?.hp ?? 0 : 0
+        return { name: f.name, hp: f.hp, maxHp: Math.max(f.hp, max), stunned: !!f.stunned, dots: f.dots ?? [] }
+      })) : null, round: p.battle?.round,
     }
   } catch {}
   return { trip: c.trip, state, lines }
