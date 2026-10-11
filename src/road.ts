@@ -6,6 +6,7 @@
 import { mapLegend, mapSvg, whereLine } from "./map.ts"
 import { isNotable } from "./notable.ts"
 import { buildRecap, type Recap } from "./recap.ts"
+import { questLine, questStatus } from "./quest.ts"
 import { appendFileSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs"
 import { join } from "node:path"
 import { outDir } from "./board.ts"
@@ -84,7 +85,9 @@ export async function feed() {
   try {
     const p = c.file ? await Bun.file(c.file).json() : null
     if (p) state = {
-      page: c.page, pageAt: new Date(statSync(c.file!).mtimeMs).toISOString(), ...(await notableOf(c.trip!)), dungeon: p.dungeon, torch: p.torch, food: p.supplies?.food ?? 0, torches: p.supplies?.torch ?? 0,
+      page: c.page, pageAt: new Date(statSync(c.file!).mtimeMs).toISOString(), ...(await notableOf(c.trip!)),
+      // the quest as the page stands (C68)
+      quest: await questStatus(await Bun.file(c.file!.replace(/\.json$/, ".raw.json")).json().catch(() => undefined)).then((q) => q && { ...q, line: questLine(q) }), dungeon: p.dungeon, torch: p.torch, food: p.supplies?.food ?? 0, torches: p.supplies?.torch ?? 0,
       rooms: p.tally?.ROOM_VISITED ?? 0, battles: p.tally?.BATTLE_COMPLETED ?? 0,
       heroes: (p.heroes ?? []).map((h: any) => ({ name: h.name, cls: h.cls, hp: Math.round(h.hp), maxHp: h.maxHp, stress: h.stress, affliction: h.affliction, virtue: h.virtue, deathsDoor: h.deathsDoor })),
       // a foe's full health is the .hp of its own monster file; pages keep no maximum, and a foe's id is reused across fights
@@ -109,6 +112,7 @@ export const roadPanel = `<style>
 #road .rc-head{font-size:.9rem;color:var(--dim);margin:0 0 .5rem}
 #road .packs{margin:.8rem 0}#road .words{margin:1rem 0 .4rem;line-height:1.5;font-size:1.05rem}#road .words .said{margin:0 0 .7rem}
 #road .meta{color:var(--dim);font-size:.9rem;margin:.2rem 0 .4rem}
+#road .quest{margin:0 0 .6rem;padding:.35rem .6rem;border:1px solid var(--line);border-radius:3px;background:var(--panel)}#road .quest.done{border-color:var(--gold);color:var(--gold)}
 #road .seat{display:grid;grid-template-columns:7rem minmax(0,1fr) minmax(0,1fr);gap:.6rem;align-items:center;margin:.25rem 0;font-size:.95rem}
 #road .bar{position:relative;display:block;height:1.1rem;padding:0;background:#000;border:1px solid var(--line);border-radius:2px;overflow:hidden;box-shadow:none}
 #road .bar i{position:absolute;inset:0 auto 0 0;display:block}#road .bar.hp i{background:var(--blood)}#road .bar.st i{background:var(--ink)}
@@ -153,7 +157,7 @@ let shown="";
 async function tick(){try{const d=await (await fetch("/road/feed",{cache:"no-store"})).json();z.hidden=!d.out;if(!d.out)return;const s=d.state;
 if(!link&&nav){link=document.createElement('a');link.href='#road';link.textContent='On the road';const l=nav.querySelector('a[href^="#"]');l?l.before(link):nav.prepend(link)}
 const recaps=d.lines.filter(l=>l.recap),latest=recaps.at(-1);
-put(document.getElementById("roadCard"),latest?card(latest.recap)+(s&&s.page!==latest.recap.page?'<p class="meta">The game has gone on to page '+Number(s.page)+' since.</p>':''):s?live(s):'');
+put(document.getElementById("roadCard"),(s&&s.quest?'<p class="quest'+(s.quest.complete?' done':'')+'">The work: '+esc(s.quest.line)+'</p>':'')+(latest?card(latest.recap)+(s&&s.page!==latest.recap.page?'<p class="meta">The game has gone on to page '+Number(s.page)+' since.</p>':''):s?live(s):''));
 put(document.getElementById("roadFoes"),foes(s));
 put(document.getElementById("roadMap"),s&&s.map?s.map+'<p class="meta">'+esc(s.where)+'</p>'+(s.legend||''):'');
 const mine=d.lines.filter(l=>l.from==="caretaker").at(-1),asked=d.lines.filter(l=>l.from==="soushi").at(-1),B=document.getElementById("roadBusy");

@@ -6,6 +6,7 @@ import { statSync } from "node:fs"
 import type { Snap } from "./chronicle.ts"
 import { monster } from "./game.ts"
 import { whereLine } from "./map.ts"
+import { questLine, questStatus } from "./quest.ts"
 import { current } from "./road.ts"
 import { effectWords, plain, wrap } from "./words.ts"
 
@@ -16,6 +17,9 @@ export async function nowText(p: Snap, raw: any, page: string, savedAt: number):
   const out: string[] = []
   const b = raw?.raid?.battle, inFight = !!p.inBattle && !!b
   out.push(`PAGE ${page}, saved ${time(savedAt)}${inFight ? `, round ${b.round ?? p.battle?.round ?? "?"}` : ", out of a fight"}`)
+  // what the quest asks and how far along it is (C68)
+  const q = await questStatus(raw)
+  if (q) out.push(`QUEST ${questLine(q)}`)
   // who has taken this round's turn: the game spends an actor's initiative to 0 once it has acted
   const spent = (list: any) => new Set(Object.values<any>(list ?? {}).filter((x) => Number(x.initiative) === 0).map((x) => Number(x.roster_guid ?? x.battle_guid)))
   const heroDone = spent(b?.initiative?.heroes), foeDone = spent(b?.initiative?.monsters)

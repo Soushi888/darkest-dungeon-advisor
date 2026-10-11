@@ -7,6 +7,7 @@ import { outDir } from "./board.ts"
 import { monster, nameOf, strings, text } from "./game.ts"
 import type { Save } from "./read.ts"
 import { mapOf, type MapView } from "./map.ts"
+import { effectWords } from "./words.ts"
 
 // RULE: my own reading of a trip, not the game's numbers (ISA A2)
 export const CHRONICLE_RULE = {
@@ -118,6 +119,21 @@ export async function snapshot(save: Save): Promise<Snap | undefined> {
   }
 }
 
+// "blight 2 (1) from the X" carries on from "blight 2 (3) from the Y" when its kind and amount match and its count did not go up
+const parts = (e: string) => { const m = e.match(/^(.+?) (-?[\d.]+)(?: \((\d+)\))?(?: from (.+))?$/); return m ? { what: `${m[1]} ${m[2]}`, n: Number(m[3] ?? 0), from: m[4] } : undefined }
+export function carried(e: string, before: string[]): string {
+  const p = parts(e)
+  if (!p?.from) return e
+  const was = before.map(parts).find((q) => q && q.what === p.what && q.from && p.n <= q.n)
+  return was ? e.replace(/ from .+$/, ` from ${was.from}`) : e
+}
+/** True when an effect is new on the hero: no effect of the same kind and amount before, or its count went up (laid again). */
+export function freshEffect(e: string, before: string[]): boolean {
+  const p = parts(e)
+  if (!p) return !before.includes(e)
+  return !before.map(parts).some((q) => q && q.what === p.what && p.n <= q.n)
+}
+
 const town = () => outDir()
 export const chronicleDir = (key = "") => join(town(), "chronicle", key.replace(/[^\w.-]+/g, "_"))
 const sig = (s: Snap) => JSON.stringify({ ...s, at: "" })
@@ -130,6 +146,9 @@ export async function capture(save: Save): Promise<string | undefined> {
   mkdirSync(dir, { recursive: true })
   const files = readdirSync(dir).filter((f) => f.endsWith(".json") && !f.includes(".raw.")).sort()
   const last = files.length ? ((await Bun.file(join(dir, files[files.length - 1]!)).json()) as Snap) : undefined
+  // an effect that carries on from the last page keeps the source it had there: a self-laid bleed or blight is named after
+  // the curio searched when it landed, not after a later one (the strongbox's blight read "from the Pile of Bones", U20)
+  if (last) for (const h of s.heroes) { const w = last.heroes.find((o) => o.guid === h.guid); if (w?.effects && h.effects) h.effects = h.effects.map((e) => carried(e, w.effects!)) }
   if (last && sig(last) === sig(s)) return undefined
   const n = String(files.filter((x) => !x.includes(".raw.")).length).padStart(4, "0"), f = join(dir, `${n}.json`)
   await Bun.write(f, JSON.stringify(s))
@@ -368,10 +387,18 @@ export async function debrief(snaps: Snap[]): Promise<Debrief> {
       // a gain of stress is a toll, said as gained: "lost 25 stress" once told a coral's blow backwards (U7)
       const tolls = harm.filter((x) => x.hp > 0 || x.st > 0).map((x) => `${x.name} ${[x.hp > 0 ? `lost ${x.hp} health` : "", x.st > 0 ? `gained ${x.st} stress` : ""].filter(Boolean).join(" and ")}`)
       const eased = harm.filter((x) => x.st < 0).map((x) => `${x.name} shed ${-x.st} stress`)
-      const what = [...found.length ? [`found ${found.join(", ")}`] : [], ...changed.map((c) => c.text), ...tolls, ...eased]
+      // an effect it laid on a hero is what came of it too (pm#29: the Rack of Blades bled Azor, and the tale said nothing came of it)
+      // only an effect new on the hero, not one ticking down; one the record says the hero laid on themselves is the curio's
+      const curioName = ids[0] ? `the ${str.get(`str_curio_title_${ids[0]}`) ?? word(String(ids[0]))}` : "the curio"
+      const laid = async (x: Snap, y: Snap) => (await Promise.all(y.heroes.map(async (h) => {
+        const w = x.heroes.find((o) => o.guid === h.guid), fresh = (h.effects ?? []).filter((e) => freshEffect(e, w?.effects ?? [])).map((e) => e.replace(new RegExp(` from ${h.cls}$`), ` from ${curioName}`))
+        return fresh.length ? [`${h.name} was left with ${[...new Set(await Promise.all(fresh.map(effectWords)))].join(" and ")}`] : []
+      }))).flat()
+      const left = [...await laid(a, b), ...(quiet ? await laid(b, nb!) : [])]
+      const what = [...found.length ? [`found ${found.join(", ")}`] : [], ...changed.map((c) => c.text), ...tolls, ...eased, ...left]
       // every search the game counted is told, by name when the page kept it, else as a curio (the first pages kept no record)
       const names = Array.from({ length: searched }, (_, k) => ids[k] ? an(str.get(`str_curio_title_${ids[k]}`) ?? word(String(ids[k]))) : "a curio")
-      for (const n of names) out.push({ i, kind: "curio", text: `they searched ${n}${what.length ? `: ${what.join("; ")}` : ", and nothing came of it"}`, bad: changed.some((c) => / took on /.test(c.text)) || tolls.length > 0 })
+      for (const n of names) out.push({ i, kind: "curio", text: `they searched ${n}${what.length ? `: ${what.join("; ")}` : ", and nothing came of it"}`, bad: changed.some((c) => / took on /.test(c.text)) || tolls.length > 0 || left.length > 0 })
     } else for (const c of changed) out.push({ i, kind: "quirk", who: c.who, text: c.text, bad: / took on /.test(c.text) })
     // an obstacle cleared with a shovel is told from the shovel spent, outside a fight and a curio (U7: two shovels, one told)
     const spent = (k: string) => (a.supplies[k] ?? 0) - (b.supplies[k] ?? 0), calm = !a.inBattle && !b.inBattle && searched <= 0

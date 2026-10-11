@@ -2,7 +2,7 @@
 // errors anymore". Every number a beat says is read back out of its words and re-derived from the pages around it, in sign and
 // size; the counts the tale tells are held against the game's own tallies; no hero stands among the foes. A beat that fails is
 // dropped rather than told wrong, and every failure is an issue the board writes to coherence.json for the live session.
-import type { Beat, Debrief, Snap } from "./chronicle.ts"
+import { freshEffect, type Beat, type Debrief, type Snap } from "./chronicle.ts"
 
 type Delta = { hp: number; st: number }
 const delta = (a: Snap | undefined, b: Snap | undefined, who: string): Delta | undefined => {
@@ -45,15 +45,23 @@ export function checkTale(snaps: Snap[], beats: Beat[], db?: Debrief, heroClasse
     // the harm a beat tells shows on its page, or the one after when the game saves before the blow lands
     const spans: [number, number][] = [[i - 1, i], [i, i + 1], [i - 1, i + 1]]
     const ok = cs.every((c) => spans.some(([x, y]) => c(snaps[x], snaps[y]))) && ls.every((l) => [i, i - 1, i + 1].some((k) => l(snaps[k])))
-    if (ok) kept.push(b)
-    else issues.push(`the tale's step on page ${i} does not match the pages, and is not told: "${b.text}"`)
+    // a curio told as giving nothing, when a hero's health, stress or effects moved on its page or the next (pm#29)
+    // on its own page the toll is told by health and stress, so what is checked there is a new effect (a countdown is not new);
+    // the next page counts only while nothing else happens on it (no fight, no room, no other search)
+    const laid = (x?: Snap, y?: Snap) => !!x && !!y && y.heroes.some((h) => { const w = x.heroes.find((o) => o.guid === h.guid); return !!w && (h.effects ?? []).some((e) => freshEffect(e, w.effects ?? [])) })
+    const quiet = (x?: Snap, y?: Snap) => !!x && !!y && !y.inBattle && ["BATTLE_COMPLETED", "CURIO_INVESTIGATED", "ROOM_VISITED"].every((k) => (y.tally[k] ?? 0) === (x.tally[k] ?? 0))
+    const empty = b.kind === "curio" && /nothing came of it/.test(b.text) && (laid(snaps[i - 1], snaps[i]) || (quiet(snaps[i], snaps[i + 1]) && laid(snaps[i], snaps[i + 1])))
+    if (ok && !empty) kept.push(b)
+    else issues.push(empty ? `the tale says nothing came of a curio on page ${i}, yet a hero's health, stress or effects moved there, and it is not told: "${b.text}"` : `the tale's step on page ${i} does not match the pages, and is not told: "${b.text}"`)
   }
   if (snaps.length > 1) {
     const first = snaps[0]!, last = snaps.at(-1)!, tally = (k: string) => (last.tally[k] ?? 0) - (first.tally[k] ?? 0)
     const said = (k: Beat["kind"]) => kept.filter((b) => b.kind === k)
     const battles = said("battle").reduce((t, b) => t + (Number(b.text.match(/^(\d+) battles/)?.[1]) || 1), 0)
     if (battles !== tally("BATTLE_COMPLETED")) issues.push(`the tale tells ${battles} battles won, the road counted ${tally("BATTLE_COMPLETED")}`)
-    if (said("curio").length !== tally("CURIO_INVESTIGATED")) issues.push(`the tale tells ${said("curio").length} curios searched, the road counted ${tally("CURIO_INVESTIGATED")}`)
+    // a curio dropped above is still a curio told, so one wrong step is not also a wrong count
+    const curios = beats.filter((b) => b.kind === "curio").length
+    if (curios !== tally("CURIO_INVESTIGATED")) issues.push(`the tale tells ${curios} curios searched, the road counted ${tally("CURIO_INVESTIGATED")}`)
     // obstacles: one per shovel spent outside a fight and a curio, and one per obstacle cleared by hand the narrator spoke of
     let shovels = 0, food = 0
     for (let k = 1; k < snaps.length; k++) {
