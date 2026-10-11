@@ -40,10 +40,12 @@ describe("C67: the training lean follows his preferred skills", () => {
     // a rich estate, so every lesson is within reach, and the dearest Guild lesson is the one he prefers
     t.wallet = { ...t.wallet, gold: 1_000_000 }
     t.heroUpgrades = t.heroUpgrades.map((u) => ({ ...u, affordable: true, blockedBy: "" }))
-    const lessons = t.heroUpgrades.filter((u) => u.where === "Guild").sort((x, y) => (y.cost.find((c) => c.type === "gold")?.amount ?? 0) - (x.cost.find((c) => c.type === "gold")?.amount ?? 0))
+    // the card offers the advised party's lessons only, so the liked one is the dearest of theirs: a hero of the roster left out
+    // of the party (on the road, as Dismas was on 2026-10-11) has no lesson on the card
+    const a = await advise(t)
+    const lessons = a.buys.filter((u) => u.where === "Guild").sort((x, y) => (y.cost.find((c) => c.type === "gold")?.amount ?? 0) - (x.cost.find((c) => c.type === "gold")?.amount ?? 0))
     if (!lessons.length) return
     const liked = lessons[0]!
-    const a = await advise(t)
     const md = source(t, a, { foresight: false, answers: { preferred: [liked.label] } }).board
     const card = md.split(/\n- q: /).find((c) => c.startsWith('"What do we train first?"'))!
     expect(card).toContain(`The skills you prefer: ${liked.label}.`)
