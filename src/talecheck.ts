@@ -25,6 +25,12 @@ function claims(text: string): ((a?: Snap, b?: Snap) => boolean)[] {
   return out
 }
 
+/** A health a beat names from one page to the next ("health fell from 26 to 15"). */
+function healths(text: string): ((a?: Snap, b?: Snap) => boolean)[] {
+  return [...text.matchAll(/(\p{Lu}[\p{L}'-]+)(?: took a heavy wound| was mended): health (?:fell|rose) from (\d+) to (\d+)/gu)].map((m) => (a?: Snap, b?: Snap) =>
+    Math.round(a?.heroes.find((h) => h.name === m[1])?.hp ?? NaN) === Number(m[2]) && Math.round(b?.heroes.find((h) => h.name === m[1])?.hp ?? NaN) === Number(m[3]))
+}
+
 /** A stress level a beat names on its own page ("stress leapt to 27", "stress reached 93"). */
 function levels(text: string): ((s?: Snap) => boolean)[] {
   return [...text.matchAll(/(\p{Lu}[\p{L}'-]+)'s stress (?:leapt to|reached) (\d+)/gu)].map((m) => (s?: Snap) => s?.heroes.find((h) => h.name === m[1])?.stress === Number(m[2]))
@@ -35,7 +41,7 @@ export interface TaleCheck { beats: Beat[]; issues: string[] }
 export function checkTale(snaps: Snap[], beats: Beat[], db?: Debrief, heroClasses: string[] = []): TaleCheck {
   const issues: string[] = [], kept: Beat[] = []
   for (const b of beats) {
-    const cs = claims(b.text), ls = levels(b.text), i = b.i
+    const cs = [...claims(b.text), ...healths(b.text)], ls = levels(b.text), i = b.i
     // the harm a beat tells shows on its page, or the one after when the game saves before the blow lands
     const spans: [number, number][] = [[i - 1, i], [i, i + 1], [i - 1, i + 1]]
     const ok = cs.every((c) => spans.some(([x, y]) => c(snaps[x], snaps[y]))) && ls.every((l) => [i, i - 1, i + 1].some((k) => l(snaps[k])))
