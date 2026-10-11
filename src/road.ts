@@ -7,8 +7,8 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, statSync } from "no
 import { join } from "node:path"
 import { outDir } from "./board.ts"
 
-// read at call time, so a test that sets DD_TOWN_OUT after its imports never writes into the live thread
-const town = () => process.env.DD_TOWN_OUT ?? outDir
+// read at call time (outDir() is), so a test that sets DD_TOWN_OUT after its imports never writes into the live thread
+const town = () => outDir()
 export const roadDir = () => join(town(), "road")
 const chron = () => join(town(), "chronicle")
 export const messagesFile = () => join(roadDir(), "messages.jsonl")
