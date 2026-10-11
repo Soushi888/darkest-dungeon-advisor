@@ -6,14 +6,14 @@ import { join } from "node:path"
 import type { Snap } from "./chronicle.ts"
 import { whereLine } from "./map.ts"
 import { install } from "./paths.ts"
-import { plain } from "./words.ts"
+import { journalPage, pageTitle, plain } from "./words.ts"
 
 export interface Recap {
   page: string; savedAt: string
   tally: { rooms: number; battles: number; lost: number }
   where: string
   four: { rank: number; name: string; hp: number; maxHp: number; stress: number; tags: string[] }[]
-  packs: { light: number; items: { key: string; label: string; n: number; icon?: string; kind: "provision" | "loot" }[] }
+  packs: { light: number; items: { key: string; label: string; n: number; icon?: string; kind: "provision" | "loot" | "page" }[] }
   since?: string; advice: string
 }
 
@@ -38,14 +38,17 @@ export function itemIcon(key: string, out: string): string | undefined {
 }
 
 // the light's own supplies first, food then torches, then the rest of the provisions, then the loot
-const order = (x: { key: string; kind: string }) => (x.kind === "loot" ? 3 : x.key === "food" ? 0 : x.key === "torch" ? 1 : 2)
+const order = (x: { key: string; kind: string }) => (x.kind === "page" ? 4 : x.kind === "loot" ? 3 : x.key === "food" ? 0 : x.key === "torch" ? 1 : 2)
 
 /** The recap of one page: the tally of the road, where they stand, the four, the packs, and the Caretaker's own words. */
-export function buildRecap(p: Snap, raw: any, page: string, savedAt: number, words: { advice: string; since?: string }, out: string): Recap {
+export async function buildRecap(p: Snap, raw: any, page: string, savedAt: number, words: { advice: string; since?: string }, out: string): Promise<Recap> {
   const start = Number(raw?.raid?.party?.start_heroes_size ?? p.heroes.length)
-  const items = Object.entries(p.supplies).filter(([, n]) => n > 0).map(([key, n]) => ({
-    key, label: plain(key), n, icon: itemIcon(key, out), kind: (PROVISIONS.includes(key) ? "provision" : "loot") as "provision" | "loot",
-  })).sort((a, b) => order(a) - order(b))
+  // a journal page goes by the game's title for it and is a page of the story, not loot (pm, 2026-10-11)
+  const items = (await Promise.all(Object.entries(p.supplies).filter(([, n]) => n > 0).map(async ([key, n]) => {
+    const jp = journalPage(key)
+    return { key, label: jp ? await pageTitle(jp) : plain(key), n, icon: itemIcon(key, out),
+      kind: (jp ? "page" : PROVISIONS.includes(key) ? "provision" : "loot") as "provision" | "loot" | "page" }
+  }))).sort((a, b) => order(a) - order(b))
   return {
     page, savedAt: new Date(savedAt).toISOString(),
     tally: { rooms: p.tally.ROOM_VISITED ?? 0, battles: p.tally.BATTLE_COMPLETED ?? 0, lost: Math.max(0, start - p.heroes.length) },
