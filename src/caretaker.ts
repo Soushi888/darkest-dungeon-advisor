@@ -23,6 +23,7 @@ export const SYSTEM = [
   // the report beside your words already shows the numbers as bars, icons and a map (C66), so speak, do not tabulate (pm#26)
   "Length follows what happened: a quiet page, nothing fought, found or lost, gets one or two short paragraphs; up to four short paragraphs, one subject each, only after a fight, a curio searched or a crisis. Separate paragraphs with a blank line. Plain prose: no headings, no lists, no capitals for emphasis, and never open with a tally or a page number, the card above your words already shows them.",
   "Write every number as digits (33 health, 38 stress), never in words.",
+  "Every change you name in health, stress, light or the packs carries its cause, read from THE PAGE or WHAT HAPPENED SINCE MY LAST WORD: the blow and who struck it with what, a trap or a curio and what it laid, hunger, a bleed or a blight ticking, a heal. Say the cause is unknown only when no page there holds one.",
   "Use only what the page and the thread say. Never name a foe, a trap, a curio or what lies ahead unless the page names it; never say what a curio would give before it was searched; never give a number that is not on the page.",
   "Never use an em dash. Never name a save, a file, a field, a page number, a tool or a model: stay in the Hamlet's words.",
   "THE HEIR'S WAYS are habits he has told you; follow them in what you advise, and never advise against one.",
@@ -32,10 +33,11 @@ export const SYSTEM = [
 export const FIGHT = "This page is in a fight. Comment the fight alone, in one or two short paragraphs: which foe threatens whom, which foe to strike first and why, and who needs healing. Nothing about the packs, the map or the road ahead."
 
 /** The prompt for one page or one question: the page whole, then the last lines of the thread, then what to answer. */
-export async function promptFor(kind: "page" | "ask", snapshot: string, ask = ""): Promise<string> {
+export async function promptFor(kind: "page" | "ask", snapshot: string, ask = "", since: string[] = []): Promise<string> {
   const thread = (await feed()).lines.slice(-10).map((l) => `${l.from === "soushi" ? "The Heir" : "The Caretaker"}: ${l.text}`).join("\n")
   const ways = await readWays()
-  return [ways.length ? `THE HEIR'S WAYS\n${ways.map((w) => `- ${w}`).join("\n")}` : "", `THE PAGE\n${snapshot}`, thread ? `THE THREAD SO FAR\n${thread}` : "",
+  // C73: every page told since his last word, in the stream's own words, so a change he names has its cause in front of him
+  return [ways.length ? `THE HEIR'S WAYS\n${ways.map((w) => `- ${w}`).join("\n")}` : "", since.length ? `WHAT HAPPENED SINCE MY LAST WORD\n${since.join("\n")}` : "", `THE PAGE\n${snapshot}`, thread ? `THE THREAD SO FAR\n${thread}` : "",
     kind === "ask" ? `THE HEIR ASKS\n${ask}\nAnswer him. If he states a standing habit of his own, end with one last line \"WAY: <the habit, in one short line>\"; otherwise do not.`
       // C71: in a fight he speaks of the fight alone (Soushi, 05:42: "more focused on it and clear")
       : /\nFOES front to back:/.test(snapshot) ? FIGHT : "Comment this page."].filter(Boolean).join("\n\n")
@@ -60,8 +62,8 @@ export async function ask(system: string, user: string): Promise<{ text?: string
 }
 
 /** Comment one page or answer one question, posting through say(); a failure posts nothing and prints a WARN. */
-export async function comment(kind: "page" | "ask", snapshot: string, page: string, question = ""): Promise<boolean> {
-  const r = await ask(SYSTEM, await promptFor(kind, snapshot, question))
+export async function comment(kind: "page" | "ask", snapshot: string, page: string, question = "", since: string[] = []): Promise<boolean> {
+  const r = await ask(SYSTEM, await promptFor(kind, snapshot, question, since))
   if (!r.text) { console.log(`WARN ${clock()} caretaker: no comment on page ${page} (${r.error})`); return false }
   // a page's comment is his recap, the report beside the conversation (C66); an answer to the Heir is a plain line
   // a tally opener is the card's job, not his (pm#34); a stated habit goes to his ways (pm#35)
@@ -78,6 +80,29 @@ export async function comment(kind: "page" | "ask", snapshot: string, page: stri
   return true
 }
 
+/** The stream read by the Caretaker (C73): one report per CHRON page and one answer per ASK, each prompt holding every page
+ *  told since his last word (Soushi, 05:59: "It should see all the pages, but only make one report"). A plain PAGE is only
+ *  kept; a CHRON he failed to comment stays among the kept pages for the next report. */
+export function streamFlow(post: typeof comment, snapshot: () => Promise<{ text: string; page: string } | undefined>) {
+  let block: string[] = [], since: string[] = []
+  const end = async () => {
+    if (!block.length) return
+    const lines = block; block = []
+    const page = lines[0]!.match(/#(\d+)/)?.[1], text = lines.map((l) => l.replace(/^MORE /, "")).join("\n")
+    if (lines[0]!.startsWith("PAGE ")) { since.push(text); return }
+    // the page whole, as the MORE lines carry it; the head line's own changes go first
+    if (page && await post("page", text, page, "", since)) since = []
+    else since.push(text)
+  }
+  const line = async (l: string) => {
+    if (l.startsWith("MORE ") && block.length) { block.push(l); return }
+    await end()
+    if (l.startsWith("CHRON ") || l.startsWith("PAGE ")) block.push(l)
+    else if (l.startsWith("ASK ")) { const s = await snapshot(); if (s && await post("ask", s.text, s.page, l.replace(/^ASK \S+ page \S+: /, ""), since)) since = [] }
+  }
+  return { line, end }
+}
+
 async function snapshotNow(): Promise<{ text: string; page: string } | undefined> {
   const c = current()
   if (!c.file) return undefined
@@ -91,25 +116,14 @@ if (import.meta.main) {
   console.log(`CARETAKER ${clock()} commenting CHRON pages and ASKs through ${inference()} at ${level()}`)
   // stopping the Caretaker stops his stream too, so no live process is left behind
   for (const sig of ["SIGTERM", "SIGINT"] as const) process.on(sig, () => { live.kill(); process.exit(0) })
-  let buf = "", block: string[] = []
-  const flush = async () => {
-    if (!block.length) return
-    const lines = block; block = []
-    const page = lines[0]!.match(/#(\d+)/)?.[1]
-    // the page whole, as the MORE lines carry it; the head line's own changes go first
-    if (page) await comment("page", lines.map((l) => l.replace(/^MORE /, "")).join("\n"), page)
-  }
+  const flow = streamFlow(comment, snapshotNow)
+  let buf = ""
   const decoder = new TextDecoder()
   for await (const chunk of live.stdout) {
     buf += decoder.decode(chunk)
     const parts = buf.split("\n"); buf = parts.pop() ?? ""
-    for (const l of parts) {
-      if (l.startsWith("MORE ") && block.length) { block.push(l); continue }
-      await flush()
-      if (l.startsWith("CHRON ")) block.push(l)
-      else if (l.startsWith("ASK ")) { const s = await snapshotNow(); if (s) await comment("ask", s.text, s.page, l.replace(/^ASK \S+ page \S+: /, "")) }
-    }
+    for (const l of parts) await flow.line(l)
     // a CHRON block arrives in one write, so the end of a chunk closes it
-    await flush()
+    await flow.end()
   }
 }
