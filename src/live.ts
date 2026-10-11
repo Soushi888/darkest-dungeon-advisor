@@ -15,6 +15,7 @@ import { monster, nameOf } from "./game.ts"
 import { decode } from "./dson.ts"
 import { profileDir } from "./paths.ts"
 import { messagesFile } from "./road.ts"
+import { newlySeen, whereLine } from "./map.ts"
 
 const log = join(outDir(), "answers-log.md")
 const game = join(profileDir(), "persist.game.json")
@@ -53,6 +54,9 @@ setInterval(async () => {
       const notable = !prev || ["BATTLE_COMPLETED", "ROOM_VISITED", "AMBUSHED"].some((k) => (tl[k] ?? 0) !== (pt[k] ?? 0)) || crossed(prev.torch, p.torch)
         || (p.heroes ?? []).some((h: any) => { const w = prev.heroes?.find((x: any) => x.guid === h.guid); return !w || (h.affliction && !w.affliction) || (h.virtue && !w.virtue) || (h.deathsDoor && !w.deathsDoor) || (h.hp < h.maxHp * 0.3 && w.hp >= w.maxHp * 0.3) })
         || (prev.heroes ?? []).length !== (p.heroes ?? []).length
+      // the map (C51): where they stand, and what came into sight since the last page; a sight is worth waking for
+      const where = whereLine(p.map), seen = newlySeen(prev?.map, p.map)
+      const noted = notable || seen.length > 0
       last.set(f.split("/").slice(-2, -1)[0]!, p)
       prevFile.set(f.split("/").slice(-2, -1)[0]!, f.replace(/\.json$/, ".raw.json"))
       // every change since the last page, so no page reads as empty: the packs item by item, the game's tallies with their
@@ -137,10 +141,11 @@ setInterval(async () => {
       const change = delta.length ? ` || changed: ${delta.join("; ")}` : ""
       const fight = p.battle ? ` || round ${p.battle.round}: ${p.battle.foes.map((x: any) => `${x.name} ${x.hp}hp${x.hitBy ? ` (hit by ${x.hitBy})` : ""}`).join(", ")}` : ""
       // a page whose only difference is the save itself (a new round opening, a turn starting) is folded into the next one
-      const body = `${who}${fight.replace(/round \d+/, "")}`
-      if (!notable && !delta.length && body === lastBody.get(trip)) continue
+      const body = `${who}${fight.replace(/round \d+/, "")}${where}`
+      if (!noted && !delta.length && body === lastBody.get(trip)) continue
       lastBody.set(trip, body)
-      console.log(`${notable ? "CHRON" : "PAGE"} ${now()} #${f.match(/(\d+)\.json$/)![1]} light ${p.torch}, rooms ${tl.ROOM_VISITED ?? 0}, battles ${tl.BATTLE_COMPLETED ?? 0}, food ${p.supplies?.food ?? 0}, torches ${p.supplies?.torch ?? 0} | ${who}${fight}${change}`)
+      const map = `${where ? ` || ${where}` : ""}${seen.length ? ` || newly seen: ${seen.join(", ")}` : ""}`
+      console.log(`${noted ? "CHRON" : "PAGE"} ${now()} #${f.match(/(\d+)\.json$/)![1]} light ${p.torch}, rooms ${tl.ROOM_VISITED ?? 0}, battles ${tl.BATTLE_COMPLETED ?? 0}, food ${p.supplies?.food ?? 0}, torches ${p.supplies?.torch ?? 0} | ${who}${fight}${change}${map}`)
     } catch {}
   }
   if (existsSync(messagesFile())) {
