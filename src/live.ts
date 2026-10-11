@@ -66,8 +66,11 @@ setInterval(async () => {
           // of that foe (witnessed ones only, C5) whose damage fits the blow: in range, or up to half again as a critical
           let by = ""
           // a loss equal to the blight or bleed the hero carried on the last page is that damage ticking, not a new blow
-          const tick = dh < 0 ? (w.effects ?? []).map((x: string) => x.match(/^(blight|bleed|stat [45]) (\d+)/)).find((m: any) => m && Number(m[2]) === -dh) : undefined
-          if (tick) by = ` (${tick[1].replace("stat 4", "blight").replace("stat 5", "bleed")} ticking)`
+          // stacks tick together, so the loss may be one stack or all of them
+          const stacks = (w.effects ?? []).map((x: string) => x.match(/^(blight|bleed|stat [45]) (\d+)/)).filter(Boolean).map((m: any) => [m[1].replace("stat 4", "blight").replace("stat 5", "bleed"), Number(m[2])] as [string, number])
+          const one = stacks.find(([, n]) => n === -dh), all = stacks.reduce((t, [, n]) => t + n, 0)
+          const tick = dh < 0 && (one || (stacks.length > 1 && all === -dh)) ? (one ? one[0] : [...new Set(stacks.map(([k]) => k))].join(" and ") + ` (${stacks.length} stacks)`) : ""
+          if (tick) by = ` (${tick} ticking)`
           else if (dh < 0 && h.lastBlow) {
             const m = h.blowCls ? await monster(h.blowCls) : undefined, loss = -dh, known = new Set<string>(p.known ?? [])
             const fits = [...(m?.dmg ?? [])].filter(([id]) => !p.known || known.has(id)).flatMap(([id, [lo, hi]]) =>
