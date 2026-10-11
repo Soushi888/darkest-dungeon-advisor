@@ -309,6 +309,8 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   // each card is filed under the building I lean it to, so the section reads building by building (Soushi, 2026-10-11:
   // "organise this section by building you suggest"); a card leaned to wait is filed last
   const cards: string[] = [], filed: { at: number; place: string }[] = []
+  // each lean takes its seat, so no two cards lean to the same last seat (U11)
+  const seatsLeft = new Map(t.activities.map((x) => [x.activity, x.slots - x.used]))
   for (const r of a.relief) {
     if (!r.options.length) continue
     const at = cards.length
@@ -319,11 +321,14 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     if (a.dismiss.some((d) => d.hero.guid === r.hero.guid)) {
       cards.push(`  lean: ${r.options.length}`, `  lean_why: ${y("I would rather let them go than pay for their rest; see Who stays, who goes.")}`)
     } else {
-      const best = r.options.find((o) => o.activity.cost <= left)
+      const best = r.options.find((o) => o.activity.cost <= left && (seatsLeft.get(o.activity.activity) ?? 0) > 0)
+      const taken = r.options.filter((o) => o.activity.cost <= left && !((seatsLeft.get(o.activity.activity) ?? 0) > 0))
       if (best) {
         left -= best.activity.cost
+        seatsLeft.set(best.activity.activity, (seatsLeft.get(best.activity.activity) ?? 1) - 1)
         cards.push(`  lean: ${r.options.indexOf(best)}`, `  lean_why: ${y(`the cheapest place they accept that has a free seat (${best.note}).`)}`)
-      } else cards.push(`  lean: ${r.options.length}`, `  lean_why: ${y(`${firstRoad}.`)}`)
+      } else if (taken.length) cards.push(`  lean: ${r.options.length}`, `  lean_why: ${y(`the seats they could take (${taken.map((o) => o.activity.name).join(", ")}) I have already leaned to someone above.`)}`)
+      else cards.push(`  lean: ${r.options.length}`, `  lean_why: ${y(`${firstRoad}.`)}`)
     }
     const leaned = !a.dismiss.some((d) => d.hero.guid === r.hero.guid) && r.options.find((o) => o.activity.cost <= left + o.activity.cost && cards.slice(at).some((l) => l === `  lean: ${r.options.indexOf(o)}`))
     filed.push({ at, place: leaned ? leaned.activity.buildingName : "" })

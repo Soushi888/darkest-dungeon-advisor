@@ -21,7 +21,7 @@ export interface HeroView {
   weapon: number; armour: number; trinkets: string[]; dungeons: string[]; portrait: string
   from?: string // the town event that brought a recruit
 }
-export interface Activity { building: string; buildingName: string; activity: string; name: string; locked: boolean; baseCost: number; cost: number; lockedQuirkCost?: number; heal: number; cure: number; slots: number; used: number; barred: string[] }
+export interface Activity { building: string; buildingName: string; activity: string; name: string; locked: boolean; baseCost: number; cost: number; lockedQuirkCost?: number; heal: number; cure: number; slots: number; used: number; barred: string[]; caretaker?: number }
 export interface Quest { foeResist?: { bleed: number; blight: number; foes: number }; unknownTypes: string[]; bleeders: string[]; blighters: string[]; walked: boolean; idx: number; dungeon: string; dungeonName: string; type: string; goal: string; difficulty: number; length: number; plot: boolean; rewards: string[]; known: string[]; unknownCount: number; types: string[] }
 export interface Upgrade { hero?: string; toLevel?: number; where?: string; tree: string; label: string; code: string; cost: Cost[]; affordable: boolean; blockedBy: string }
 export interface Town {
@@ -104,7 +104,14 @@ export async function town(save: Save): Promise<Town> {
     for (const a of def.data.activities ?? []) {
       const slots = tb[b]?.activities?.[a.id] ?? {}
       let used = 0
-      for (const s of Object.values<any>(slots)) if (s && typeof s === "object" && s.hero > 0) { busy.set(s.hero, await nameOf("activity", a.id)); used++ }
+      // a seat holds a hero, or the Caretaker himself (resident_occupied 0 or more: the game says "The Caretaker is currently
+      // enjoying this activity...", str_cant_place_hero_here_caretaker), and either way no hero of ours can take it (U11)
+      let caretaker = 0
+      for (const s of Object.values<any>(slots)) {
+        if (!s || typeof s !== "object") continue
+        if (s.hero > 0) { busy.set(s.hero, await nameOf("activity", a.id)); used++ }
+        else if (typeof s.resident_occupied === "number" && s.resident_occupied >= 0) { caretaker++; used++ }
+      }
       const d = a.data
       const tree = b === "sanitarium" ? (a.id === "disease_treatment" ? "sanitarium.disease_quirk_cost" : "sanitarium.cost") : `${b}.${a.id}`
       const slotTree = b === "sanitarium" ? "sanitarium.slots" : `${b}.${a.id}`
@@ -119,7 +126,7 @@ export async function town(save: Save): Promise<Town> {
       activities.push({
         building: b, buildingName: await nameOf("building", b), activity: a.id, name: await nameOf("activity", a.id), locked: false,
         baseCost: cost?.cost_currency?.amount ?? 0, cost: cost?.cost_currency?.amount ?? 0, lockedQuirkCost: lockedCost,
-        heal: heal?.heal_high ?? 0, cure, slots: slot.number_of_slots ?? 0, used, barred,
+        heal: heal?.heal_high ?? 0, cure, slots: slot.number_of_slots ?? 0, used, barred, ...(caretaker ? { caretaker } : {}),
       })
     }
   }
