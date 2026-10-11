@@ -807,6 +807,10 @@ describe("the road page", () => {
     expect(f.trip).toBe("zz_road_test")
     expect(f.lines.map((l) => [l.from, l.text, l.page])).toEqual([["soushi", "Retreat or push on?", "0007"], ["caretaker", "Push on: the light is high.", "0007"]])
     expect(f.state.heroes[0]).toMatchObject({ name: "Emory", hp: 12, stress: 130 })
+    // in a fight, each foe carries its full health as the most it showed this trip (Soushi's pin: foes' life in battle)
+    writeFileSync(join(trip, "0006.json"), JSON.stringify({ battle: { round: 1, foes: [{ name: "Pelagic Grouper", hp: 14, guid: 7 }] } }))
+    writeFileSync(join(trip, "0008.json"), JSON.stringify({ dungeon: "cove", torch: 80, heroes: [], battle: { round: 2, foes: [{ name: "Pelagic Grouper", hp: 8, guid: 7, stunned: true }] } }))
+    expect((await feed()).state.foes).toEqual([{ name: "Pelagic Grouper", hp: 8, maxHp: 14, stunned: true, dots: [] }])
     // the live board's own folder is never written by a test
     expect(join(townOut, "road")).not.toContain(join(".local", "town"))
     rmSync(trip, { recursive: true, force: true })

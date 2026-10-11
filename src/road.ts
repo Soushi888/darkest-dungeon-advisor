@@ -56,7 +56,14 @@ export async function feed() {
       page: c.page, pageAt: new Date(statSync(c.file!).mtimeMs).toISOString(), dungeon: p.dungeon, torch: p.torch, food: p.supplies?.food ?? 0, torches: p.supplies?.torch ?? 0,
       rooms: p.tally?.ROOM_VISITED ?? 0, battles: p.tally?.BATTLE_COMPLETED ?? 0,
       heroes: (p.heroes ?? []).map((h: any) => ({ name: h.name, cls: h.cls, hp: Math.round(h.hp), maxHp: h.maxHp, stress: h.stress, affliction: h.affliction, virtue: h.virtue, deathsDoor: h.deathsDoor })),
-      foes: p.battle ? p.battle.foes.map((f: any) => ({ name: f.name, hp: f.hp })) : null, round: p.battle?.round,
+      // a foe's full health is the most it ever showed this trip (pages keep no maximum); stuns and dots ride along
+      foes: p.battle ? await (async () => {
+        const most = new Map<number, number>()
+        for (const f of readdirSync(join(chron(), c.trip!)).filter((f) => /^\d+\.json$/.test(f))) {
+          try { for (const e of (await Bun.file(join(chron(), c.trip!, f)).json()).battle?.foes ?? []) if (e.guid != null) most.set(e.guid, Math.max(most.get(e.guid) ?? 0, e.hp)) } catch {}
+        }
+        return p.battle.foes.map((f: any) => ({ name: f.name, hp: f.hp, maxHp: Math.max(f.hp, most.get(f.guid) ?? f.hp), stunned: !!f.stunned, dots: f.dots ?? [] }))
+      })() : null, round: p.battle?.round,
     }
   } catch {}
   return { trip: c.trip, state, lines }
@@ -72,6 +79,7 @@ export const roadPanel = `<style>
 #road .bar i{position:absolute;inset:0 auto 0 0;display:block}#road .bar.hp i{background:var(--blood)}#road .bar.st i{background:var(--ink)}
 #road .bar.st::after{content:"";position:absolute;left:50%;top:0;bottom:0;border-left:1px dashed var(--gold)}
 #road .bar span{position:absolute;right:.3rem;top:-.12rem;font-size:.72rem;color:var(--gold);mix-blend-mode:difference}
+#road .seat.foe .bar.hp i{background:#4a5a2a}
 #road .tag{color:var(--gold);font-size:.8rem}
 #roadThread{max-height:28rem;overflow-y:auto;margin:.8rem 0;display:flex;flex-direction:column;gap:.5rem}
 #road .msg{max-width:85%;padding:.5rem .7rem;border-radius:4px;border:1px solid var(--line);white-space:pre-wrap;line-height:1.35;background:var(--panel)}
@@ -91,7 +99,7 @@ const time=iso=>new Date(iso).toLocaleTimeString("en-GB",{hour:"2-digit",minute:
 let shown="";
 async function tick(){try{const d=await (await fetch("/road/feed",{cache:"no-store"})).json();z.hidden=!d.out;if(!d.out)return;const s=d.state;
 if(!link&&nav){link=document.createElement('a');link.href='#road';link.textContent='On the road';const l=nav.querySelector('a[href^="#"]');l?l.before(link):nav.prepend(link)}
-if(s)document.getElementById("roadParty").innerHTML='<div class="meta">Page '+esc(s.page)+' in the '+esc(s.dungeon)+' · light '+s.torch+' · '+s.rooms+' rooms, '+s.battles+' battles · '+s.food+' food, '+s.torches+' torches'+(s.foes?' · round '+s.round+': '+s.foes.map(f=>esc(f.name)+' '+f.hp+'hp').join(', '):'')+'</div><div class="seat meta"><div></div><div>Health</div><div>Stress (the line is 100, the end 200)</div></div>'+
+if(s)document.getElementById("roadParty").innerHTML='<div class="meta">Page '+esc(s.page)+' in the '+esc(s.dungeon)+' · light '+s.torch+' · '+s.rooms+' rooms, '+s.battles+' battles · '+s.food+' food, '+s.torches+' torches'+(s.foes?' · round '+s.round:'')+'</div>'+(s.foes?'<div class="seat meta"><div>The foes</div><div>Health</div><div></div></div>'+s.foes.map(f=>'<div class="seat foe"><div>'+esc(f.name)+(f.stunned?' <span class="tag">stunned</span>':'')+(f.dots.length?' <span class="tag">'+esc(f.dots.join(', '))+'</span>':'')+'</div><div class="bar hp" title="health"><i style="width:'+Math.max(0,Math.min(100,100*f.hp/f.maxHp))+'%"></i><span>'+f.hp+'/'+f.maxHp+'</span></div><div></div></div>').join(''):'')+'<div class="seat meta"><div>The four</div><div>Health</div><div>Stress (the line is 100, the end 200)</div></div>'+
 s.heroes.map(h=>'<div class="seat"><div>'+esc(h.name)+(h.affliction?' <span class="tag">'+esc(h.affliction)+'</span>':'')+(h.virtue?' <span class="tag">'+esc(h.virtue)+'</span>':'')+(h.deathsDoor?' <span class="tag">Death\\'s Door</span>':'')+'</div>'+
 '<div class="bar hp" title="health"><i style="width:'+Math.max(0,Math.min(100,100*h.hp/h.maxHp))+'%"></i><span>'+h.hp+'/'+h.maxHp+'</span></div>'+
 '<div class="bar st" title="stress, of 200; the line is 100"><i style="width:'+Math.min(100,h.stress/2)+'%"></i><span>'+h.stress+'</span></div></div>').join("");
