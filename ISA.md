@@ -2,7 +2,7 @@
 name: darkest-dungeon-advisor
 principal_stated_goal: "J'aimerais qu'on étudie l'idée de faire un projet darkest-dungeon-advisor, comme on a fait pour factorio. C'est un jeu asser complexe et de l'aide stratégique entre deux quêtes serait utile!"
 phase: climbing
-progress: 44/47 claims, 4/4 anti-claims (counted by checkbox grep, never typed)
+progress: 45/48 claims, 4/4 anti-claims (counted by checkbox grep, never typed)
 frozen: false
 ---
 
