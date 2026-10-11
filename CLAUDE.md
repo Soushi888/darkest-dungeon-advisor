@@ -18,6 +18,7 @@ bun run live                 # one line per board send or game save, for a live 
 bun run now                  # the latest page in full: the four and the foes front to back, who has acted, where they stand
 bun run say --page N "<t>"   # the Caretaker's line on the road thread, tied to the page it answers
 bun run say --recap --page N --words "<t>"  # his recap: the report card, its numbers built from the page (C66)
+bun run caretaker            # the Caretaker comments each CHRON page and answers each ASK by himself, one rung down (C64)
 bun test                     # all claim probes
 bun test -t "C6"             # one test, by its claim id
 bun run typecheck            # tsc --noEmit
@@ -25,7 +26,7 @@ bun run typecheck            # tsc --noEmit
 
 Tests run against a copy of the local profile in `.dd-runtime/test-profile` and are skipped entirely when no profile is found, because a save is personal and never committed. A skipped suite is not a passing one.
 
-Environment: `DD_INSTALL` (game folder, default `~/.steam/steam/steamapps/common/DarkestDungeon`), `DD_PROFILE` (folder holding `persist.game.json`, default the first Steam user's `262060/remote/profile_0`), `NICEBOARD` (path to the external Niceboard compiler, default `~/.claude/skills/Niceboard/Tools/Board.ts`; the board cannot build without it).
+Environment: `DD_INFERENCE` (the PAI Inference tool `bun run caretaker` calls, default `~/.claude/PAI/Tools/Inference.ts`, run as `--level standard <system> <user>`; `DD_CARETAKER_LEVEL` and `DD_CARETAKER_TIMEOUT` change its level and its time limit), `DD_INSTALL` (game folder, default `~/.steam/steam/steamapps/common/DarkestDungeon`), `DD_PROFILE` (folder holding `persist.game.json`, default the first Steam user's `262060/remote/profile_0`), `NICEBOARD` (path to the external Niceboard compiler, default `~/.claude/skills/Niceboard/Tools/Board.ts`; the board cannot build without it).
 
 ## Pipeline
 

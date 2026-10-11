@@ -24,11 +24,14 @@ const HEIRLOOMS = ["crest", "bust", "deed", "portrait"]
 
 /** The install's own icon for a carried item, copied beside the page like the portraits (A4); undefined when it has none. */
 export function itemIcon(key: string, out: string): string | undefined {
-  const src = key === "food" ? "panels/icons_equip/provision/inv_provision+_0.png" : key === "gold" ? "panels/icons_equip/gold/inv_gold+_0.png"
-    : HEIRLOOMS.includes(key) ? `panels/icons_equip/heirloom/inv_heirloom+${key}.png` : GEMS.includes(key) ? `panels/icons_equip/gem/inv_gem+${key}.png`
-    : PROVISIONS.includes(key) ? `panels/icons_equip/supply/inv_supply+${key}.png` : ""
-  if (!src || !existsSync(join(install, src))) return undefined
-  const rel = `img/items/${key}.png`
+  const base = "panels/icons_equip/"
+  const tries = key === "food" ? ["provision/inv_provision+_0.png"] : key === "gold" ? ["gold/inv_gold+_0.png"]
+    : HEIRLOOMS.includes(key) ? [`heirloom/inv_heirloom+${key}.png`] : GEMS.includes(key) ? [`gem/inv_gem+${key}.png`]
+    : /^journal[ _]page/.test(key) ? ["journal_page/inv_journal_page.png"]
+    : [`supply/inv_supply+${key}.png`, `trinket/inv_trinket+${key}.png`, `quest_item/inv_quest_item+${key}.png`]
+  const src = tries.map((t) => base + t).find((t) => existsSync(join(install, t)))
+  if (!src) return undefined
+  const rel = `img/items/${key.replace(/[^\w-]+/g, "_")}.png`
   mkdirSync(join(out, "img", "items"), { recursive: true })
   if (!existsSync(join(out, rel))) copyFileSync(join(install, src), join(out, rel))
   return rel

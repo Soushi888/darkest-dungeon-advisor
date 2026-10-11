@@ -12,6 +12,7 @@
     "live": "bun src/live.ts",
     "say": "bun src/road.ts say",
     "now": "bun src/now.ts",
+    "caretaker": "bun src/caretaker.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },

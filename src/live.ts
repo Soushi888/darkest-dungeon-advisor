@@ -39,7 +39,7 @@ const pages = () => { try { return readdirSync(chron).flatMap((d) => readdirSync
 const bySave = (fs: string[]) => inOrder(fs.flatMap((f) => { try { return [{ path: f, mtime: statSync(f).mtimeMs }] } catch { return [] } })).map((p) => p.path)
 const replay = Number(process.env.DD_LIVE_REPLAY ?? 0), all = bySave(pages())
 // a restarted stream resumes after the last page it told, so a page saved while it was down is still told
-const mark = join(outDir(), "live-last.txt"), lastTold = existsSync(mark) ? (await Bun.file(mark).text()).trim() : ""
+const mark = join(outDir(), process.env.DD_LIVE_MARK ?? "live-last.txt"), lastTold = existsSync(mark) ? (await Bun.file(mark).text()).trim() : ""
 const told = alreadyTold(all.map((f) => ({ path: f, mtime: statSync(f).mtimeMs })), lastTold, replay)
 const last = new Map<string, any>(), prevFile = new Map<string, string>(), lastBody = new Map<string, string>()
 // the page before the first one told is what the next page is compared with
