@@ -2,7 +2,7 @@
 name: darkest-dungeon-advisor
 principal_stated_goal: "J'aimerais qu'on étudie l'idée de faire un projet darkest-dungeon-advisor, comme on a fait pour factorio. C'est un jeu asser complexe et de l'aide stratégique entre deux quêtes serait utile!"
 phase: climbing
-progress: 34/37 claims, 4/4 anti-claims (counted by checkbox grep, never typed)
+progress: 35/38 claims, 4/4 anti-claims (counted by checkbox grep, never typed)
 frozen: false
 ---
 
@@ -65,6 +65,7 @@ Soushi comes back from an expedition, saves, and opens the town board. A village
 - [x] **C35: A mark and a hand that strikes the marked count together.** A skill that marks a foe, carried alongside one that hits marked foes harder (from the game's effect lines), adds to the party's score and is named on the card. *Falsifier: a party with Mark for Death and Pistol Shot scores no more than the same party without the mark.* *Evidence: test "C35".*
 - [x] **C36: Bleed and blight are weighed against the foes you know.** A skill's bleed or blight is worth what the known foes of the road fail to resist, from their own resistances in the game's monster files; a road with no known foe weighs it at nothing. *Falsifier: a bleed skill weighs the same on a road whose known foes resist bleed at 60% as on one where they resist at 20%, or a resistance of a foe never met reaches the score.* *Evidence: test "C36".*
 - [x] **C37: When the coach is back, the board opens on what the road did.** The first section after an expedition says where the four went and whether the work was done, names who fell and how each one who came home stands (affliction, illness, stress), and bridges to the week: who must sit out, which healers are left when a healer fell and why each one is or is not going, and the four the Caretaker would send next. Read from the campaign log's latest chapter and the roster, never from memory of the farewell. Asked by Soushi on 2026-10-10, after Herbard fell in the Cove ("the same way there is a farewell page, I would like a welcome page"). *Falsifier: a board built after an expedition whose first section is not the return, or that omits a hero of the four.* *Evidence: test "C37".*
+- [x] **C38: The board never contradicts itself.** Every build is read back as Soushi reads it, and these clash checks run on it: the same four in the headline, the return section, the party card and the rank notes; none of the four leaned into a building, the ward or dismissal; trinkets and training only for the four; the leans' gold within what the road leaves; no more recruits than places; the readiness table agreeing with the party card on the healer and the stun; no "Save them" while the party waits on a Blacksmith upgrade the estate can afford. Contradictions go to `.local/town/coherence.json`, the watcher's log and `bun run live` (`WARN`), never onto the board. Asked by Soushi on 2026-10-10 ("ensure that every time the whole board is coherent and there is no advice contradicting itself"), after the Treatment Ward took Burci out of the four it proposed. *Falsifier: a board with one of the four leaned to a building, or a trinket for a hero left home, passes the check.* *Evidence: test "C38".*
 
 ## Anti-claims
 

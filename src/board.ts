@@ -12,6 +12,7 @@ import { install, root } from "./paths.ts"
 import { DIFFICULTY, LENGTH, type HeroView, type Town } from "./town.ts"
 import { buildSkin } from "./skin.ts"
 import { loadPicks, reconcile, type Check } from "./reconcile.ts"
+import { contradictions } from "./coherence.ts"
 
 // DD_TOWN_OUT lets the tests build elsewhere, so they never touch the live board or its picks
 export const outDir = process.env.DD_TOWN_OUT ?? join(root, ".local", "town")
@@ -492,6 +493,10 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
     await Bun.write(wsFile, JSON.stringify(start, null, 1))
   }
   const { board, sources } = source(t, a, { foresight: !!opts.foresight, answers, own, checks, prices: await supplyPrices(), soFar: weekSoFar(t, start) })
+  // C38: every build is read back for advice that contradicts itself; the live session is told through coherence.json
+  const clash = contradictions(board)
+  await Bun.write(join(outDir, "coherence.json"), JSON.stringify({ week: t.week, contradictions: clash }, null, 1))
+  if (clash.length) console.log(`INCOHERENT week ${t.week}: ${clash.join(" | ")}`)
   // what the Caretaker proposed this week, for the farewell to judge the departure against (C24)
   const chosen = own ?? ((answers.expedition && a.parties.find((p) => questLabel(p) === answers.expedition)) || a.best)
   if (chosen) await Bun.write(join(outDir, "proposal.json"), JSON.stringify({ week: t.week, dungeon: chosen.quest.dungeon, length: chosen.quest.length, type: chosen.quest.type, label: questLabel(chosen), party: chosen.seats.map((x) => x.hero.guid), own: !!own }, null, 1))

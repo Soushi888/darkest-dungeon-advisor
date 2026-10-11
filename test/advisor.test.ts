@@ -10,6 +10,7 @@ import { readSave } from "../src/read.ts"
 import { town } from "../src/town.ts"
 import { profileDir, root } from "../src/paths.ts"
 import { boardOptions, mergePicks, parseAnswers, reconcile } from "../src/reconcile.ts"
+import { contradictions } from "../src/coherence.ts"
 import { ACTING_ORDER, road, source, weekSoFar } from "../src/board.ts"
 import { supplyPrices } from "../src/game.ts"
 import { advise, readiness, seatParty, skillWorth, RULE } from "../src/advise.ts"
@@ -538,5 +539,18 @@ describe.skipIf(!has)("on the local save", () => {
     for (const h of t.back.heroes) expect(zone).toContain(h.died ? `${h.name} fell in the` : `${h.name} is home`)
     expect(zone).toContain(t.back.success ? "with the work done" : "without the work done")
     expect(zone).toMatch(/So this week (I would send|nobody is fit)/)
+  })
+
+  test("C38: the board never contradicts itself, and the check catches a board that does", async () => {
+    const t = await town(await readSave(copyProfile()))
+    const md = source(t, await advise(t), { foresight: false, answers: {}, prices: await supplyPrices() }).board
+    expect(contradictions(md)).toEqual([])
+    // the falsifier: one of the four also leaned into a building, and a trinket for someone left home
+    const four = [...(md.match(/Front to back: ([^"]+)/)?.[1] ?? "").matchAll(/\d\. ([^(;]+?) \(/g)].map((m) => m[1]!.trim())
+    if (!four.length) return
+    const bad = md.replace(/- q: "Where does (.+?) go\?"([\s\S]*?)\n  lean: \d+/, `- q: "Where does ${four[0]} go?"$2\n  lean: 0`) + `\n\n\`\`\`board-stickies\n- title: "Bleed Stone to Nobody"\n  kind: idea\n\`\`\`\n`
+    const found = contradictions(bad)
+    expect(found.some((f) => f.includes(`${four[0]} is in the four`))).toBe(true)
+    expect(found.some((f) => f.includes("Nobody, who is not in the four"))).toBe(true)
   })
 })
