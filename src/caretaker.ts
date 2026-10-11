@@ -97,13 +97,15 @@ export async function comment(kind: "page" | "ask" | "camp", snapshot: string, p
 export function streamFlow(post: typeof comment, snapshot: () => Promise<{ text: string; page: string } | undefined>,
   opts: { mode?: "live" | "camp"; atCamp?: (page: string) => Promise<{ text: string } | undefined> } = {}) {
   const mode = opts.mode ?? "live"
-  let block: string[] = [], since: string[] = [], fire = false
+  let block: string[] = [], since: string[] = [], fire = false, quiet = false
   const end = async () => {
     if (!block.length) return
     const lines = block; block = []
     const page = lines[0]!.match(/#(\d+)/)?.[1], text = lines.map((l) => l.replace(/^MORE /, "")).join("\n")
     if (mode === "camp") {
       since.push(text)
+      // a page retold on a restart is kept and never called on: its council, if it had one, was already given (C82)
+      if (quiet) { fire = !!(page && opts.atCamp && await opts.atCamp(page)); return }
       const camp = page && opts.atCamp ? await opts.atCamp(page) : undefined
       // one council per camp: the first page at the fire calls him, the pages after it while they rest do not
       if (camp && !fire) fire = await post("camp", camp.text, page!, "", since.slice(0, -1).concat(text))
@@ -123,7 +125,9 @@ export function streamFlow(post: typeof comment, snapshot: () => Promise<{ text:
     if (l.startsWith("CHRON ") || l.startsWith("PAGE ")) block.push(l)
     else if (l.startsWith("ASK ")) { const s = await snapshot(); if (s && await post("ask", s.text, s.page, l.replace(/^ASK \S+ page \S+: /, ""), since) && mode === "live") since = [] }
   }
-  return { line, end }
+  /** The pages a restart retells (C82): kept as if they had just been told, none of them commented. */
+  const seed = async (lines: string[]) => { quiet = true; for (const l of lines) await line(l); await end(); quiet = false }
+  return { line, end, seed, kept: () => since.length }
 }
 
 /** The page at the fire, whole, with what the four took to camp, or undefined when this page shows no camp (C74). */
@@ -157,6 +161,14 @@ if (import.meta.main) {
   const mode = process.env.DD_CARETAKER_MODE === "live" ? "live" : "camp"
   setCaretaker({ mode })
   const flow = streamFlow(comment, snapshotNow, { mode, atCamp })
+  // C82: restarted mid-road in camp mode, he retells the trip up to the last page he was told, so the council still has the
+  // whole road; the live stream then carries on after that page, so no page is kept twice
+  const mark = join(outDir(), "caretaker-last.txt"), told = await Bun.file(mark).text().then((t) => t.trim()).catch(() => "")
+  if (mode === "camp" && told && current().trip && told.split("/").slice(-2, -1)[0] === current().trip) {
+    const r = Bun.spawn(["bun", join(import.meta.dir, "live.ts")], { env: { ...process.env, DD_LIVE_RETELL: told, DD_LIVE_MARK: "caretaker-retell.txt" }, stdout: "pipe" })
+    await flow.seed((await new Response(r.stdout).text()).split("\n"))
+    console.log(`CARETAKER ${clock()} kept ${flow.kept()} pages of this road from before the restart`)
+  }
   let buf = ""
   const decoder = new TextDecoder()
   for await (const chunk of live.stdout) {

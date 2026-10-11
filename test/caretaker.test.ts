@@ -200,3 +200,29 @@ describe("C74: in camp mode he speaks once, at the fire", () => {
       .toBe("relieves 10 stress for each companion; stops bleeding on one hero")
   })
 })
+
+// C82: a restart mid-road loses nothing of the road the campfire council will tell (pm#47: the kept pages lived in memory only)
+describe("C82: restarted mid-road, he still has the whole road at the fire", () => {
+  test("restarted after page 2 of 3, he keeps the road and posts once at the camp page, with every page of it", async () => {
+    await fresh()
+    const trip = join(out, "chronicle", "generated_1_t"), at = (n: number, light: number, more: object = {}) =>
+      Bun.write(join(trip, `${String(n).padStart(4, "0")}.json`), JSON.stringify({ ...page, length: 2, torch: light, supplies: { food: 4, firewood: 1 }, ...more }))
+    await at(1, 90); await at(2, 84); await at(3, 78)
+    // he had been told up to page 2 before the restart; page 3 came while he was down
+    await Bun.write(join(out, "caretaker-last.txt"), join(trip, "0002.json"))
+    const log = join(out, "args.json")
+    const p = Bun.spawn(["bun", "src/caretaker.ts"], { cwd: root, env: { ...process.env, DD_TOWN_OUT: out, DD_INFERENCE: stub("ok"), STUB_LOG: log }, stdout: "pipe" })
+    let said: { page?: string }[] = []
+    await Bun.sleep(2500)
+    await at(4, 78, { supplies: { food: 4, firewood: 0 } }) // a firewood burnt: the camp
+    for (let i = 0; i < 40 && !said.length; i++) { await Bun.sleep(300); said = (await Bun.file(join(out, "road", "comments.jsonl")).text().catch(() => "")).split("\n").filter(Boolean).map((l) => JSON.parse(l)) }
+    await Bun.sleep(1500)
+    said = (await Bun.file(join(out, "road", "comments.jsonl")).text().catch(() => "")).split("\n").filter(Boolean).map((l) => JSON.parse(l))
+    p.kill("SIGTERM"); await p.exited
+    const prompt = ((await Bun.file(log).json()) as string[])[3]!
+    const road = prompt.slice(prompt.indexOf("WHAT HAPPENED SINCE MY LAST WORD"), prompt.indexOf("THE PAGE"))
+    rmSync(out, { recursive: true, force: true })
+    expect(said.map((l) => l.page)).toEqual(["0004"])
+    expect([...road.matchAll(/#(\d{4})/g)].map((m) => m[1])).toEqual(["0000", "0001", "0002", "0003", "0004"])
+  }, 30_000)
+})
