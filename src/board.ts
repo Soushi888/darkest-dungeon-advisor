@@ -586,7 +586,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     }
     if (a.trinkets.length) {
       L.push("```board-stickies")
-      for (const tr of a.trinkets) L.push(`- title: ${y(`${tr.trinket} to ${tr.to}`)}`, "  kind: idea", `  body: ${y(`${tr.why}.`)}`)
+      for (const tr of a.trinkets) L.push(`- title: ${y(tr.to ? `${tr.trinket} to ${tr.to}` : `${tr.trinket} waits in the stores`)}`, "  kind: idea", `  body: ${y(`${tr.why[0]!.toUpperCase()}${tr.why.slice(1)}.`)}`)
       L.push("```", "")
     }
   }

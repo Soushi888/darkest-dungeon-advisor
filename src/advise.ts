@@ -311,10 +311,18 @@ export async function advise(t: Town): Promise<Advice> {
   // first, rarest first; listed by hero, back rank first like the party (Soushi, 2026-10-10: "propose only if it is worth the switch")
   const wear = new Map((best?.seats ?? []).map((s) => [s.hero.guid, [...(t.worn[s.hero.guid] ?? [])]]))
   const placed = [...t.estateTrinkets].sort((x, z) => z.classes.length - x.classes.length || x.rank - z.rank).flatMap((tr) => {
-    const fit = (best?.seats ?? []).filter((s) => !tr.classes.length || tr.classes.includes(s.hero.cls))
+    // a hero already wearing this very trinket is not offered a second: nothing in the game's files says one hero may wear two
+    // of the same (a trinket's `limit` follows its rarity, not who wears it), so I do not lean on it (U23, the second Stalwart Buckle)
+    const could = (best?.seats ?? []).filter((s) => !tr.classes.length || tr.classes.includes(s.hero.cls))
+    const fit = could.filter((s) => !wear.get(s.hero.guid)!.some((w) => w.id === tr.id))
     const open = fit.filter((s) => wear.get(s.hero.guid)!.length < t.trinketSlots).sort((x, z) => wear.get(x.hero.guid)!.length - wear.get(z.hero.guid)!.length)[0]
     const who = open ?? fit.map((s) => ({ s, worst: [...wear.get(s.hero.guid)!].sort((x, z) => z.rank - x.rank)[0] })).filter((c) => c.worst && c.worst.rank > tr.rank).sort((x, z) => z.worst!.rank - x.worst!.rank)[0]?.s
-    if (!who) return []
+    if (!who) {
+      const twin = could.filter((s) => !fit.includes(s))
+      if (!twin.length) return []
+      const cls = tr.classes.length ? twin[0]!.hero.clsName : "hero"
+      return [{ rank: 0, trinket: tr.name, to: "", why: `${twin.map((s) => s.hero.name).join(" and ")} already ${twin.length > 1 ? "wear" : "wears"} one, and I do not know that a hero may wear two of the same; it waits for another ${cls}` }]
+    }
     const mine = wear.get(who.hero.guid)!, out = open ? undefined : [...mine].sort((x, z) => z.rank - x.rank)[0]!
     if (out) mine.splice(mine.indexOf(out), 1)
     mine.push({ id: tr.id, name: tr.name, rank: tr.rank })
