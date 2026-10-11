@@ -14,7 +14,7 @@ import { DIFFICULTY, LENGTH, type HeroView, type Town, type Upgrade } from "./to
 import { buildSkin } from "./skin.ts"
 import { loadPicks, reconcile, type Check } from "./reconcile.ts"
 import { contradictions } from "./coherence.ts"
-import { beats, chronicleFor, CHRONICLE_RULE, debrief, judge, loadLedger, remember, untried, type Beat, type Debrief, type Lesson } from "./chronicle.ts"
+import { beats, chronicleFor, heirloomTrips, CHRONICLE_RULE, debrief, judge, loadLedger, remember, untried, type Beat, type Debrief, type Lesson } from "./chronicle.ts"
 import { heroClass } from "./game.ts"
 
 // DD_TOWN_OUT lets the tests build elsewhere, so they never touch the live board or its picks. Read at call time: a test file
@@ -118,7 +118,7 @@ export function weekSoFar(t: Town, start: WeekStart | undefined): string[] {
 }
 
 export interface Tale { snaps: number; beats: Beat[]; well: string[]; wrong: string[]; lessons: Lesson[]; debrief?: Debrief; issues?: string[] }
-export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: Answers; own?: Party; checks?: Check[]; prices?: Map<string, number>; soFar?: string[]; tale?: Tale; camp?: Map<string, CampSkill>; sent?: Proposal }): { board: string; sources: string } {
+export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: Answers; own?: Party; checks?: Check[]; prices?: Map<string, number>; soFar?: string[]; tale?: Tale; camp?: Map<string, CampSkill>; sent?: Proposal; rates?: Record<string, { trips: number; got: number }> }): { board: string; sources: string } {
   const L: string[] = []
   const picked = (opts.answers.expedition && a.parties.find((p) => questLabel(p) === opts.answers.expedition)) || a.best
   const chosen = opts.own ?? picked
@@ -583,6 +583,8 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
       const why = youngWhy ? (si >= 0 ? `${youngWhy}.` : `${youngWhy}; I keep the heirlooms for them, ${cost(seasoned!)}, ${short(seasoned!)} short.`) : most >= 0 ? `it opens what the party is waiting for: ${opens[most]!.map((b) => `${b.hero} ${b.label}`).join(", ")}.` : san >= 0 ? `${a.disease.length} of your heroes are ill; cheaper treatment pays back quickly.` : "nothing affordable opens anything the party is waiting for."
       L.push(`  lean: ${lean}`, `  lean_why: ${y(why)}`)
       L.push("```", "")
+      // U22: saving is a plan, not a wait (Soushi, 05:22: "when you propose to save for later, at least give a vision")
+      if (youngWhy && si < 0 && seasoned) L.push(...savingPlan(t, a, seasoned, opts.rates ?? {}))
     }
     if (a.trinkets.length) {
       L.push("```board-stickies")
@@ -740,7 +742,9 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
     const p = await Bun.file(f).json().catch(() => undefined) as Proposal | undefined
     if (p && p.week === t.week - 1) { sent = p; break }
   }
-  const { board, sources } = source(t, a, { foresight: !!opts.foresight, answers, own, checks, prices: await supplyPrices(), soFar: weekSoFar(t, start), tale, camp: await campingSkills(), sent })
+  // what each heirloom came home at, per recorded trip (U22)
+  const rates = Object.fromEntries(await Promise.all(["crest", "bust", "portrait", "deed"].map(async (k) => [k, await heirloomTrips(k)] as const)))
+  const { board, sources } = source(t, a, { foresight: !!opts.foresight, answers, own, checks, prices: await supplyPrices(), soFar: weekSoFar(t, start), tale, camp: await campingSkills(), sent, rates })
   // C38: every build is read back for advice that contradicts itself; the live session is told through coherence.json
   const clash = [...contradictions(board), ...(tale?.issues ?? [])]
   await Bun.write(join(outDir(), "coherence.json"), JSON.stringify({ week: t.week, contradictions: clash }, null, 1))
@@ -791,6 +795,29 @@ async function compile(board: string, sources: string): Promise<string> {
   if (proc.exitCode !== 0) throw new Error(`board build failed: ${proc.stderr.toString()}`)
   await Bun.write(out, estateIcons(await Bun.file(out).text()))
   return out
+}
+
+/** The plan behind a lean to keep the heirlooms (U22): what is short, which of this week's roads pay it, how many trips that
+ *  takes at the rate the recorded trips brought it home, and what the other heirlooms can buy now without delaying the target. */
+export function savingPlan(t: Town, a: Advice, target: Upgrade, rates: Record<string, { trips: number; got: number }>): string[] {
+  const held = (k: string) => t.wallet[k] ?? 0
+  const lines: string[] = []
+  for (const c of target.cost.filter((c) => c.amount > held(c.type))) {
+    const k = c.type, short = c.amount - held(k), plural = `${k}s`
+    const roads = t.quests.filter((q) => !q.plot && q.rewards.some((r) => new RegExp(`^\\d+ ${k}s?$`).test(r)))
+      .map((q) => `the ${q.dungeonName}, ${(LENGTH[q.length] ?? "").toLowerCase()} (${q.goal}), paying ${q.rewards.find((r) => new RegExp(`^\\d+ ${k}s?$`).test(r))}`)
+    const r = rates[k], per = r && r.trips ? r.got / r.trips : 0
+    lines.push(`${short} ${plural} short.`)
+    lines.push(roads.length ? `This week ${roads.length > 1 ? "these roads pay" : "this road pays"} them: ${roads.join("; ")}.` : `No road this week pays ${plural}.`)
+    lines.push(per > 0 ? `The ${r!.trips} roads I kept the story of brought home ${r!.got} ${plural}, about ${Math.round(per * 10) / 10} a trip; at that rate, ${Math.ceil(short / per)} more trips.` : r?.trips ? `None of the ${r.trips} roads I kept the story of brought ${plural} home, so I cannot say how many trips.` : `I have kept no road's story yet, so I cannot say how many trips.`)
+  }
+  // what the rest can buy without touching what the target needs
+  const keep = Object.fromEntries(target.cost.map((c) => [c.type, Math.min(c.amount, held(c.type))]))
+  const spare = (k: string) => held(k) - (keep[k] ?? 0)
+  const free = a.heirlooms.filter((u) => u !== target && u.cost.every((c) => c.amount <= spare(c.type)))
+  const sparing = Object.keys(t.wallet).filter((k) => ["crest", "bust", "portrait", "deed"].includes(k) && spare(k) > 0).map((k) => `${spare(k)} ${k}s`)
+  lines.push(free.length ? `Without delaying it, the ${sparing.join(", ")} it does not need can pay for any one of these now: ${free.map((u) => `${u.label} (${u.cost.map((c) => `${c.amount} ${c.type}s`).join(" and ")})`).join("; ")}.` : `Nothing else the heirlooms can buy now leaves the target untouched.`)
+  return ["```board-stickies", `- title: ${JSON.stringify(`My plan for the ${target.label.replace(/^[^:]+: /, "")}`)}`, "  kind: model", `  body: ${JSON.stringify(lines.join(" "))}`, "```", ""]
 }
 
 /** The road and four that left, against the proposal of the week they left (#3): named, each difference marked, and whose
