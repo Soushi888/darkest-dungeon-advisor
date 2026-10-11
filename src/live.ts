@@ -2,7 +2,9 @@
 //   SEND <time> <n> picks       the board's "Send to the Caretaker" was pressed (.local/town/answers-log.md grew)
 //   SAVE <time> town            a Hamlet save changed the rebuilt board (the game saves often; a save that changes nothing is silent)
 //   SAVE <time> dungeon         the party left the Hamlet; the board waits (C16). Said once per expedition
-//   CHRON <time> #<n> <summary>   a new page of the expedition's chronicle (C39): light, battles, rooms, each hero's state
+//   CHRON <time> #<n> <summary>   a page of the chronicle that changes the story (C39): a battle, a room, an ambush, the light
+//                                 past 50 or 25, a break, a virtue, Death's Door, a fall, a hero under 30% health
+//   PAGE <time> #<n> <summary>    any other new page (kept, but not worth waking the agent)
 //   WARN <time> <n> contradictions: ...   the rebuilt board advises two things that cannot both be done (C38)
 // It only reads the profile (ISA A1). See CLAUDE.md, "Live session".
 import { existsSync, readdirSync, statSync } from "node:fs"
@@ -22,6 +24,7 @@ let sent = mtime(log), saved = mtime(game), seen = await digest(), out = false
 const chron = join(outDir, "chronicle")
 const pages = () => { try { return readdirSync(chron).flatMap((d) => readdirSync(join(chron, d)).filter((f) => /^\d+\.json$/.test(f)).map((f) => join(chron, d, f))) } catch { return [] } }
 const told = new Set(pages())
+const last = new Map<string, any>()
 const clashes = join(outDir, "coherence.json")
 let clashSeen = mtime(clashes)
 console.log(`LIVE ${now()} watching ${outDir} and ${game}`)
@@ -31,7 +34,14 @@ setInterval(async () => {
     try {
       const p = await Bun.file(f).json(), tl = p.tally ?? {}
       const who = (p.heroes ?? []).map((h: any) => `${h.name} ${Math.round(h.hp)}/${h.maxHp}hp ${h.stress}st${h.affliction ? ` ${h.affliction}` : ""}${h.virtue ? ` ${h.virtue}` : ""}${h.deathsDoor ? " DD" : ""}`).join(", ")
-      console.log(`CHRON ${now()} #${f.match(/(\d+)\.json$/)![1]} light ${p.torch}, rooms ${tl.ROOM_VISITED ?? 0}, battles ${tl.BATTLE_COMPLETED ?? 0}, food ${p.supplies?.food ?? 0}, torches ${p.supplies?.torch ?? 0} | ${who}`)
+      // only a page that changes the story wakes the agent (Soushi, 2026-10-11: every turn ends in a spoken line); the rest print as PAGE
+      const prev = last.get(f.split("/").slice(-2, -1)[0]!), pt = prev?.tally ?? {}
+      const crossed = (a: number, b: number) => [50, 25].some((x) => a >= x && b < x)
+      const notable = !prev || ["BATTLE_COMPLETED", "ROOM_VISITED", "AMBUSHED"].some((k) => (tl[k] ?? 0) !== (pt[k] ?? 0)) || crossed(prev.torch, p.torch)
+        || (p.heroes ?? []).some((h: any) => { const w = prev.heroes?.find((x: any) => x.guid === h.guid); return !w || (h.affliction && !w.affliction) || (h.virtue && !w.virtue) || (h.deathsDoor && !w.deathsDoor) || (h.hp < h.maxHp * 0.3 && w.hp >= w.maxHp * 0.3) })
+        || (prev.heroes ?? []).length !== (p.heroes ?? []).length
+      last.set(f.split("/").slice(-2, -1)[0]!, p)
+      console.log(`${notable ? "CHRON" : "PAGE"} ${now()} #${f.match(/(\d+)\.json$/)![1]} light ${p.torch}, rooms ${tl.ROOM_VISITED ?? 0}, battles ${tl.BATTLE_COMPLETED ?? 0}, food ${p.supplies?.food ?? 0}, torches ${p.supplies?.torch ?? 0} | ${who}`)
     } catch {}
   }
   if (mtime(clashes) !== clashSeen) {
