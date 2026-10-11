@@ -45,6 +45,7 @@ export const RULE = {
   moveWorth: 0.5, // RULE: a skill that moves its user, to win a seat back (C33)
   markPair: 3, // RULE: a mark carried with a hand that strikes the marked harder (C35)
   dotWorth: 1.5, // RULE: a bleed or blight, times the share the road's known foes fail to resist (C36)
+  frontHp: 1.5, // RULE: per hit point above the four's average, at the front; rank 1 counts twice, rank 4 twice against (Soushi, 2026-10-11: "an occultist on front line? he is not really resistant")
   lessonHeal: 4, // RULE: a true healer's extra weight on a road where healing failed before (C42)
 }
 
@@ -143,6 +144,7 @@ async function bestParty(pool: HeroView[], q: Quest): Promise<Party | undefined>
   for (let a = 0; a < n; a++) for (let b = a + 1; b < n; b++) for (let c = b + 1; c < n; c++) for (let d = c + 1; d < n; d++) {
     const four = [pool[a]!, pool[b]!, pool[c]!, pool[d]!]
     // try every order; rank 1 is the front
+    const meanHp = four.reduce((t, h) => t + info.get(h.guid)!.hp, 0) / 4
     for (const order of permutations(four)) {
       if (!order.every((h, i) => ranksFor(h).includes(i + 1))) continue
       const heal = order.map((h, i) => healAt(h, i + 1)).filter((x): x is Heal => !!x).sort((x, y) => y.avg - x.avg)[0]
@@ -154,7 +156,7 @@ async function bestParty(pool: HeroView[], q: Quest): Promise<Party | undefined>
         const r = i + 1, cls = info.get(h.guid)!, mine = kit(h, r)
         // a seat is worth what its skills are worth from there, and the front wants hit points
         for (const s of mine) score += skillWorth(s.k, r, q)
-        score += (r <= 2 ? 1 : -1) * (cls.hp - 25) / 3
+        score += [2, 1, -1, -2][i]! * (cls.hp - meanHp) * RULE.frontHp
         score += h.level * 3 - h.stress / 10 + fit.get(h.guid)!.score
         // C32: the enemy ranks this seat can strike
         for (const s of mine) if (s.k?.launch.includes(r)) for (const e of s.k.target) reach.add(e)
