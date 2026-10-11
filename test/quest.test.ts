@@ -66,3 +66,19 @@ describe("C68: what a curio laid is what came of it", () => {
     expect(freshEffect("blight 2 (3) from the Pile of Bones", ["blight 2 (1) from the Unlocked Strongbox"])).toBe(true)
   })
 })
+
+// U39: a gather quest keeps no count of its own; its progress is what the party carries (Weald, page 0089, 2026-10-11: the board
+// read "gather 3 medicines, 0 of 0" with one in the pack, and offered the medicines to the floor at 0 gold)
+describe("C68, U39: a gather quest counts what they carry, and its items are never left behind", () => {
+  const raw = (n: number) => ({ raid: { raid_instance: { type: "gather", dungeon: "weald", length: 2, goal_ids: ["gather_medicines"], gather_medicines: {} },
+    party: { inventory: { items: { 0: { type: "supply", id: "torch", amount: 8 }, ...(n ? { 1: { type: "quest_item", id: "medicines", amount: n } } : {}) } } } } })
+  test("the target from the goal's item, the count from the pack", async () => {
+    expect(await questStatus(raw(1))).toMatchObject({ asks: "gather 3 medicines", done: 1, of: 3, complete: false })
+    expect(await questStatus(raw(0))).toMatchObject({ done: 0, of: 3 })
+    expect((await questStatus(raw(3)))!.complete).toBe(true)
+  })
+  test("a quest item is never on the list of what to leave behind", async () => {
+    const { dropFirst, packRules } = await import("../src/pack.ts")
+    expect(dropFirst({ medicines: 1, jade: 1, gold: 1300 }, await packRules()).map((d) => d.key)).toEqual(["jade", "gold"])
+  })
+})
