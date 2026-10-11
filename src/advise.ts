@@ -1,7 +1,7 @@
 // The Caretaker's reading of a Town: who rests where, which expedition, which party, who stays, what to buy.
 // Figures come from the Town (save + game files). Thresholds marked RULE are the Caretaker's own judgement,
 // stated as such on the board, never presented as the game's numbers (ISA A2).
-import { heroClass, quirks, supplyPrices } from "./game.ts"
+import { heroClass, heroTrees, nameOf, quirks, supplyPrices, type Skill } from "./game.ts"
 import type { Activity, HeroView, Quest, QuirkView, Town, Upgrade } from "./town.ts"
 
 export const RULE_FOOD = [0, 8, 12, 16] // RULE: food and torches by expedition length
@@ -30,16 +30,42 @@ export const RULE = {
   goldCap: 4,
   brokeRoad: 20, // RULE: a road the coffers cannot provision counts this much against itself
   turnBackBroken: 2, // RULE: when this many of the four have broken, I bring them home
+  // how I weigh a party's fighting shape (Soushi, 2026-10-10: "take into account heroes' positions and their abilities")
+  reachPerRank: 1, // RULE: each enemy rank the four can strike from their seats (C32)
+  shufflePerSide: 0.5, // RULE: each neighbouring rank a hero can still attack from, if knocked out of their seat (C33)
+  moveWorth: 0.5, // RULE: a skill that moves its user, to win a seat back (C33)
+  markPair: 3, // RULE: a mark carried with a hand that strikes the marked harder (C35)
+  dotWorth: 1.5, // RULE: a bleed or blight, times the share the road's known foes fail to resist (C36)
+}
+
+/** What a skill is worth from rank r on road q, by my habits: an attack by how many ranks it reaches, a heal by what it
+ *  restores, a bleed or blight by what the foes you have met fail to resist. Zero when it cannot be used from r. */
+export function skillWorth(k: Skill | undefined, r: number, q: Quest): number {
+  if (!k || !k.launch.includes(r)) return 0
+  let v = k.target.length ? 1.5 + 0.25 * k.target.length : k.heal && k.targetsAllies ? k.healAvg / 2 : 0.5
+  const f = q.foeResist
+  if (f?.foes && k.bleed) v += RULE.dotWorth * (1 - f.bleed)
+  if (f?.foes && k.blight) v += RULE.dotWorth * (1 - f.blight)
+  if (k.stun) v += 1
+  if (k.marks) v += 0.5
+  return v
 }
 
 // quirk ids carry the dungeon they concern; the crypts are "ruins" in quirk names, the warrens "warren"
 const DUNGEON_TOKEN: Record<string, string[]> = { weald: ["weald"], cove: ["cove"], warrens: ["warren"], crypts: ["ruins", "crypt"], darkestdungeon: ["darkest"] }
 
 export interface Relief { hero: HeroView; why: string[]; options: { activity: Activity; note: string }[] }
-export interface Seat { hero: HeroView; rank: number; skills: string[]; notes: string[] }
+export interface Seat {
+  hero: HeroView; rank: number; skills: string[]; notes: string[]
+  // the four skills I would have them carry from this seat, the swaps that takes, and a skill worth learning (C34)
+  carry?: string[]; swaps?: { equip: string; for: string }[]; learn?: { skill: string; gold: number }
+}
 /** The strongest heal on another hero the four can cast from where they stand (C30). */
 export interface Heal { by: string; skill: string; avg: number }
-export interface Party { quest: Quest; seats: Seat[]; score: number; healer: boolean; heal?: Heal; stunner: boolean; notes: string[]; left?: number; green?: boolean }
+export interface Party {
+  quest: Quest; seats: Seat[]; score: number; healer: boolean; heal?: Heal; stunner: boolean; notes: string[]; left?: number; green?: boolean
+  reach?: number[]; pair?: { marker: string; mark: string; striker: string; strike: string }
+}
 export interface Advice {
   relief: Relief[]; disease: HeroView[]; afflicted: HeroView[]
   ready: HeroView[]; parties: Party[]; best?: Party
@@ -82,12 +108,23 @@ async function bestParty(pool: HeroView[], q: Quest): Promise<Party | undefined>
   const fit = new Map<number, Awaited<ReturnType<typeof quirkFit>>>()
   for (const h of pool) fit.set(h.guid, await quirkFit(h, q))
 
-  // which ranks each hero can fight from: at least two of their equipped skills launch there
-  const ranksFor = (h: HeroView) => [1, 2, 3, 4].filter((r) => h.skills.filter((s) => info.get(h.guid)!.skills.get(s.id)?.launch.includes(r)).length >= 2)
-  const usable = (h: HeroView, r: number) => h.skills.filter((s) => info.get(h.guid)!.skills.get(s.id)?.launch.includes(r)).map((s) => s.name)
+  // the four skills each hero would carry from rank r: their learned skills, best for that seat first (C34)
+  const kits = new Map<string, { id: string; name: string; k: Skill | undefined }[]>()
+  const kit = (h: HeroView, r: number) => {
+    const key = `${h.guid}:${r}`
+    if (!kits.has(key)) {
+      const sk = info.get(h.guid)!.skills, worn = new Set(h.skills.map((s) => s.id))
+      kits.set(key, (h.learned ?? h.skills).map((s) => ({ id: s.id, name: s.name, k: sk.get(s.id) }))
+        .sort((x, y) => skillWorth(y.k, r, q) - skillWorth(x.k, r, q) || Number(worn.has(y.id)) - Number(worn.has(x.id))).slice(0, 4))
+    }
+    return kits.get(key)!
+  }
+  // which ranks each hero can fight from: at least two of the skills they would carry there launch there
+  const ranksFor = (h: HeroView) => [1, 2, 3, 4].filter((r) => kit(h, r).filter((s) => s.k?.launch.includes(r)).length >= 2)
+  const usable = (h: HeroView, r: number) => kit(h, r).filter((s) => s.k?.launch.includes(r)).map((s) => s.name)
   // the best heal on an ally each hero can cast from rank r, by the hit points it restores
-  const healAt = (h: HeroView, r: number): Heal | undefined => h.skills.map((s) => ({ s, k: info.get(h.guid)!.skills.get(s.id) })).filter(({ k }) => k?.heal && k.targetsAllies && k.launch.includes(r)).map(({ s, k }) => ({ by: h.name, skill: s.name, avg: k!.healAvg })).sort((x, y) => y.avg - x.avg)[0]
-  const stuns = (h: HeroView) => h.skills.some((s) => info.get(h.guid)!.skills.get(s.id)?.stun)
+  const healAt = (h: HeroView, r: number): Heal | undefined => kit(h, r).filter(({ k }) => k?.heal && k.targetsAllies && k.launch.includes(r)).map(({ name, k }) => ({ by: h.name, skill: name, avg: k!.healAvg })).sort((x, y) => y.avg - x.avg)[0]
+  const stuns = (h: HeroView, r: number) => kit(h, r).some((s) => s.k?.stun && s.k.launch.includes(r))
 
   let best: Party | undefined
   const n = pool.length
@@ -97,18 +134,27 @@ async function bestParty(pool: HeroView[], q: Quest): Promise<Party | undefined>
     for (const order of permutations(four)) {
       if (!order.every((h, i) => ranksFor(h).includes(i + 1))) continue
       const heal = order.map((h, i) => healAt(h, i + 1)).filter((x): x is Heal => !!x).sort((x, y) => y.avg - x.avg)[0]
-      const healer = !!heal && heal.avg >= RULE.realHeal, stunner = order.some(stuns)
+      const healer = !!heal && heal.avg >= RULE.realHeal, stunner = order.some((h, i) => stuns(h, i + 1))
       let score = 0
+      const reach = new Set<number>()
+      let pair: Party["pair"], marker: { h: HeroView; name: string } | undefined, striker: { h: HeroView; name: string } | undefined
       order.forEach((h, i) => {
-        const r = i + 1, cls = info.get(h.guid)!
-        // a seat is worth its usable attacks more than its usable support, and the front wants hit points
-        for (const s of h.skills) {
-          const k = cls.skills.get(s.id)
-          if (k?.launch.includes(r)) score += k.type === "melee" || k.type === "ranged" ? 1.5 : 0.5
-        }
+        const r = i + 1, cls = info.get(h.guid)!, mine = kit(h, r)
+        // a seat is worth what its skills are worth from there, and the front wants hit points
+        for (const s of mine) score += skillWorth(s.k, r, q)
         score += (r <= 2 ? 1 : -1) * (cls.hp - 25) / 3
         score += h.level * 3 - h.stress / 10 + fit.get(h.guid)!.score
+        // C32: the enemy ranks this seat can strike
+        for (const s of mine) if (s.k?.launch.includes(r)) for (const e of s.k.target) reach.add(e)
+        // C33: still able to attack one rank off the seat, or to move back into it
+        for (const n of [r - 1, r + 1]) if (n >= 1 && n <= 4 && mine.some((s) => s.k?.target.length && s.k.launch.includes(n))) score += RULE.shufflePerSide
+        if (mine.some((s) => s.k && (s.k.move[0] || s.k.move[1]))) score += RULE.moveWorth
+        // C35: a mark, and a hand that strikes the marked harder
+        marker ??= ((s) => (s ? { h, name: s.name } : undefined))(mine.find((s) => s.k?.marks && s.k.launch.includes(r)))
+        striker ??= ((s) => (s ? { h, name: s.name } : undefined))(mine.find((s) => s.k?.onMarked && s.k.launch.includes(r)))
       })
+      score += RULE.reachPerRank * reach.size
+      if (marker && striker) { score += RULE.markPair; pair = { marker: marker.h.name, mark: marker.name, striker: striker.h.name, strike: striker.name } }
       // a true healer is what brings a party home; a light heal helps, but does not stand in for one
       if (healer) score += 8
       else if (heal) score += 2
@@ -116,13 +162,27 @@ async function bestParty(pool: HeroView[], q: Quest): Promise<Party | undefined>
       if (new Set(order.map((h) => h.cls)).size < 4) score -= 2
       if (!best || score > best.score) {
         best = {
-          quest: q, score, healer, heal, stunner, notes: [],
-          seats: order.map((h, i) => ({ hero: h, rank: i + 1, skills: usable(h, i + 1), notes: fit.get(h.guid)!.notes })),
+          quest: q, score, healer, heal, stunner, notes: [], reach: [...reach].sort(), pair,
+          seats: order.map((h, i) => ({ hero: h, rank: i + 1, skills: usable(h, i + 1), notes: fit.get(h.guid)!.notes, carry: kit(h, i + 1).map((s) => s.name) })),
         }
       }
     }
   }
   if (best) {
+    // C34: the swaps each seat takes, and a skill not yet learned that would serve the seat better than one carried
+    for (const seat of best.seats) {
+      const h = seat.hero, r = seat.rank, mine = kit(h, r), worn = h.skills
+      seat.swaps = mine.filter((s) => !worn.some((w) => w.id === s.id)).map((s, i) => ({ equip: s.name, for: worn.filter((w) => !mine.some((m) => m.id === w.id))[i]?.name ?? "" }))
+      const learned = new Set((h.learned ?? h.skills).map((s) => s.id)), sk = info.get(h.guid)!.skills
+      const weakest = Math.min(...mine.map((s) => skillWorth(s.k, r, q)))
+      const cand = [...sk.values()].filter((k) => !learned.has(k.id) && skillWorth(k, r, q) > weakest).sort((x, y) => skillWorth(y, r, q) - skillWorth(x, r, q))[0]
+      if (cand) {
+        const gold = (await heroTrees(h.cls)).get(`${h.cls}.${cand.id}`)?.find((x) => x.code === "0")?.cost.find((c) => c.type === "gold")?.amount
+        if (gold) seat.learn = { skill: await nameOf("skill", cand.id, h.cls), gold }
+      }
+    }
+    const blind = [1, 2, 3, 4].filter((e) => !best!.reach!.includes(e))
+    if (blind.length) best.notes.push(`none of them can strike enemy rank${blind.length > 1 ? "s" : ""} ${blind.join(" and ")} from these seats`)
     if (!best.healer) best.notes.push(best.heal ? `only a light heal in this four: ${best.heal.by}'s ${best.heal.skill}` : "no healer in this four")
     if (!best.stunner) best.notes.push("no stun in this four")
   }

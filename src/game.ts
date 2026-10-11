@@ -17,6 +17,7 @@ export const P = {
   portrait: (c: string) => `heroes/${c}/${c}_A/${c}_portrait_roster.png`,
   townEvents: "campaign/town_events/base.town_events.events.json",
   supplies: "inventory/base.supply.inventory.items.darkest",
+  effects: "effects/base.effects.darkest",
 }
 
 const json = async (rel: string) => Bun.file(join(install, rel)).json()
@@ -73,9 +74,24 @@ export function levelOf(xp: number, thr: number[]): number {
 }
 
 // ---------- hero classes ----------
-export interface Skill { id: string; launch: number[]; targetsAllies: boolean; heal: boolean; healAvg: number; stun: boolean; type: string }
+export interface Skill {
+  id: string; launch: number[]; targetsAllies: boolean; heal: boolean; healAvg: number; stun: boolean; type: string
+  // the enemy ranks it strikes (none for a skill on allies or on oneself), how far it moves its user back and forward,
+  // and, from its effect lines, whether it marks a foe, hits a marked foe harder, bleeds or blights (C32 to C36)
+  target: number[]; move: [number, number]; marks: boolean; onMarked: boolean; bleed: boolean; blight: boolean
+}
 export interface HeroClass { id: string; skills: Map<string, Skill>; tags: string[]; hp: number }
 const classCache = new Map<string, HeroClass>()
+// the game's named effects, one line each, keyed by name
+let effectLib: Map<string, string> | undefined
+export async function effect(name: string): Promise<string> {
+  if (!effectLib) {
+    effectLib = new Map()
+    for (const line of (await text(P.effects)).split("\n")) { const n = line.match(/^effect: \.name "([^"]+)"/)?.[1]; if (n && !effectLib.has(n)) effectLib.set(n, line) }
+  }
+  return effectLib.get(name) ?? ""
+}
+
 export async function heroClass(id: string): Promise<HeroClass> {
   if (classCache.has(id)) return classCache.get(id)!
   const info = await text(P.heroInfo(id))
@@ -86,7 +102,14 @@ export async function heroClass(id: string): Promise<HeroClass> {
     if (!sid) continue
     const launch = (line.match(/\.launch (\d+)/)?.[1] ?? "").split("").map(Number)
     const target = line.match(/\.target (\S*)/)?.[1] ?? ""
+    const fx = await Promise.all([...(line.match(/\.effect((?: "[^"]+")+)/)?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((e) => effect(e[1]!)))
+    const mv = line.match(/\.move (\d+) (\d+)/)
     skills.set(sid, {
+      target: target.startsWith("@") ? [] : target.replace(/\D/g, "").split("").map(Number).filter(Boolean),
+      move: [Number(mv?.[1] ?? 0), Number(mv?.[2] ?? 0)],
+      marks: fx.some((f) => /\.tag 1\b/.test(f) && /\.target "target"/.test(f)),
+      onMarked: fx.some((f) => /\.keyStatus "tagged"/.test(f) && /\.target "performer"/.test(f)),
+      bleed: fx.some((f) => /\.dotBleed \d/.test(f)), blight: fx.some((f) => /\.dotPoison \d/.test(f)),
       id: sid, launch, targetsAllies: target.startsWith("@"), heal: /\.heal \d/.test(line),
       // the hit points a heal restores at its first level, the mean of the file's .heal range (C30)
       healAvg: ((m) => (m ? (Number(m[1]) + Number(m[2])) / 2 : 0))(line.match(/\.heal (\d+) (\d+)/)),
@@ -145,7 +168,7 @@ export async function trinkets(): Promise<Map<string, Trinket>> {
 }
 
 // ---------- monsters ----------
-export interface Monster { id: string; base: string; type: string; skills: string[]; effects: Map<string, string[]> }
+export interface Monster { id: string; base: string; type: string; skills: string[]; effects: Map<string, string[]>; bleedResist: number; blightResist: number }
 const monsterCache = new Map<string, Monster>()
 export async function monster(variant: string): Promise<Monster | undefined> {
   if (monsterCache.has(variant)) return monsterCache.get(variant)
@@ -155,6 +178,8 @@ export async function monster(variant: string): Promise<Monster | undefined> {
   const info = await text(rel)
   const m = {
     id: variant, base, type: info.match(/^enemy_type: \.id "([^"]+)"/m)?.[1] ?? "",
+    bleedResist: Number(info.match(/^stats:[^\n]*\.bleed_resist (\d+)/m)?.[1] ?? 0) / 100,
+    blightResist: Number(info.match(/^stats:[^\n]*\.poison_resist (\d+)/m)?.[1] ?? 0) / 100,
     skills: [...info.matchAll(/^skill: \.id "([^"]+)"/gm)].map((x) => x[1]!),
     // each skill's named effects ("Minor Bleed 1", "Blight 2"), for what a supply counters
     effects: new Map([...info.matchAll(/^skill: \.id "([^"]+)"([^\n]*)/gm)].map((x) => [x[1]!, [...(x[2]!.match(/\.effect((?: "[^"]+")+)/)?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((e) => e[1]!)])),

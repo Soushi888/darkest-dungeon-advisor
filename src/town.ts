@@ -4,7 +4,7 @@ import type { Dson } from "./dson.ts"
 import type { Save } from "./read.ts"
 import {
   P, applied, buildingData, buildingTrees, describeQuirk, dungeonMonsters, heroClass, heroTrees, levelOf, levelThresholds,
-  monster, nameOf, quirks, strings, townEvents, trinkets, type Cost,
+  monster, nameOf, quirks, strings, townEvents, trinkets, type Cost, type Monster,
 } from "./game.ts"
 
 const raw = (h: any) => h.hero_file_data?.raw_data ?? h
@@ -13,11 +13,13 @@ export interface QuirkView { id: string; name: string; positive: boolean; diseas
 export interface HeroView {
   guid: number; name: string; cls: string; clsName: string; level: number; xp: number; stress: number
   affliction: string; busy: string; quirks: QuirkView[]; skills: { id: string; name: string; level: number }[]
+  // every combat skill the hero has learned, equipped or not: the equipped four plus every skill tree with a purchase (C34)
+  learned?: { id: string; name: string }[]
   weapon: number; armour: number; trinkets: string[]; dungeons: string[]; portrait: string
   from?: string // the town event that brought a recruit
 }
 export interface Activity { building: string; activity: string; name: string; locked: boolean; baseCost: number; cost: number; lockedQuirkCost?: number; heal: number; cure: number; slots: number; used: number; barred: string[] }
-export interface Quest { unknownTypes: string[]; bleeders: string[]; blighters: string[]; walked: boolean; idx: number; dungeon: string; dungeonName: string; type: string; difficulty: number; length: number; plot: boolean; rewards: string[]; known: string[]; unknownCount: number; types: string[] }
+export interface Quest { foeResist?: { bleed: number; blight: number; foes: number }; unknownTypes: string[]; bleeders: string[]; blighters: string[]; walked: boolean; idx: number; dungeon: string; dungeonName: string; type: string; difficulty: number; length: number; plot: boolean; rewards: string[]; known: string[]; unknownCount: number; types: string[] }
 export interface Upgrade { hero?: string; toLevel?: number; where?: string; tree: string; label: string; code: string; cost: Cost[]; affordable: boolean; blockedBy: string }
 export interface Town {
   week: number; inRaid: boolean; raidDungeon: string; estate: string
@@ -152,6 +154,11 @@ export async function town(save: Save): Promise<Town> {
   deaths(save.campaign_log)
   const heroes: HeroView[] = [], fallen: HeroView[] = []
   for (const [g, h] of Object.entries<any>((save.roster as any)?.heroes ?? {})) (died.has(Number(g)) ? fallen : heroes).push(await heroView(Number(g), h, thr, busy))
+  for (const h of heroes) {
+    const combat = (await heroClass(h.cls)).skills, mine = heroBought.get(h.guid) ?? new Set<string>()
+    const ids = new Set([...h.skills.map((s) => s.id), ...[...mine].map((k) => k.split(":")[0]!).filter((t) => t.startsWith(`${h.cls}.`)).map((t) => t.slice(h.cls.length + 1)).filter((id) => combat.has(id))])
+    h.learned = await Promise.all([...ids].map(async (id) => ({ id, name: h.skills.find((s) => s.id === id)?.name ?? (await nameOf("skill", id, h.cls)) })))
+  }
   const recruits: HeroView[] = []
   for (const [g, h] of Object.entries<any>(tb.stage_coach?.store?.hero_recruit?.generated ?? {})) recruits.push(await heroView(Number(g), h, thr, new Map()))
   // a town event's bonus recruits wait at the coach beside the usual offer
@@ -200,13 +207,13 @@ export async function town(save: Save): Promise<Town> {
   const view = async (q: any, idx: number): Promise<Quest> => {
     const variants = await dungeonMonsters(q.dungeon, q.difficulty, ["hall", "room"])
     const seen = new Map<string, string>(), types = new Set<string>(), bleeders = new Set<string>(), blighters = new Set<string>()
-    const unknown = new Set<string>(), unknownTypes = new Set<string>()
+    const unknown = new Set<string>(), unknownTypes = new Set<string>(), met: Monster[] = []
     for (const v of variants) {
       const m = await monster(v)
       if (!m) continue
       if (knownVariants.has(v) && (walkedLevels.has(q.dungeon) || visited.has(q.dungeon))) {
         const n = await nameOf("monster", m.id)
-        seen.set(m.id, n); types.add(m.type)
+        seen.set(m.id, n); types.add(m.type); met.push(m)
         // only the attacks you have suffered say what they do to you
         for (const s of m.skills.filter((s) => known.has(s))) {
           const fx = (m.effects.get(s) ?? []).join(" ")
@@ -221,7 +228,10 @@ export async function town(save: Save): Promise<Town> {
       else if (it.type === "heirloom") rewards.push(`${it.amount} ${it.id}${it.amount > 1 ? "s" : ""}`)
       else if (it.type === "trinket") rewards.push(await nameOf("trinket", it.id))
     }
+    // how well the foes you have met on this road resist bleed and blight, on average (C36); nothing is said of the rest
+    const avg = (k: "bleedResist" | "blightResist") => (met.length ? met.reduce((a, m) => a + m[k], 0) / met.length : 0)
     return {
+      foeResist: { bleed: avg("bleedResist"), blight: avg("blightResist"), foes: met.length },
       unknownTypes: [...unknownTypes], bleeders: [...bleeders], blighters: [...blighters], walked: visited.has(q.dungeon), idx, dungeon: q.dungeon, dungeonName: await nameOf("dungeon", q.dungeon), type: q.type, difficulty: q.difficulty,
       length: q.length, plot: !!q.is_plot_quest, rewards, known: [...new Set(seen.values())], unknownCount: unknown.size, types: [...types],
     }

@@ -12,7 +12,7 @@ import { profileDir, root } from "../src/paths.ts"
 import { boardOptions, mergePicks, parseAnswers, reconcile } from "../src/reconcile.ts"
 import { ACTING_ORDER, road, source, weekSoFar } from "../src/board.ts"
 import { supplyPrices } from "../src/game.ts"
-import { advise, readiness, seatParty, RULE } from "../src/advise.ts"
+import { advise, readiness, seatParty, skillWorth, RULE } from "../src/advise.ts"
 
 let profile = ""
 try { profile = profileDir() } catch {}
@@ -459,5 +459,70 @@ describe.skipIf(!has)("on the local save", () => {
     expect(at("Who stays, who goes")).toBeLessThan(at("The next expedition"))
     expect(at("Who rests, who prays")).toBeLessThan(at("The next expedition"))
     if (at("Provisions for the road") >= 0) expect(at("Provisions for the road")).toBeGreaterThan(at("The next expedition"))
+  })
+
+  // the best party's score for one road, with the habits as they stand or with one of them set to nothing
+  async function scoreWith(key: keyof typeof RULE, value?: number) {
+    const t = await town(await readSave(copyProfile()))
+    const keep = RULE[key]
+    if (value !== undefined) (RULE as any)[key] = value
+    try { const a = await advise(t); return a.parties.find((p) => !p.quest.plot && p.quest.length === 1) } finally { (RULE as any)[key] = keep }
+  }
+
+  test("C32: the party is judged by whom it can reach, and the card says so", async () => {
+    const with_ = await scoreWith("reachPerRank"), without = await scoreWith("reachPerRank", 0)
+    if (!with_ || !without) return
+    expect(with_.reach!.length).toBeGreaterThan(0)
+    expect(with_.score).toBeGreaterThan(without.score)
+    const t = await town(await readSave(copyProfile()))
+    const md = source(t, await advise(t), { foresight: false, answers: {}, prices: await supplyPrices() }).board
+    expect(md).toMatch(/From these seats they can strike (every rank of the enemy line|enemy ranks? [1-4])/)
+  })
+
+  test("C33: a seat that survives a shuffle is worth more", async () => {
+    const with_ = await scoreWith("shufflePerSide"), without = await scoreWith("shufflePerSide", 0)
+    if (!with_ || !without) return
+    expect(with_.score).toBeGreaterThan(without.score)
+    // the game's own move: Duelist's Advance moves its user forward one rank
+    expect((await heroClass("highwayman")).skills.get("duelist_advance")!.move).toEqual([0, 1])
+  })
+
+  test("C34: each seat carries the four learned skills that serve it, and the swaps are named", async () => {
+    const t = await town(await readSave(copyProfile()))
+    for (const h of t.heroes) for (const s of h.skills) expect(h.learned!.map((l) => l.id)).toContain(s.id)
+    // a hero carrying a skill useless from the back, with a better one learned, is told to swap it
+    const hw = t.heroes.find((h) => h.cls === "highwayman")
+    if (!hw) return
+    const cls = await heroClass("highwayman"), name = async (id: string) => nameOf("skill", id, "highwayman")
+    hw.skills = await Promise.all(["point_blank_shot", "pistol_shot", "grape_shot_blast", "take_aim"].map(async (id) => ({ id, name: await name(id), level: 0 })))
+    hw.learned = [...hw.skills, { id: "duelist_advance", name: await name("duelist_advance") }]
+    Object.assign(hw, { stress: 0, affliction: "", busy: "", quirks: hw.quirks.filter((q) => !q.disease), level: 5 })
+    expect(cls.skills.get("point_blank_shot")!.launch).toEqual([1])
+    for (const h of t.heroes) if (h.guid !== hw.guid && h.cls === "highwayman") h.busy = "elsewhere"
+    const a = await advise(t)
+    const seat = a.parties.flatMap((p) => p.seats).find((s) => s.hero.guid === hw.guid && s.rank > 1)
+    expect(seat).toBeDefined()
+    expect(seat!.swaps).toContainEqual({ equip: await name("duelist_advance"), for: await name("point_blank_shot") })
+  })
+
+  test("C35: a mark and a hand that strikes the marked count together", async () => {
+    expect((await heroClass("bounty_hunter")).skills.get("target_tag")!.marks).toBe(true)
+    expect((await heroClass("highwayman")).skills.get("pistol_shot")!.onMarked).toBe(true)
+    const with_ = await scoreWith("markPair"), without = await scoreWith("markPair", 0)
+    if (!with_?.pair || !without) return
+    expect(with_.score).toBeGreaterThan(without.score)
+  })
+
+  test("C36: bleed and blight are weighed against what the known foes resist", async () => {
+    const vein = (await heroClass("highwayman")).skills.get("opened_vein")!, plain = (await heroClass("highwayman")).skills.get("wicked_slice")!
+    expect(vein.bleed).toBe(true)
+    const road = (bleed: number, foes: number) => ({ foeResist: { bleed, blight: 0, foes } }) as any
+    expect(skillWorth(vein, 1, road(0.2, 5))).toBeGreaterThan(skillWorth(vein, 1, road(0.6, 5)))
+    // a road whose foes you have never met says nothing of their resistances
+    expect(skillWorth(vein, 1, road(0, 0))).toBe(skillWorth({ ...vein, bleed: false }, 1, road(0, 0)))
+    // the resistances come only from foes met on that road
+    const t = await town(await readSave(copyProfile()))
+    for (const q of t.quests) if (!q.known.length) expect(q.foeResist!.foes).toBe(0)
+    expect(plain.bleed).toBe(false)
   })
 })
