@@ -17,6 +17,7 @@ bun run skin                 # build .local/state/theme.css from skin/darkest.cs
 bun run live                 # one line per board send or game save, for a live session (see below)
 bun run now                  # the latest page in full: the four and the foes front to back, who has acted, where they stand
 bun run say --page N "<t>"   # the Caretaker's line on the road thread, tied to the page it answers
+bun run say --recap --page N --words "<t>"  # his recap: the report card, its numbers built from the page (C66)
 bun test                     # all claim probes
 bun test -t "C6"             # one test, by its claim id
 bun run typecheck            # tsc --noEmit
