@@ -19,6 +19,9 @@ export const P = {
   portrait: (c: string, look = 0) => `heroes/${c}/${c}_${"ABCD"[look] ?? "A"}/${c}_portrait_roster.png`,
   townEvents: "campaign/town_events/base.town_events.events.json",
   supplies: "inventory/base.supply.inventory.items.darkest",
+  // the pack (U34): how many slots a party carries, and how many of each item fit in one
+  inventoryConfigs: "inventory/base.inventory.system_configs.darkest",
+  inventoryItems: ["supply", "gem", "currency", "quest_item"].map((k) => `inventory/base.${k}.inventory.items.darkest`),
   effects: "effects/base.effects.darkest",
 }
 

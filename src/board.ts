@@ -3,6 +3,7 @@
 // The board speaks only as the Caretaker, in the Hamlet's own words (C13): no file, field or save is named on it.
 // Where each figure comes from goes to sources.md beside it (C14).
 import { campTell, campWorth } from "./camp.ts"
+import { asPack, packRules, slotsOf, trims, type PackRules } from "./pack.ts"
 import { upkeep, upkeepWords, type UpItem } from "./upkeep.ts"
 import { checkTale } from "./talecheck.ts"
 import { copyFileSync, existsSync, mkdirSync } from "node:fs"
@@ -121,7 +122,7 @@ export function weekSoFar(t: Town, start: WeekStart | undefined): string[] {
 }
 
 export interface Tale { snaps: number; beats: Beat[]; well: string[]; wrong: string[]; lessons: Lesson[]; debrief?: Debrief; issues?: string[] }
-export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: Answers; own?: Party; checks?: Check[]; prices?: Map<string, number>; soFar?: string[]; tale?: Tale; camp?: Map<string, CampSkill>; sent?: Proposal; rates?: Record<string, { trips: number; got: number }> }): { board: string; sources: string } {
+export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: Answers; own?: Party; checks?: Check[]; prices?: Map<string, number>; soFar?: string[]; tale?: Tale; camp?: Map<string, CampSkill>; sent?: Proposal; rates?: Record<string, { trips: number; got: number }>; pack?: PackRules }): { board: string; sources: string } {
   const L: string[] = []
   const picked = (opts.answers.expedition && a.parties.find((p) => questLabel(p) === opts.answers.expedition)) || a.best
   const chosen = opts.own ?? picked
@@ -430,6 +431,13 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     // firewood's price in the item list is 0: it is taken, not bought. The count the camp needs is the game's to show
     if (q.length >= 2) notes.push(`This road has a camp: take firewood from the Provisioner before you leave; it costs ${coin(opts.prices?.get("firewood") ?? 0)}.`)
     if (notes.length) L.push(notes.join(" "), "")
+    // C79: the pack's slots, from the game's files; the buy list against what stays free for what they find
+    if (opts.pack?.slots) {
+      // a road with a camp also packs its firewood (the note above), one stack of its own
+      const buy = asPack({ ...Object.fromEntries(roadItems.map((i) => [i.id, i.count])), ...(q.length >= 2 ? { firewood: 1 } : {}) }), used = slotsOf(buy, opts.pack), free = opts.pack.slots - used
+      const cut = free < RULE.packFree ? trims(buy, opts.pack) : []
+      L.push(`**The packs.** This takes ${used} of the pack's ${opts.pack.slots} slots and leaves ${free} free for what they find. ${free >= RULE.packFree ? `That is room enough (my habit: at least ${RULE.packFree}).` : `I like at least ${RULE.packFree} free (my habit). ${cut.length ? `To free a slot, leave behind ${cut.map((c) => `${c.n} ${c.key === "food" ? "food" : c.key.replace(/_/g, " ")}`).join(", or ")}.` : "Every stack is full, so each slot freed costs a whole stack."}`}`, "")
+    }
   }
 
   // guild and blacksmith
@@ -452,7 +460,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
       if (k) items.push({ hero: s.hero.name, what: `${k.name} at the Survivalist`, kind: "camp", gold: Math.round(k.gold * (1 - t.campDiscount)) })
     }
     const plan = upkeep(items, left, { camps: chosen.quest.length >= 2, dismiss: new Map(a.dismiss.map((d) => [d.hero.name, d.why])) })
-    L.push(`**Before the coach leaves, the four's upkeep (my habit).** ${coin(left)} is free once the road's provisions are kept back. I would spend it in this order: healing, then the weapon and the armour, then the other skills they carry from their seats, then a camping skill if the road camps. That spends ${coin(plan.spent)} and leaves ${coin(plan.left)}. A skill they do not carry from their seat is not worth the gold this week, and a hero I would dismiss gets nothing.`, "")
+    L.push(`**Before the coach leaves, the four's upkeep (my habit).** ${gold < reserve ? `The road's provisions cost ${coin(reserve)} and the coffers hold ${coin(gold)}: the road itself is ${coin(reserve - gold)} short, so nothing is free for the rest.` : `${coin(left)} is free once the road's provisions are kept back.`} ${gold < reserve ? "When gold is free, I spend it" : "I would spend it"} in this order: healing, then the weapon and the armour, then the other skills they carry from their seats, then a camping skill if the road camps. That spends ${coin(plan.spent)} and leaves ${coin(plan.left)}. A skill they do not carry from their seat is not worth the gold this week, and a hero I would dismiss gets nothing.`, "")
     // one colour for all four, so the board keeps them in seat order (it groups stickies by colour)
     L.push("```board-stickies")
     for (const s of chosen.seats) {
@@ -750,7 +758,7 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
   }
   // what each heirloom came home at, per recorded trip (U22)
   const rates = Object.fromEntries(await Promise.all(["crest", "bust", "portrait", "deed"].map(async (k) => [k, await heirloomTrips(k)] as const)))
-  const { board, sources } = source(t, a, { foresight: !!opts.foresight, answers, own, checks, prices: await supplyPrices(), soFar: weekSoFar(t, start), tale, camp: await campingSkills(), sent, rates })
+  const { board, sources } = source(t, a, { foresight: !!opts.foresight, answers, own, checks, prices: await supplyPrices(), soFar: weekSoFar(t, start), tale, camp: await campingSkills(), sent, rates, pack: await packRules() })
   // C38: every build is read back for advice that contradicts itself; the live session is told through coherence.json
   const clash = [...contradictions(board), ...(tale?.issues ?? [])]
   await Bun.write(join(outDir(), "coherence.json"), JSON.stringify({ week: t.week, contradictions: clash }, null, 1))
@@ -873,7 +881,7 @@ export interface Proposal { week: number; dungeon: string; length: number; type:
 /** The farewell (C24): once the party has left, the board turns into the Caretaker's last word before the dark: how they were
  *  sent against what he proposed and what was picked, what they carry against his habit, the foes known there, when he would
  *  turn back, and a send-off. In his voice like the town board (C13); its figures go to sources.md (C14). */
-export function farewellSource(t: Town, r: NonNullable<Town["raid"]>, opts: { proposal?: Proposal; checks: Check[]; prices: Map<string, number> }): { board: string; sources: string } {
+export function farewellSource(t: Town, r: NonNullable<Town["raid"]>, opts: { proposal?: Proposal; checks: Check[]; prices: Map<string, number>; pack?: PackRules }): { board: string; sources: string } {
   const q = r.quest, L: string[] = [], rows: [string, string, string][] = []
   const who = r.party.map((g) => t.heroes.find((h) => h.guid === g)).filter((h): h is HeroView => !!h)
   const names = who.map((h) => h.name)
@@ -910,7 +918,7 @@ export function farewellSource(t: Town, r: NonNullable<Town["raid"]>, opts: { pr
   // what they carry
   const habit = road(t, { quest: q } as Party, opts.prices)
   L.push("## What they carry {wide}", "")
-  L.push(`Their packs against what I would carry on a ${LENGTH[len]?.toLowerCase()} road (my habit), and what the coffers kept: ${coin(t.wallet.gold ?? 0)}.`, "")
+  L.push(`Their packs against what I would carry on a ${LENGTH[len]?.toLowerCase()} road (my habit), and what the coffers kept: ${coin(t.wallet.gold ?? 0)}.${opts.pack?.slots ? ` The packs fill ${slotsOf(asPack(r.carried), opts.pack)} of their ${opts.pack.slots} slots: ${opts.pack.slots - slotsOf(asPack(r.carried), opts.pack)} stay free for what they find.` : ""}`, "")
   L.push("```board-stickies")
   for (const i of habit) {
     const has = r.carried[i.id] ?? 0
@@ -956,6 +964,6 @@ export async function buildFarewell(t: Town): Promise<string> {
   mkdirSync(join(outDir(), "img"), { recursive: true })
   const f = Bun.file(join(outDir(), "proposal.json"))
   const proposal = (await f.exists()) ? ((await f.json()) as Proposal) : undefined
-  const { board, sources } = farewellSource(t, t.raid!, { proposal, checks: reconcile(await loadPicks(outDir()), t), prices: await supplyPrices() })
+  const { board, sources } = farewellSource(t, t.raid!, { proposal, checks: reconcile(await loadPicks(outDir()), t), prices: await supplyPrices(), pack: await packRules() })
   return compile(board, sources)
 }

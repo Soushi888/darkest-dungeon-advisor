@@ -2,6 +2,7 @@
 // every comment, so a claim about who acted, the ranks or anyone's health comes from the page and never from memory of the
 // stream (Soushi, 2026-10-11 04:17: "ensure you are always well synced with the pages and game state"). Only what the page
 // holds is said, nothing inferred. It only reads the chronicle (ISA A1).
+import { dropFirst, packRules, slotsOf } from "./pack.ts"
 import { statSync } from "node:fs"
 import type { Snap } from "./chronicle.ts"
 import { monster } from "./game.ts"
@@ -48,6 +49,12 @@ export async function nowText(p: Snap, raw: any, page: string, savedAt: number):
   if (where) out.push(`WHERE ${where}`)
   const held = Object.entries(p.supplies).filter(([, n]) => n > 0), pages = held.filter(([k]) => journalPage(k))
   out.push(`SUPPLIES ${held.filter(([k]) => !journalPage(k)).map(([k, n]) => `${plain(k)} ${n}`).join(", ") || "none"}; light ${p.torch}`)
+  // C79: the pack's slots, and what to leave behind first when it fills, by the gold each slot is worth in the game's files
+  const pk = await packRules()
+  if (pk.slots) {
+    const used = slotsOf(p.supplies, pk), free = pk.slots - used, drop = dropFirst(p.supplies, pk)
+    out.push(`PACK ${used} of ${pk.slots} slots used, ${free} free${free <= 2 && drop.length ? `; if it fills, leave behind first: ${drop.slice(0, 4).map((d) => `${plain(d.key)} ${d.n} (${d.worth} gold, ${d.perSlot} a slot)`).join(", ")}` : ""}`)
+  }
   // a journal page is a page of the story, with no price anywhere in the game's files: never loot, never counted in gold
   if (pages.length) out.push(`JOURNAL PAGES (pages of the estate's story, worth no gold) ${(await Promise.all(pages.map(([k]) => pageTitle(journalPage(k)!)))).join("; ")}`)
   return out.join("\n")
