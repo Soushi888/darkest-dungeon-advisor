@@ -67,7 +67,7 @@ setInterval(async () => {
           let by = ""
           // a loss equal to the blight or bleed the hero carried on the last page is that damage ticking, not a new blow
           // stacks tick together, so the loss may be one stack or all of them
-          const stacks = (w.effects ?? []).map((x: string) => x.match(/^(blight|bleed|stat [45]) (\d+)/)).filter(Boolean).map((m: any) => [m[1].replace("stat 4", "blight").replace("stat 5", "bleed"), Number(m[2])] as [string, number])
+          const stacks: [string, number][] = (w.effects ?? []).map((x: string) => x.match(/^(blight|bleed|stat [45]) (\d+)/)).filter(Boolean).map((m: any) => [m[1].replace("stat 4", "blight").replace("stat 5", "bleed"), Number(m[2])] as [string, number])
           const one = stacks.find(([, n]) => n === -dh), all = stacks.reduce((t, [, n]) => t + n, 0)
           const tick = dh < 0 && (one || (stacks.length > 1 && all === -dh)) ? (one ? one[0] : [...new Set(stacks.map(([k]: [string, number]) => k))].join(" and ") + ` (${stacks.length} stacks)`) : ""
           if (tick) by = ` (${tick} ticking)`
