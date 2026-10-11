@@ -19,6 +19,7 @@ import { messagesFile } from "./road.ts"
 import { newlySeen, whereLine } from "./map.ts"
 import { effectWords, plain, wrap } from "./words.ts"
 import { turnKind } from "./turns.ts"
+import { isNotable } from "./notable.ts"
 import { alreadyTold, inOrder } from "./livemark.ts"
 import { chronBlock } from "./now.ts"
 
@@ -57,13 +58,9 @@ setInterval(async () => {
       const who = (p.heroes ?? []).map((h: any) => `${h.name} ${Math.round(h.hp)}/${h.maxHp}hp ${h.stress}st${h.affliction ? ` ${h.affliction}` : ""}${h.virtue ? ` ${h.virtue}` : ""}${h.deathsDoor ? " DD" : ""}`).join(", ")
       // only a page that changes the story wakes the agent (Soushi, 2026-10-11: every turn ends in a spoken line); the rest print as PAGE
       const trip = f.split("/").slice(-2, -1)[0]!, prev = last.get(trip), pt = prev?.tally ?? {}, prevRaw = prevFile.get(trip)
-      const crossed = (a: number, b: number) => [50, 25].some((x) => a >= x && b < x)
-      const notable = !prev || ["BATTLE_COMPLETED", "ROOM_VISITED", "AMBUSHED"].some((k) => (tl[k] ?? 0) !== (pt[k] ?? 0)) || crossed(prev.torch, p.torch)
-        || (p.heroes ?? []).some((h: any) => { const w = prev.heroes?.find((x: any) => x.guid === h.guid); return !w || (h.affliction && !w.affliction) || (h.virtue && !w.virtue) || (h.deathsDoor && !w.deathsDoor) || (h.hp < h.maxHp * 0.3 && w.hp >= w.maxHp * 0.3) })
-        || (prev.heroes ?? []).length !== (p.heroes ?? []).length
       // the map (C51): where they stand, and what came into sight since the last page; a sight is worth waking for
       const where = whereLine(p.map), seen = newlySeen(prev?.map, p.map)
-      const noted = notable || seen.length > 0
+      const noted = isNotable(prev, p) // the same test the road zone's busy line uses (C65)
       last.set(f.split("/").slice(-2, -1)[0]!, p)
       prevFile.set(f.split("/").slice(-2, -1)[0]!, f.replace(/\.json$/, ".raw.json"))
       // every change since the last page, so no page reads as empty: the packs item by item, the game's tallies with their

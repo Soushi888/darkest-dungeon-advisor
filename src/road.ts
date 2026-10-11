@@ -4,6 +4,7 @@
 //   (served by bun run watch)   the farewell board's first zone while the party is out; /road/feed its data, POST /road/message a line from Soushi
 // It only reads the chronicle and writes under .local/town/road/ (ISA A1).
 import { mapLegend, mapSvg, whereLine } from "./map.ts"
+import { isNotable } from "./notable.ts"
 import { appendFileSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs"
 import { join } from "node:path"
 import { outDir } from "./board.ts"
@@ -48,6 +49,22 @@ export function ask(text: string) {
   append(messagesFile(), { at: new Date().toISOString(), from: "soushi", text, page: c.page, trip: c.trip })
 }
 
+// the latest page of the trip that changes the story, the one the Caretaker answers (C65); kept until a page is added
+let notableCache: { key: string; at?: { notablePage: string; notableAt: string } } | undefined
+async function notableOf(trip: string): Promise<{ notablePage?: string; notableAt?: string }> {
+  const dir = join(chron(), trip), files = readdirSync(dir).filter((f) => /^\d+\.json$/.test(f)).sort(), key = `${trip}:${files.length}:${files.at(-1)}`
+  if (notableCache?.key === key) return notableCache.at ?? {}
+  let prev: any, at: { notablePage: string; notableAt: string } | undefined
+  for (const f of files) {
+    const p = await Bun.file(join(dir, f)).json().catch(() => undefined)
+    if (!p) continue
+    if (isNotable(prev, p)) at = { notablePage: f.replace(/\.json$/, ""), notableAt: new Date(statSync(join(dir, f)).mtimeMs).toISOString() }
+    prev = p
+  }
+  notableCache = { key, at }
+  return at ?? {}
+}
+
 /** The thread of the current expedition, oldest first, and the party as its latest page left them. */
 export async function feed() {
   const c = current()
@@ -56,7 +73,7 @@ export async function feed() {
   try {
     const p = c.file ? await Bun.file(c.file).json() : null
     if (p) state = {
-      page: c.page, pageAt: new Date(statSync(c.file!).mtimeMs).toISOString(), dungeon: p.dungeon, torch: p.torch, food: p.supplies?.food ?? 0, torches: p.supplies?.torch ?? 0,
+      page: c.page, pageAt: new Date(statSync(c.file!).mtimeMs).toISOString(), ...(await notableOf(c.trip!)), dungeon: p.dungeon, torch: p.torch, food: p.supplies?.food ?? 0, torches: p.supplies?.torch ?? 0,
       rooms: p.tally?.ROOM_VISITED ?? 0, battles: p.tally?.BATTLE_COMPLETED ?? 0,
       heroes: (p.heroes ?? []).map((h: any) => ({ name: h.name, cls: h.cls, hp: Math.round(h.hp), maxHp: h.maxHp, stress: h.stress, affliction: h.affliction, virtue: h.virtue, deathsDoor: h.deathsDoor })),
       // a foe's full health is the .hp of its own monster file; pages keep no maximum, and a foe's id is reused across fights
@@ -117,7 +134,7 @@ const mine=d.lines.filter(l=>l.from==="caretaker").at(-1),asked=d.lines.filter(l
 const fresh=at=>at&&Date.now()-new Date(at)<180000&&(!mine||at>mine.at);
 const say=(a)=>"The Caretaker is "+a[Math.floor(Date.now()/4000)%a.length]+"…";
 const busy=asked&&fresh(asked.at)?say(["reading your message","thinking over what you wrote","looking through the ledgers for an answer","weighing his words"])
-:s&&fresh(s.pageAt)?say(s.foes?["watching the fight on page "+esc(s.page),"counting who struck whom","looking up the foes' blows","weighing the next turn"]:["reading page "+esc(s.page),"checking the packs","watching the light","tracing the map","noting it for the report"]):"";
+:s&&s.notableAt&&fresh(s.notableAt)?say(s.foes?["watching the fight on page "+esc(s.notablePage),"counting who struck whom","looking up the foes' blows","weighing the next turn"]:["reading page "+esc(s.notablePage),"checking the packs","watching the light","tracing the map","noting it for the report"]):"";
 B.hidden=!busy;B.textContent=busy;
 const key=JSON.stringify(d.lines);if(key===shown)return;shown=key;const T=document.getElementById("roadThread");
 T.innerHTML=d.lines.length?[...d.lines].reverse().map(l=>'<div class="msg '+l.from+'"><div class="who">'+(l.from==="soushi"?"You":"The Caretaker")+' · '+time(l.at)+(l.page?(l.gameAt?' · about page '+esc(l.page)+', the game was at '+esc(l.gameAt):' · page '+esc(l.page)):'')+'</div>'+esc(l.text)+'</div>').join(""):'<div class="empty">Nothing said yet on this road.</div>';para(T);
