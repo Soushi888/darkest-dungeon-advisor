@@ -22,6 +22,8 @@ export interface Snap {
   torch: number; inBattle: boolean; supplies: Record<string, number>
   tally: Record<string, number> // the game's own counts: ROOM_VISITED, BATTLE_COMPLETED, AMBUSHED, CURIO_INVESTIGATED, ...
   heroes: SnapHero[]
+  // the fight under way, as the game keeps it (raid.battle): the round, and the foes in rank order with their health and who last struck them
+  battle?: { round: number; foes: { name: string; hp: number; hitBy: string }[] }
 }
 
 // DSON keeps some floats as their raw bits
@@ -61,7 +63,17 @@ export async function snapshot(save: Save): Promise<Snap | undefined> {
       deathsDoor: !!h.visited_deaths_door, lastBlow: blow && /_[A-Z]$/.test(blow) ? await nameOf("monster", blow) : "",
     })
   }
+  const b = r.inbattle ? r.battle : undefined
+  const battle = b ? {
+    round: Number(b.round ?? 0),
+    foes: await Promise.all(Object.values<any>(b.enemies ?? {}).filter((e) => !e.is_hero).map(async (e) => ({
+      name: typeof e.data?.monster_class === "string" ? await nameOf("monster", e.data.monster_class) : "?",
+      hp: Math.max(0, Math.round(f32(e.data?.actor?.current_hp))),
+      hitBy: heroes.find((h) => h.guid === Number(e.data?.actor?.damage_source_data))?.name ?? "",
+    }))),
+  } : undefined
   return {
+    battle,
     at: new Date().toISOString(), dungeon: ri.dungeon, difficulty: Number(ri.difficulty ?? 0), length: Number(ri.length ?? 0), quest: String(ri.type ?? ""),
     key: `${ri.id}:${r.start_elapsed_time ?? ""}`, torch: Math.round(f32(r.torchlight)), inBattle: !!r.inbattle, supplies, tally, heroes,
   }

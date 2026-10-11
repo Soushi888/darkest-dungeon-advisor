@@ -41,7 +41,8 @@ setInterval(async () => {
         || (p.heroes ?? []).some((h: any) => { const w = prev.heroes?.find((x: any) => x.guid === h.guid); return !w || (h.affliction && !w.affliction) || (h.virtue && !w.virtue) || (h.deathsDoor && !w.deathsDoor) || (h.hp < h.maxHp * 0.3 && w.hp >= w.maxHp * 0.3) })
         || (prev.heroes ?? []).length !== (p.heroes ?? []).length
       last.set(f.split("/").slice(-2, -1)[0]!, p)
-      console.log(`${notable ? "CHRON" : "PAGE"} ${now()} #${f.match(/(\d+)\.json$/)![1]} light ${p.torch}, rooms ${tl.ROOM_VISITED ?? 0}, battles ${tl.BATTLE_COMPLETED ?? 0}, food ${p.supplies?.food ?? 0}, torches ${p.supplies?.torch ?? 0} | ${who}`)
+      const fight = p.battle ? ` || round ${p.battle.round}: ${p.battle.foes.map((x: any) => `${x.name} ${x.hp}hp${x.hitBy ? ` (hit by ${x.hitBy})` : ""}`).join(", ")}` : ""
+      console.log(`${notable ? "CHRON" : "PAGE"} ${now()} #${f.match(/(\d+)\.json$/)![1]} light ${p.torch}, rooms ${tl.ROOM_VISITED ?? 0}, battles ${tl.BATTLE_COMPLETED ?? 0}, food ${p.supplies?.food ?? 0}, torches ${p.supplies?.torch ?? 0} | ${who}${fight}`)
     } catch {}
   }
   if (mtime(clashes) !== clashSeen) {
