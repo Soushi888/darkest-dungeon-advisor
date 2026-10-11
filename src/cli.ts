@@ -10,6 +10,7 @@ import { readSave } from "./read.ts"
 import { town, type Town } from "./town.ts"
 import { boardOptions, loadPicks, mergePicks, picksFile } from "./reconcile.ts"
 import { ask, feed, roadPanel } from "./road.ts"
+import { keepDrafts } from "./drafts.ts"
 
 const args = process.argv.slice(2)
 const cmd = args[0] ?? "town"
@@ -71,7 +72,7 @@ if (cmd === "town") {
   // the served page reloads when the board changes, and can send its answers back to the Caretaker from a button in the
   // board's own navbar; once he has them,
   // the page forgets them, so an old pick or sticky is never sent twice (the week's picks live on in picks.json, C18)
-  const reload = `<button id="toCaretaker" class="btn" title="Send to the Caretaker (Ctrl+Shift+Enter)">Send to the Caretaker</button><script>(()=>{let v=null;setInterval(async()=>{try{const r=await fetch('/version');const n=await r.text();if(v!==null&&n!==v)location.reload();v=n}catch{}},2000);const b=document.getElementById('toCaretaker');const nav=document.querySelector('nav.bar'),cp=document.getElementById('copyAll');if(nav){b.classList.add('primary');nav.insertBefore(b,cp||null)}b.onclick=async()=>{b.textContent='Sent…';const r=await fetch('/answers',{method:'POST',body:window.brainstormAnswers()});if(r.ok){try{localStorage.removeItem((window.BRAINSTORM_KEY||'brainstorm')+':v1')}catch{}b.textContent='The Caretaker has your answers';location.reload()}else{b.textContent='Not received; send again'}};document.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)&&e.shiftKey&&!e.repeat){e.preventDefault();b.click()}})})()</script>`
+  const reload = `<button id="toCaretaker" class="btn" title="Send to the Caretaker (Ctrl+Shift+Enter)">Send to the Caretaker</button><script>(()=>{${keepDrafts}let v=null,due=false;setInterval(async()=>{try{const r=await fetch('/version');const n=await r.text();if(v!==null&&n!==v)due=true;v=n}catch{}if(due&&!window.ddWriting()){due=false;location.reload()}},2000);const b=document.getElementById('toCaretaker');const nav=document.querySelector('nav.bar'),cp=document.getElementById('copyAll');if(nav){b.classList.add('primary');nav.insertBefore(b,cp||null)}b.onclick=async()=>{b.textContent='Sent…';const r=await fetch('/answers',{method:'POST',body:window.brainstormAnswers()});if(r.ok){try{localStorage.removeItem((window.BRAINSTORM_KEY||'brainstorm')+':v1')}catch{}b.textContent='The Caretaker has your answers';location.reload()}else{b.textContent='Not received; send again'}};document.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)&&e.shiftKey&&!e.repeat){e.preventDefault();b.click()}})})()</script>`
   Bun.serve({
     port, hostname: "127.0.0.1",
     async fetch(req) {
