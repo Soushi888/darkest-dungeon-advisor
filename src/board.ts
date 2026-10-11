@@ -13,7 +13,7 @@ import { DIFFICULTY, LENGTH, type HeroView, type Town } from "./town.ts"
 import { buildSkin } from "./skin.ts"
 import { loadPicks, reconcile, type Check } from "./reconcile.ts"
 import { contradictions } from "./coherence.ts"
-import { beats, chronicleFor, judge, loadLedger, remember, untried, type Beat, type Lesson } from "./chronicle.ts"
+import { beats, chronicleFor, debrief, judge, loadLedger, remember, untried, type Beat, type Debrief, type Lesson } from "./chronicle.ts"
 import { heroClass } from "./game.ts"
 
 // DD_TOWN_OUT lets the tests build elsewhere, so they never touch the live board or its picks
@@ -22,6 +22,12 @@ const BOARD = process.env.NICEBOARD ?? join(homedir(), ".claude/skills/Niceboard
 const y = (s: string) => JSON.stringify(s) // a JSON string is a valid YAML scalar, quotes and colons included
 const HABIT = "(my habit)" // how a RULE number is labelled on the board, in his voice (A2)
 const coin = (n: number) => `${n.toLocaleString("en-US")} gold`
+// C46: stress drawn as a bar on the hero's own gauge, 0 to 200: resolve is tested at 100 and the heart gives out at 200
+// (the game's rule as the Darkest Dungeon wiki states it, darkestdungeon.wiki.gg/wiki/Stress; Soushi allowed the wiki 2026-10-11)
+const STRESS = { test: 100, max: 200 }
+const stressBars = (hs: { name: string; stress: number; affliction?: string }[]) => !hs.length ? [] : ["```board-tally",
+  ...hs.flatMap((h) => [`- n: ${h.stress}`, `  label: ${y(`${h.name}'s stress${h.affliction ? `, afflicted (${h.affliction})` : h.stress >= STRESS.test ? ", resolve tested" : ""}`)}`, `  pct: ${Math.min(100, Math.round((h.stress / STRESS.max) * 100))}`]), "```", ""]
+const GAUGE = `Each bar is the hero's stress on the gauge of ${STRESS.max}: at ${STRESS.test} their resolve is tested, at ${STRESS.max} the heart gives out.`
 
 function portrait(h: HeroView): string {
   const src = join(install, h.portrait)
@@ -98,7 +104,7 @@ export function weekSoFar(t: Town, start: WeekStart | undefined): string[] {
   return out
 }
 
-export interface Tale { snaps: number; beats: Beat[]; well: string[]; wrong: string[]; lessons: Lesson[] }
+export interface Tale { snaps: number; beats: Beat[]; well: string[]; wrong: string[]; lessons: Lesson[]; debrief?: Debrief }
 export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: Answers; own?: Party; checks?: Check[]; prices?: Map<string, number>; soFar?: string[]; tale?: Tale }): { board: string; sources: string } {
   const L: string[] = []
   const picked = (opts.answers.expedition && a.parties.find((p) => questLabel(p) === opts.answers.expedition)) || a.best
@@ -132,13 +138,33 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
       const told = tale.beats.map((x) => x.text)
       const turn = tale.beats.findIndex((x) => x.bad && x.kind !== "ambush" && x.kind !== "spike")
       const start = turn < 0 ? told : told.slice(0, turn), rest = turn < 0 ? [] : told.slice(turn)
-      L.push(`**What the survivors told me.** ${start.length ? `It began well: ${start.join(", ")}.` : "It went badly from the start."}${rest.length ? ` Then it turned: ${rest.join(", then ")}.` : " Nothing turned against them."}`, "")
+      // a long road is told step by step, the turn marked, so the story reads as it happened
+      if (told.length > 6) {
+        L.push(`**What the survivors told me.** ${start.length ? `It began well${rest.length ? `, then it turned at step ${start.length + 1}` : ""}.` : "It went badly from the start."}`, "")
+        told.forEach((x, k) => L.push(`${k + 1}. ${k === start.length && rest.length ? "**" : ""}${x[0]!.toUpperCase()}${x.slice(1)}.${k === start.length && rest.length ? "**" : ""}`))
+        L.push("")
+      } else L.push(`**What the survivors told me.** ${start.length ? `It began well: ${start.join(", ")}.` : "It went badly from the start."}${rest.length ? ` Then it turned: ${rest.join(", then ")}.` : " Nothing turned against them."}`, "")
       if (tale.well.length || tale.wrong.length) {
         L.push("```board-stickies")
         for (const w of tale.well) L.push(`- title: ${y(w)}`, "  kind: works")
         for (const w of tale.wrong) L.push(`- title: ${y(w)}`, "  kind: gotcha")
         L.push("```", "")
       }
+      // C45: what struck them, foe by foe, and what came home
+      const foes = tale.debrief?.foes.filter((f) => f.hp + f.blight + f.bleed > 0) ?? []
+      if (foes.length) {
+        L.push("**What struck them.** Every wound I could lay at a foe's feet, with the attacks that fit it among those your heroes have already suffered.", "")
+        L.push("| Foe | Wounds | Health taken | Criticals | Attacks that fit | Blight and bleed | Hardest on |", "|---|---|---|---|---|---|---|")
+        for (const f of foes) {
+          const atk = Object.entries(f.attacks).sort((x, y) => y[1] - x[1]).map(([k, n]) => `${k} (${n})`).join("; ") || "too few to tell"
+          const dot = [f.blight ? `${f.blight} by blight` : "", f.bleed ? `${f.bleed} by bleeding` : ""].filter(Boolean).join(", ") || "none"
+          const most = Object.entries(f.victims).sort((x, y) => y[1] - x[1])[0]
+          L.push(`| ${f.name} | ${f.blows} | ${f.hp} | ${f.crits || "none"} | ${atk} | ${dot} | ${most ? `${most[0]} (${most[1]})` : ""} |`)
+        }
+        L.push("")
+      }
+      const loot = Object.entries(tale.debrief?.loot ?? {})
+      if (loot.length) L.push(`**What came home.** ${loot.map(([k, n]) => `${n.toLocaleString("en-US")} ${k}`).join(", ")}.`, "")
       if (tale.lessons.length) L.push(`**What I will remember.** ${tale.lessons.map((l) => `In the ${b.dungeonName}: ${l.text}.`).join(" ")} I keep it for the next road there, at this level of danger or worse.`, "")
     } else L.push("Nobody kept the story of this road as it happened: I only know how it ended.", "")
     L.push("```board-stickies")
@@ -149,6 +175,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
       L.push(`- title: ${y(`${h.name} is home`)}`, `  kind: ${h.affliction || h.stress >= RULE.restAbove ? "gotcha" : "works"}`, `  body: ${y(`${h.clsName}, level ${h.level}: ${marks.join(", ")}.`)}`)
     }
     L.push("```", "")
+    L.push(GAUGE, "", ...stressBars(home))
     // the bridge: who the road has taken out of this week's plan, what was lost, and where that leaves the next coach
     const resting = home.filter((h) => h.affliction || h.stress >= RULE.restAbove || h.quirks.some((q) => q.disease)).map((h) => h.name)
     const lostHeal = fell.filter((h) => a.lostHealers.includes(h.name))
@@ -268,11 +295,13 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     }
     for (const n of chosen.notes) L.push(`- title: ${y("Mind this")}`, "  kind: risk", `  body: ${y(n)}`)
     L.push("```", "")
+    L.push(...stressBars(chosen.seats.map((x) => x.hero)))
   }
 
   // relief
   L.push("## Who rests, who prays {wide}", "")
-  L.push(`The ones the dark has worn down, where the Abbey and the Tavern can take them as the estate has built them up, and the places their own habits forbid them. My habit: anyone at ${RULE.restAbove} stress or more rests before going out again.`, "")
+  L.push(`The ones the dark has worn down, where the Abbey and the Tavern can take them as the estate has built them up, and the places their own habits forbid them. My habit: anyone at ${RULE.restAbove} stress or more rests before going out again. ${GAUGE}`, "")
+  L.push(...stressBars([...t.heroes].filter((h) => h.stress > 0).sort((x, y) => y.stress - x.stress)))
   const cards: string[] = []
   for (const r of a.relief) {
     if (!r.options.length) continue
@@ -448,6 +477,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
 
   // C14: every number on this page, with the save field or game file it was read from
   const rows: [string, string, string][] = []
+  rows.push([`${STRESS.test}`, "stress at which resolve is tested", "darkestdungeon.wiki.gg/wiki/Stress (Soushi allowed the wiki, 2026-10-11)"], [`${STRESS.max}`, "stress at which the heart gives out; the bars run to it", "darkestdungeon.wiki.gg/wiki/Stress"])
   for (const [k, v] of Object.entries(t.wallet)) rows.push([`${v}`, `${k} in the coffers`, "`persist.estate.json` wallet"])
   rows.push([`${t.rosterSize} / ${t.rosterCap}`, "roster and its cap", "`persist.roster.json` heroes; `stage_coach.building.json` roster_size_upgrades at your `stage_coach.rostersize` purchases"])
   rows.push([`${t.quests_won} / ${t.quests_done}`, "expeditions won", "`persist.progression.json` total_successful_quests_finished / total_quests_finished"])
@@ -503,7 +533,12 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
   let tale: Tale | undefined
   if (t.back) {
     const snaps = await chronicleFor(t.back), fellNames = t.back.heroes.filter((h) => h.died).map((h) => h.name)
-    const bs = beats(snaps, fellNames)
+    // C45: the whole debrief folded into the tale: traps, obstacles, criticals, curios and quirks take their place among the beats;
+    // a fall of light the obstacle caused, and a leap of stress the trap caused, are told once, by their cause
+    const db = snaps.length > 1 ? await debrief(snaps) : undefined
+    const extra = db?.beats ?? []
+    const bs = [...beats(snaps, fellNames).filter((x) => !(x.kind === "dark" && extra.some((e) => e.kind === "obstacle" && e.i === x.i))
+      && !(x.kind === "spike" && extra.some((e) => e.kind === "trap" && e.who === x.who && Math.abs(e.i - x.i) <= 1))), ...extra].sort((x, y) => x.i - y.i)
     const healer = (await Promise.all(t.back.heroes.map(async (bh) => {
       const h = [...t.heroes, ...t.fallen].find((x) => x.guid === bh.guid), sk = h ? (await heroClass(h.cls)).skills : undefined
       return !!h && h.skills.some((s) => sk?.get(s.id)?.targetsAllies && sk.get(s.id)!.healAvg >= RULE.realHeal)
@@ -511,7 +546,7 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
     const first = snaps[0]
     const j = judge(snaps, bs, { dungeon: t.back.dungeon, dungeonName: t.back.dungeonName, difficulty: first?.difficulty ?? 0, length: t.back.length, week: t.week - 1, success: t.back.success, healer })
     if (snaps.length > 1) await remember(j.lessons)
-    tale = { snaps: snaps.length, beats: bs, ...j }
+    tale = { snaps: snaps.length, beats: bs, ...j, debrief: db }
   }
   t.ledger = await loadLedger()
   const a = await advise(t)
@@ -590,6 +625,7 @@ export function farewellSource(t: Town, r: NonNullable<Town["raid"]>, opts: { pr
   const contrary = opts.checks.filter((c) => c.status === "contrary"), pending = opts.checks.filter((c) => c.status === "pending")
   if (opts.checks.length) L.push(`- title: ${y(`${opts.checks.filter((c) => c.status === "done").length} of ${opts.checks.length} of your other choices done before you left`)}`, `  kind: ${contrary.length ? "risk" : pending.length ? "model" : "works"}`, `  body: ${y([...contrary.map((c) => `Not as chosen: ${c.question} ${c.seen}.`), ...pending.map((c) => `Left undone: ${c.question} ${c.seen}.`)].join(" ") || "Everything you told me is done.")}`)
   L.push("```", "")
+  L.push(...stressBars([...who.values()]))
 
   // what they carry
   const habit = road(t, { quest: q } as Party, opts.prices)

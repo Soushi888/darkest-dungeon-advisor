@@ -11,7 +11,7 @@ import { town } from "../src/town.ts"
 import { profileDir, root } from "../src/paths.ts"
 import { boardOptions, mergePicks, parseAnswers, reconcile } from "../src/reconcile.ts"
 import { contradictions } from "../src/coherence.ts"
-import { beats, bearing, capture, chronicleDir, judge, remember, loadLedger, untried, CHRONICLE_RULE, type Snap } from "../src/chronicle.ts"
+import { beats, bearing, capture, chronicleDir, debrief, judge, remember, loadLedger, untried, CHRONICLE_RULE, type Snap } from "../src/chronicle.ts"
 import { ACTING_ORDER, road, source, weekSoFar } from "../src/board.ts"
 import { supplyPrices } from "../src/game.ts"
 import { advise, readiness, seatParty, skillWorth, RULE } from "../src/advise.ts"
@@ -205,6 +205,18 @@ describe.skipIf(!has)("on the local save", () => {
       rmSync(join(out, "answers-log.md"), { force: true })
     }
   }, 30_000)
+
+  test("C46: every hero's stress is drawn as a bar on the gauge of 200, in the rest section and beside the four", async () => {
+    const proc = Bun.spawnSync(["bun", "src/cli.ts", "town"], { cwd: root, env: { ...process.env, DD_PROFILE: copyProfile() } })
+    expect(proc.exitCode).toBe(0)
+    const md = await Bun.file(join(townOut, "town.md")).text()
+    const from = md.indexOf("## Who rests, who prays"), rest = md.slice(from, md.indexOf("\n## ", from + 5))
+    const bars = [...rest.matchAll(/- n: (\d+)\n {2}label: "([^"]+)'s stress[^"]*"\n {2}pct: (\d+)/g)]
+    const t = await town(await readSave(fake))
+    expect(bars.length).toBe(t.heroes.filter((h) => h.stress > 0).length)
+    for (const [, n, , pct] of bars) expect(Number(pct)).toBe(Math.min(100, Math.round((Number(n) / 200) * 100)))
+    expect(md).toContain("on the gauge of 200")
+  })
 
   test("C13: the board speaks in the Caretaker's voice: no save, file, field or tool is named on it", async () => {
     const dir = copyProfile()
@@ -622,5 +634,35 @@ describe.skipIf(!has)("on the local save", () => {
     expect(torch.count - plain.count).toBe(CHRONICLE_RULE.lessonTorches)
     expect(torch.why).toContain("Cove, week 13")
     rmSync(join(townOut, "lessons.json"), { force: true })
+  })
+})
+
+// C45 and C46 need no save: the debrief reads pages, and the gauge is a fixed rule
+describe("the road's debrief", () => {
+  const hero = (o: Partial<Snap["heroes"][number]>): Snap["heroes"][number] => ({ guid: 1, name: "Burci", cls: "bounty_hunter", hp: 20, maxHp: 25, stress: 10, affliction: "", virtue: "", deathsDoor: false, lastBlow: "", ...o })
+  const page = (o: Partial<Snap>): Snap => ({ at: "", dungeon: "weald", difficulty: 1, length: 1, quest: "cleanse", key: "debrief-test", torch: 80, inBattle: false, supplies: {}, tally: {}, heroes: [hero({})], ...o })
+
+  test("C45: blight ticking is laid at the foe that cast it, a loss outside a fight is no foe's blow, and the narrator's trap and critical are told", async () => {
+    const tick = await debrief([
+      page({ inBattle: true, heroes: [hero({ hp: 10, effects: ["blight 2 (3) from fungal_artillery_A"] })] }),
+      page({ inBattle: true, heroes: [hero({ hp: 8, lastBlow: "Fungal Artillery", blowCls: "fungal_artillery_A", effects: ["blight 2 (2) from fungal_artillery_A"] })] }),
+    ])
+    expect(tick.foes[0]).toMatchObject({ name: "Fungal Artillery", blight: 2, blows: 0 })
+
+    const outside = await debrief([page({ heroes: [hero({ hp: 20, lastBlow: "Maggot" })] }), page({ heroes: [hero({ hp: 15, lastBlow: "Maggot", blowCls: "maggot_A" })] })])
+    expect(outside.foes).toEqual([])
+
+    const trap = await debrief([page({ narrated: [] }), page({ narrated: ["trap"], heroes: [hero({ stress: 29 })] })])
+    expect(trap.beats.find((b) => b.kind === "trap")?.text).toContain("Burci")
+
+    const crit = await debrief([
+      page({ inBattle: true, narrated: [], known: ["groping_swipe"], heroes: [hero({ hp: 13 })], battle: { round: 1, foes: [{ name: "Fungal Scratcher", hp: 19, hitBy: "" }] } }),
+      page({ inBattle: true, narrated: ["crit_hero"], known: ["groping_swipe"], heroes: [hero({ hp: 5, lastBlow: "Fungal Scratcher", blowCls: "fungal_bloat_A" })], battle: { round: 1, foes: [{ name: "Fungal Scratcher", hp: 19, hitBy: "" }] } }),
+    ])
+    expect(crit.beats.find((b) => b.kind === "crit")?.text).toContain("critical blow on Burci for 8")
+    expect(crit.foes[0]).toMatchObject({ name: "Fungal Scratcher", crits: 1 })
+    // only a witnessed attack is named (C5): Rend the Marked was never suffered here
+    expect(Object.keys(crit.foes[0]!.attacks).join()).toContain("Groping Swipe")
+    expect(Object.keys(crit.foes[0]!.attacks).join()).not.toContain("Rend")
   })
 })

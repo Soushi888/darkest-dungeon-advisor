@@ -4,7 +4,7 @@
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs"
 import { join } from "node:path"
 import { outDir } from "./board.ts"
-import { nameOf, text } from "./game.ts"
+import { monster, nameOf, strings, text } from "./game.ts"
 import type { Save } from "./read.ts"
 
 // RULE: my own reading of a trip, not the game's numbers (ISA A2)
@@ -140,7 +140,7 @@ export async function chronicleFor(back: { dungeon: string; heroes: { guid: numb
   return []
 }
 
-export interface Beat { i: number; kind: "battle" | "ambush" | "curio" | "dark" | "hunger" | "spike" | "affliction" | "virtue" | "deathsdoor" | "fell"; who?: string; text: string; bad: boolean }
+export interface Beat { i: number; kind: "battle" | "ambush" | "curio" | "dark" | "hunger" | "spike" | "affliction" | "virtue" | "deathsdoor" | "fell" | "trap" | "obstacle" | "crit" | "quirk"; who?: string; text: string; bad: boolean }
 
 /** The trip in order, from one snapshot to the next (C40). */
 export function beats(snaps: Snap[], fell: string[] = []): Beat[] {
@@ -220,4 +220,120 @@ export function bearing(all: Lesson[], road: { dungeon: string; difficulty: numb
 export function untried(all: Lesson[], road: { difficulty: number }, done: { difficulty: number }[]): boolean {
   const seen = [...all.map((l) => l.difficulty), ...done.map((d) => d.difficulty)]
   return seen.length > 0 && road.difficulty > Math.max(...seen)
+}
+
+// ---------- C45: the debrief, everything the chronicle saw on the road ----------
+// what struck the four and with which attacks, the damage over time and who laid it, criticals, traps, obstacles cleared,
+// what each curio searched gave or took, the quirks caught, and what came home. Read from the pages and their whole
+// records; attacks are named only among those the party has witnessed (C5), from each foe's own damage ranges.
+
+const PROVISIONS = new Set(["food", "torch", "bandage", "antivenom", "shovel", "medicinal_herbs", "skeleton_key", "holy_water", "laudanum", "dog_treats"])
+export interface FoeRecord { name: string; blows: number; hp: number; crits: number; attacks: Record<string, number>; victims: Record<string, number>; blight: number; bleed: number }
+export interface Debrief { foes: FoeRecord[]; beats: Beat[]; loot: Record<string, number> }
+
+const word = (id: string) => (/^\d+$/.test(id) ? "journal page" : id.replace(/_/g, " "))
+const an = (w: string) => `${/^[aeiou]/i.test(w) ? "an" : "a"} ${w}`
+async function rawPage(s: Snap, i: number): Promise<any> { try { return await Bun.file(join(chronicleDir(s.key), `${String(i).padStart(4, "0")}.raw.json`)).json() } catch { return undefined } }
+const quirksOf = (r: any) => new Map<number, { name: string; q: string[] }>(Object.entries<any>(r?.heroes ?? {}).map(([g, h]) => { const d = h?.hero_file_data?.raw_data ?? h; return [Number(g), { name: d?.actor?.name ?? g, q: Object.keys(d?.quirks ?? {}) }] }))
+
+export async function debrief(snaps: Snap[]): Promise<Debrief> {
+  const str = await strings(), foes = new Map<string, FoeRecord>(), out: Beat[] = []
+  const foe = (n: string) => { if (!foes.has(n)) foes.set(n, { name: n, blows: 0, hp: 0, crits: 0, attacks: {}, victims: {}, blight: 0, bleed: 0 }); return foes.get(n)! }
+  const hit = (f: FoeRecord, who: string, n: number) => { f.victims[who] = (f.victims[who] ?? 0) + n }
+  const stale = new Map((snaps[0]?.heroes ?? []).map((h) => [h.guid, h.lastBlow]))
+  // health and stress each hero lost from one page to the next
+  const harmOf = (a: Snap, b: Snap) => b.heroes.flatMap((h) => { const w = a.heroes.find((x) => x.guid === h.guid); return w ? [{ name: h.name, blow: h.lastBlow, hp: Math.round(w.hp) - Math.round(h.hp), st: h.stress - w.stress }] : [] })
+  let before = quirksOf(await rawPage(snaps[0]!, 0))
+  for (let i = 1; i < snaps.length; i++) {
+    const a = snaps[i - 1]!, b = snaps[i]!, known = new Set(b.known ?? []), r = await rawPage(b, i)
+    const harm = harmOf(a, b), next = snaps[i + 1] ? harmOf(b, snaps[i + 1]!) : []
+    const said = a.narrated && b.narrated ? b.narrated.slice(a.narrated.length) : []
+    if (!a.narrated && b.narrated) placeEarlier(snaps, i, b.narrated, out)
+    // blows: a loss matching the damage over time carried is that tick, laid by whoever the effect names; any other loss is the last foe's blow
+    for (const h of b.heroes) {
+      const w = a.heroes.find((x) => x.guid === h.guid)
+      if (!w) continue
+      const loss = Math.round(w.hp) - Math.round(h.hp)
+      if (loss <= 0) continue
+      const stacks = (w.effects ?? []).map((x) => x.match(/^(blight|bleed|stat 4|stat 5) (\d+)(?:.*? from (\S+))?/)).filter((m): m is RegExpMatchArray => !!m)
+      const one = stacks.find((m) => Number(m[2]) === loss), sum = stacks.reduce((t, m) => t + Number(m[2]), 0)
+      const ticked = one ? [one] : stacks.length > 1 && sum === loss ? stacks : []
+      if (ticked.length) {
+        for (const m of ticked) { const f = foe(m[3] ? await nameOf("monster", m[3]) : "an unknown foe"); f[/blight|4/.test(m[1]!) ? "blight" : "bleed"] += Number(m[2]); hit(f, h.name, Number(m[2])) }
+        continue
+      }
+      // a blow lands only in a fight, from a foe that is in it; a loss outside one (a trap, a bare-handed obstacle, hunger) is no foe's
+      const inFight = [...(a.battle?.foes ?? []), ...(b.battle?.foes ?? [])].map((x) => x.name)
+      if (!h.lastBlow || !(a.inBattle || b.inBattle) || (inFight.length && !inFight.includes(h.lastBlow)) || (!h.blowCls && stale.get(h.guid) === h.lastBlow)) continue
+      const f = foe(h.lastBlow), m = h.blowCls ? await monster(h.blowCls) : undefined
+      // the same foe striking two of them on one page points to an attack that strikes several ranks
+      const struck = b.heroes.filter((x) => { const y = a.heroes.find((z) => z.guid === x.guid); return y && x.lastBlow === h.lastBlow && Math.round(y.hp) > Math.round(x.hp) }).length
+      f.blows++; f.hp += loss; hit(f, h.name, loss)
+      if (!m) continue
+      let fits = [...m.dmg].filter(([id]) => !b.known || known.has(id)).filter(([, [lo, hi]]) => loss >= lo && loss <= Math.ceil(hi * 1.5))
+      const wide = fits.filter(([id]) => m.multi.has(id) === struck > 1)
+      if (wide.length) fits = wide
+      if (fits.length) { const label = fits.map(([id]) => str.get(`str_monster_skill_${id}`) ?? word(id)).join(" or "); f.attacks[label] = (f.attacks[label] ?? 0) + 1 }
+      if (!b.narrated && fits.length && fits.every(([, [, hi]]) => loss > hi)) f.crits++
+    }
+    // what the narrator spoke over; it often speaks a save before the harm shows, so the harm is looked for on this page and the next
+    for (const e of said) {
+      const all = [...harm, ...next].filter((x) => x.hp > 0 || x.st > 0)
+      const worst = [...all].sort((x, y) => y.st + 3 * y.hp - (x.st + 3 * x.hp))[0]
+      const toll = (x: { hp: number; st: number }) => [x.hp > 0 ? `${x.hp} health` : "", x.st > 0 ? `${x.st} stress` : ""].filter(Boolean).join(" and ")
+      if (e === "trap") out.push({ i, kind: "trap", who: worst?.name, text: worst ? `a trap was sprung on ${worst.name}, costing ${toll(worst)}` : "a trap was sprung", bad: true })
+      else if (e === "obstacle_clear_no_item") {
+        const st = harm.reduce((t, x) => t + Math.max(0, x.st), 0)
+        out.push({ i, kind: "obstacle", text: `they cleared an obstacle with their bare hands, which cost the four ${st} stress between them and dropped the light from ${a.torch} to ${b.torch}`, bad: true })
+      } else if (e === "obstacle") out.push({ i, kind: "obstacle", text: "they cleared an obstacle", bad: false })
+      else if (e === "crit_hero") {
+        const v = [...harm, ...next].filter((x) => x.hp > 0).sort((x, y) => y.hp - x.hp)[0]
+        if (v?.blow) foe(v.blow).crits++
+        out.push({ i, kind: "crit", who: v?.name, text: v ? `${v.blow ? an(v.blow) : "a foe"} landed a critical blow on ${v.name} for ${v.hp}` : "a critical blow landed on one of them", bad: true })
+      } else if (e === "hunger_starve") out.push({ i, kind: "hunger", text: "they went hungry with nothing to eat", bad: true })
+    }
+    // each curio searched, with what it left: provisions or riches found, quirks caught or shed, health and stress
+    const quirks = quirksOf(r), changed: { who: string; text: string }[] = []
+    for (const [g, now] of quirks) {
+      const was = before.get(g)
+      if (!was) continue
+      for (const q of now.q.filter((x) => !was.q.includes(x))) changed.push({ who: now.name, text: `${now.name} took on ${await nameOf("quirk", q)}` })
+      for (const q of was.q.filter((x) => !now.q.includes(x))) changed.push({ who: now.name, text: `${now.name} was rid of ${await nameOf("quirk", q)}` })
+    }
+    if (r) before = quirks
+    const searched = (b.tally.CURIO_INVESTIGATED ?? 0) - (a.tally.CURIO_INVESTIGATED ?? 0)
+    if (searched > 0) {
+      const ids = Object.values<any>(r?.raid?.stat_database?.CURIO_INVESTIGATED?.entries ?? {}).slice(-searched).map((e) => Object.values<any>(e.parameters ?? {}).map((x) => x.data).filter((x) => typeof x === "string").pop()).filter(Boolean)
+      // what it gave shows on this page, or on the next when the loot is taken after
+      const gains = (x: Snap, y: Snap) => Object.entries(y.supplies).filter(([k, n]) => n > (x.supplies[k] ?? 0)).map(([k, n]) => `${n - (x.supplies[k] ?? 0)} ${word(k)}`)
+      const nb = snaps[i + 1], quiet = nb && ["BATTLE_COMPLETED", "CURIO_INVESTIGATED", "ROOM_VISITED"].every((k) => (nb.tally[k] ?? 0) === (b.tally[k] ?? 0))
+      const found = [...gains(a, b), ...(quiet ? gains(b, nb!) : [])]
+      const tolls = harm.filter((x) => x.hp > 0 || x.st > 0).map((x) => `${x.name} lost ${[x.hp > 0 ? `${x.hp} health` : "", x.st > 0 ? `${x.st} stress` : ""].filter(Boolean).join(" and ")}`)
+      const eased = harm.filter((x) => x.st < 0).map((x) => `${x.name} shed ${-x.st} stress`)
+      const what = [...found.length ? [`found ${found.join(", ")}`] : [], ...changed.map((c) => c.text), ...tolls, ...eased]
+      for (const id of ids) out.push({ i, kind: "curio", text: `they searched ${an(str.get(`str_curio_title_${id}`) ?? word(String(id)))}${what.length ? `: ${what.join("; ")}` : ", and nothing came of it"}`, bad: changed.some((c) => / took on /.test(c.text)) || tolls.length > 0 })
+    } else for (const c of changed) out.push({ i, kind: "quirk", who: c.who, text: c.text, bad: / took on /.test(c.text) })
+  }
+  // what came home: every riche and trophy gained over the road, provisions left aside
+  const first = snaps[0]?.supplies ?? {}, last = snaps.at(-1)?.supplies ?? {}
+  const loot = Object.fromEntries(Object.entries(last).filter(([k, n]) => !PROVISIONS.has(k) && n > (first[k] ?? 0)).map(([k, n]) => [word(k), n - (first[k] ?? 0)]))
+  return { foes: [...foes.values()].sort((x, y) => y.hp + y.blight + y.bleed - (x.hp + x.blight + x.bleed)), beats: out, loot }
+}
+
+// the narrator's log was first kept part way through a road: the traps and bare-handed obstacles it already held are placed
+// on the page that bears their mark, outside a fight: an obstacle drops the light by a fifth or more and stresses three or more;
+// a trap stresses or wounds one hero alone, with nothing searched
+function placeEarlier(snaps: Snap[], upto: number, log: string[], out: Beat[]) {
+  const used = new Set<number>()
+  const pick = (test: (a: Snap, b: Snap) => boolean) => { for (let j = upto - 1; j >= 1; j--) if (!used.has(j) && !snaps[j]!.inBattle && !snaps[j - 1]!.inBattle && test(snaps[j - 1]!, snaps[j]!)) { used.add(j); return j } return -1 }
+  const deltas = (a: Snap, b: Snap) => b.heroes.flatMap((h) => { const w = a.heroes.find((x) => x.guid === h.guid); return w ? [{ name: h.name, hp: Math.round(w.hp) - Math.round(h.hp), st: h.stress - w.stress }] : [] })
+  for (const e of [...log].reverse()) {
+    if (e === "obstacle_clear_no_item") {
+      const j = pick((a, b) => a.torch - b.torch >= 15 && deltas(a, b).filter((x) => x.st > 0).length >= 3)
+      if (j > 0) { const a = snaps[j - 1]!, b = snaps[j]!, st = deltas(a, b).reduce((t, x) => t + Math.max(0, x.st), 0); out.push({ i: j, kind: "obstacle", text: `they cleared an obstacle with their bare hands, which cost the four ${st} stress between them and dropped the light from ${a.torch} to ${b.torch}`, bad: true }) }
+    } else if (e === "trap") {
+      const j = pick((a, b) => (b.tally.CURIO_INVESTIGATED ?? 0) === (a.tally.CURIO_INVESTIGATED ?? 0) && deltas(a, b).filter((x) => x.st >= 10 || x.hp > 0).length === 1)
+      if (j > 0) { const v = deltas(snaps[j - 1]!, snaps[j]!).find((x) => x.st >= 10 || x.hp > 0)!; out.push({ i: j, kind: "trap", who: v.name, text: `a trap was sprung on ${v.name}, costing ${[v.hp > 0 ? `${v.hp} health` : "", v.st > 0 ? `${v.st} stress` : ""].filter(Boolean).join(" and ")}`, bad: true }) }
+    }
+  }
 }

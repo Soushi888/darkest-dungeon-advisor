@@ -168,7 +168,7 @@ export async function trinkets(): Promise<Map<string, Trinket>> {
 }
 
 // ---------- monsters ----------
-export interface Monster { id: string; base: string; type: string; skills: string[]; effects: Map<string, string[]>; dmg: Map<string, [number, number]>; bleedResist: number; blightResist: number }
+export interface Monster { id: string; base: string; type: string; skills: string[]; effects: Map<string, string[]>; dmg: Map<string, [number, number]>; multi: Set<string>; bleedResist: number; blightResist: number }
 const monsterCache = new Map<string, Monster>()
 export async function monster(variant: string): Promise<Monster | undefined> {
   if (monsterCache.has(variant)) return monsterCache.get(variant)
@@ -185,6 +185,8 @@ export async function monster(variant: string): Promise<Monster | undefined> {
     effects: new Map([...info.matchAll(/^skill: \.id "([^"]+)"([^\n]*)/gm)].map((x) => [x[1]!, [...(x[2]!.match(/\.effect((?: "[^"]+")+)/)?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((e) => e[1]!)])),
     // each skill's damage range, for telling which attack dealt a blow
     dmg: new Map([...info.matchAll(/^skill: \.id "([^"]+)"[^\n]*?\.dmg (\d+) (\d+)/gm)].map((x) => [x[1]!, [Number(x[2]), Number(x[3])] as [number, number]])),
+    // skills that strike several ranks at once (a target written with ~)
+    multi: new Set([...info.matchAll(/^skill: \.id "([^"]+)"[^\n]*?\.target ~/gm)].map((x) => x[1]!)),
   }
   monsterCache.set(variant, m)
   return m
