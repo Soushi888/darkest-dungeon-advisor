@@ -106,6 +106,7 @@ export interface Skill {
   // the enemy ranks it strikes (none for a skill on allies or on oneself), how far it moves its user back and forward,
   // and, from its effect lines, whether it marks a foe, hits a marked foe harder, bleeds or blights (C32 to C36)
   target: number[]; move: [number, number]; marks: boolean; onMarked: boolean; bleed: boolean; blight: boolean
+  stressHeal?: boolean // relieves an ally's stress (an effect line with .healstress), for the roster's roles (C85)
 }
 export interface HeroClass { id: string; skills: Map<string, Skill>; tags: string[]; hp: number }
 const classCache = new Map<string, HeroClass>()
@@ -140,6 +141,7 @@ export async function heroClass(id: string): Promise<HeroClass> {
       marks: fx.some((f) => /\.tag 1\b/.test(f) && /\.target "target"/.test(f)),
       onMarked: fx.some((f) => /\.keyStatus "tagged"/.test(f) && /\.target "performer"/.test(f)),
       bleed: fx.some((f) => /\.dotBleed \d/.test(f)), blight: fx.some((f) => /\.dotPoison \d/.test(f)),
+      stressHeal: target.startsWith("@") && fx.some((f) => /\.healstress \d/.test(f)),
       id: sid, launch, targetsAllies: target.startsWith("@"), heal: /\.heal \d/.test(line),
       // the hit points a heal restores at its first level, the mean of the file's .heal range (C30)
       healAvg: ((m) => (m ? (Number(m[1]) + Number(m[2])) / 2 : 0))(line.match(/\.heal (\d+) (\d+)/)),

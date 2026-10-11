@@ -1,6 +1,7 @@
 // The Caretaker's reading of a Town: who rests where, which expedition, which party, who stays, what to buy.
 // Figures come from the Town (save + game files). Thresholds marked RULE are the Caretaker's own judgement,
 // stated as such on the board, never presented as the game's numbers (ISA A2).
+import { alikePairs, gaps, rolesOf, type Alike, type Member, type Role } from "./roles.ts"
 import { heroClass, heroTrees, nameOf, quirks, supplyPrices, type Skill } from "./game.ts"
 import { bearing, CHRONICLE_RULE, untried } from "./chronicle.ts"
 import type { Activity, HeroView, Quest, QuirkView, Town, Upgrade } from "./town.ts"
@@ -87,6 +88,8 @@ export interface Advice {
   relief: Relief[]; disease: HeroView[]; afflicted: HeroView[]
   ready: HeroView[]; parties: Party[]; best?: Party
   dismiss: { hero: HeroView; why: string }[]; recruits: Recruit[]
+  // C85: pairs too alike to keep both, what the roster would then lack, and the coach's recruit who brings it
+  alike: (Alike & { gap: Role[]; recruit?: { hero: HeroView; brings: Role[] } })[]
   buys: Upgrade[]; blocked: Upgrade[]; heirlooms: Upgrade[]
   // the Stage Coach's next upgrade in each tree, bought or not yet affordable, and whether the roster is young by my habit
   coach: Upgrade[]; young: { low: number; of: number } | undefined
@@ -296,6 +299,22 @@ export async function advise(t: Town): Promise<Advice> {
     })
   }
 
+  // C85: the roster's balance, from the skills each hero carries (and each recruit brings)
+  const member = async (h: HeroView): Promise<Member> => {
+    const sk = (await heroClass(h.cls)).skills
+    return { guid: h.guid, name: h.name, cls: h.cls, clsName: h.clsName, level: h.level, bad: negatives(h).length, stress: h.stress, roles: rolesOf(h.skills.map((x) => sk.get(x.id)).filter((k): k is Skill => !!k), RULE.realHeal) }
+  }
+  const roster = await Promise.all(t.heroes.map(member)), newcomers = await Promise.all(t.recruits.map(member))
+  const taken = new Set<number>()
+  const alike = alikePairs(roster, inParty).map((p) => {
+    const gap = gaps(roster, new Set([p.drop.guid])), classes = new Set(roster.filter((m) => m.guid !== p.drop.guid).map((m) => m.cls))
+    // the recruit who brings most of what is missing, or a class the roster has none of; lower level is no bar (Soushi, 07:15)
+    const r = newcomers.filter((c) => !taken.has(c.guid)).map((c) => ({ c, brings: c.roles.filter((x) => gap.includes(x)), fresh: !classes.has(c.cls) }))
+      .filter((x) => x.brings.length || x.fresh).sort((x, y) => y.brings.length - x.brings.length || Number(y.fresh) - Number(x.fresh))[0]
+    if (r) taken.add(r.c.guid)
+    return { ...p, gap, ...(r ? { recruit: { hero: t.recruits.find((h) => h.guid === r.c.guid)!, brings: r.brings } } : {}) }
+  })
+
   // what to buy for the party first: affordable, unblocked, cheapest first
   const partyNames = new Set(best?.seats.map((s) => s.hero.name))
   const forParty = t.heroUpgrades.filter((u) => partyNames.has(u.hero ?? ""))
@@ -371,7 +390,7 @@ export async function advise(t: Town): Promise<Advice> {
     const top = (h.learned ?? h.skills).map((s) => ({ name: h.name, skill: s.name, avg: sk.get(s.id)?.targetsAllies ? sk.get(s.id)!.healAvg : 0 })).sort((x, y) => y.avg - x.avg)[0]
     if (top && top.avg >= RULE.realHeal) healers.push(top)
   }
-  return { relief, disease, afflicted, ready, parties, best, dismiss, recruits, buys, blocked, heirlooms, coach, young, trinkets, treat, healers, lostHealers, spend: t.wallet.gold ?? 0 }
+  return { relief, disease, afflicted, ready, parties, best, dismiss, recruits, alike, buys, blocked, heirlooms, coach, young, trinkets, treat, healers, lostHealers, spend: t.wallet.gold ?? 0 }
 }
 
 /** Seats a party Soushi named, front to back, and says what is wrong with it rather than refusing it. */

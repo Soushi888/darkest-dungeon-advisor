@@ -3,6 +3,7 @@
 // The board speaks only as the Caretaker, in the Hamlet's own words (C13): no file, field or save is named on it.
 // Where each figure comes from goes to sources.md beside it (C14).
 import { campTell, campWorth } from "./camp.ts"
+import { ROLE_WORDS } from "./roles.ts"
 import { asPack, packRules, slotsOf, trims, type PackRules } from "./pack.ts"
 import { upkeep, upkeepWords, type UpItem } from "./upkeep.ts"
 import { checkTale } from "./talecheck.ts"
@@ -302,7 +303,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     L.push(`  lean: ${Math.max(0, leanIdx)}`, `  lean_why: ${y(`the four I would send fit it best: ${chosen ? chosen.seats.flatMap((s) => s.notes).join(", ") || "ranks and skills line up" : ""}${chosen?.left !== undefined ? `; it leaves ${coin(Math.max(0, chosen.left))} in the coffers after the road` : ""}${longer ? "; with so many of them untried, I keep them to shorter roads" : ""} (my habits).`)}`)
     if (chosen) {
       L.push(`- q: ${y(`Take this party to the ${chosen.quest.dungeonName}?`)}`)
-      L.push(`  context: ${y(`${opts.own ? "The four you named, seated as you gave them. " : ""}Front to back: ${chosen.seats.map((s) => `${s.rank}. ${s.hero.name} (${s.hero.clsName}, ${s.hero.stress} stress)`).join("; ")}. ${chosen.healer ? `A healer is in it: ${chosen.heal!.by}'s ${chosen.heal!.skill}, about ${chosen.heal!.avg} hit points a cast.` : chosen.heal ? `No true healer: only ${chosen.heal.by}'s ${chosen.heal.skill}, about ${chosen.heal.avg} hit points a cast.` : "No healer in it."} ${chosen.stunner ? "So is a stun." : "No stun."}${chosen.reach ? ` From these seats they can strike ${chosen.reach.length === 4 ? "every rank of the enemy line" : `enemy rank${chosen.reach.length === 1 ? "" : "s"} ${chosen.reach.join(", ")}, and none of them the ${[1, 2, 3, 4].filter((e) => !chosen.reach!.includes(e)).join(" or ")}`}.` : ""}${chosen.pair ? ` ${chosen.pair.marker === chosen.pair.striker ? `${chosen.pair.marker} marks a foe with ${chosen.pair.mark} and strikes the marked harder with ${chosen.pair.strike}.` : `${chosen.pair.marker} marks a foe with ${chosen.pair.mark}, and ${chosen.pair.striker}'s ${chosen.pair.strike} strikes the marked harder.`}` : ""}`)}`, "  options:")
+      L.push(`  context: ${y(`${opts.own ? "The four you named, seated as you gave them. " : ""}Front to back: ${chosen.seats.map((s) => `${s.rank}. ${s.hero.name} (${s.hero.clsName}, ${s.hero.stress} stress)`).join("; ")}. ${chosen.healer ? `A healer is in it: ${chosen.heal!.by}'s ${chosen.heal!.skill}, about ${chosen.heal!.avg} hit points a cast.` : chosen.heal ? `No true healer: only ${chosen.heal.by}'s ${chosen.heal.skill}, about ${chosen.heal.avg} hit points a cast.` : "No healer in it."} ${chosen.stunner ? "So is a stun." : "No stun."}${chosen.reach ? ` From these seats they can strike ${chosen.reach.length === 4 ? "every rank of the enemy line" : `enemy rank${chosen.reach.length === 1 ? "" : "s"} ${chosen.reach.join(", ")}, and none of them the ${[1, 2, 3, 4].filter((e) => !chosen.reach!.includes(e)).join(" or ")}`}.` : ""}${chosen.pair ? ` ${chosen.pair.marker === chosen.pair.striker ? `${chosen.pair.marker} marks a foe with ${chosen.pair.mark} and strikes the marked harder with ${chosen.pair.strike}.` : `${chosen.pair.marker} marks a foe with ${chosen.pair.mark}, and ${chosen.pair.striker}'s ${chosen.pair.strike} strikes the marked harder.`}` : ""}${mixWords(chosen, t)}`)}`, "  options:")
       L.push(`    - pick: "Yes, this four"`, `      effect: ${y("Embark with them in this order; each one's equipped skills reach from their rank.")}`)
       L.push(`    - pick: "No, I choose my own"`, `      effect: ${y("Write your four in the note below, front to back, and send them to me; I will look them over before the coach leaves.")}`)
       L.push(`  lean: 0`, `  lean_why: ${y("of those fit to go, they stand best where I would place them, by my reckoning of what each can do from there.")}`)
@@ -570,6 +571,30 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     rcards.push(`  lean: ${take ? 0 : 1}`, `  lean_why: ${y(`${why}.`)}`)
   }
   if (rcards.length) L.push("```board-decisions", ...rcards, "```", "")
+  // C85: pairs too alike to keep both, and the coach's recruit who would round the roster out (Soushi, 07:15)
+  if (a.alike.length) {
+    const roleWords = (rs: string[]) => rs.map((r) => ROLE_WORDS[r as keyof typeof ROLE_WORDS]).join(", ")
+    L.push("**Too alike (my habit).** Two heroes who do the same work in a fight leave a gap elsewhere. Where the coach brings someone the roster lacks, I would let the weaker of a pair go for them, even at a lower level.", "")
+    const an = (w: string) => `${/^[AEIOU]/i.test(w) ? "an" : "a"} ${w}`
+    const said = (p: (typeof a.alike)[number]) => `${p.keep.name} and ${p.drop.name} are too alike: ${p.shared}. ${p.why}, so ${p.keep.name} is the one I keep.`
+    const swap = a.alike.filter((p) => p.recruit), wait = a.alike.filter((p) => !p.recruit)
+    if (swap.length) {
+      L.push("```board-decisions")
+      for (const p of swap) {
+        const r = p.recruit!
+        L.push(`- q: ${y(`Let ${p.drop.name} go for ${r.hero.name}?`)}`, `  context: ${y(`${said(p)} ${r.hero.name}, level ${r.hero.level}, ${r.brings.length ? `brings what the roster is short of: ${roleWords(r.brings)}` : `is ${an(r.hero.clsName)}, and the roster has none`}.`)}`, "  options:",
+          `    - pick: ${y(`Dismiss ${p.drop.name}, recruit ${r.hero.name}`)}`, `      effect: ${y(`${p.drop.name} leaves the roster and ${r.hero.name} takes the place.`)}`,
+          `    - pick: "Keep both"`, `      effect: ${y(`${p.drop.name} stays; the roster keeps two who do the same work.`)}`,
+          "  lean: 0", `  lean_why: ${y(`my habit: a roster that does more kinds of work goes further than two of the same, and ${p.drop.name} is the weaker of the pair.`)}`)
+      }
+      L.push("```", "")
+    }
+    if (wait.length) {
+      L.push("```board-stickies")
+      for (const p of wait) L.push(`- title: ${y(`Too alike: ${p.keep.name} and ${p.drop.name}`)}`, "  kind: model", `  body: ${y(`${said(p)} The coach brings nobody this week who does what the roster lacks, so I would keep both until one does.`)}`)
+      L.push("```", "")
+    }
+  }
 
   // heirlooms and trinkets
   if (a.heirlooms.length || a.trinkets.length) {
@@ -803,6 +828,17 @@ export function estateIcons(html: string): string {
   html = html.replace(/<div class="big">([\d,]+)<\/div><div class="of">(gold|crests|busts|portraits|deeds)<\/div>/g, (m, n: string, w: string) => icon.has(w) ? `<div class="big">${img(w)}${n}</div><div class="of">${w}</div>` : m)
   const css = `<style>.purse{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem 1.3rem}.purse .coin{display:inline-flex;align-items:center;gap:.35rem;font-size:1.15rem}.purse img.coin,.tally img.coin{height:1.8rem;width:auto;vertical-align:middle;image-rendering:auto}.tally img.coin{height:1.5rem;margin-right:.35rem}</style>`
   return html.replace("</head>", `${css}</head>`)
+}
+
+/** The four's experience (C85, my habit): a seasoned hero beside newcomers steadies them, so a party of newcomers is told who
+ *  of the roster could go with them (Soushi, 07:15: "putting newbies with more experienced, or a veteran in a less experienced
+ *  group to help leveling"). */
+function mixWords(p: Party, t: Town): string {
+  const lv = p.seats.map((s) => s.hero.level), top = Math.max(...lv)
+  const vet = p.seats.find((s) => s.hero.level === top)!.hero, green = p.seats.filter((s) => s.hero.level <= 1 && s.hero.guid !== vet.guid).map((s) => s.hero.name)
+  if (top >= 2 && green.length) return ` A seasoned hero goes with newcomers (my habit): ${vet.name}, level ${vet.level}, beside ${green.join(", ")}.`
+  const seasoned = t.heroes.filter((h) => h.level >= 2 && !p.seats.some((s) => s.hero.guid === h.guid)).sort((a, b) => b.level - a.level)[0]
+  return top <= 1 && seasoned ? ` All four are newcomers; my habit is to send a seasoned hero with them, such as ${seasoned.name}, ${seasoned.clsName}, level ${seasoned.level}.` : ""
 }
 
 // the estate's tally for the header, filled while the board is written (C84)
