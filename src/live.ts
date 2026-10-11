@@ -62,7 +62,9 @@ setInterval(async () => {
           const w = (prev.heroes ?? []).find((x: any) => x.guid === h.guid)
           if (!w) continue
           const dh = Math.round(h.hp) - Math.round(w.hp), ds = h.stress - w.stress
-          if (dh || ds) delta.push(`${h.name}${dh ? ` ${dh > 0 ? "+" : ""}${dh}hp` : ""}${ds ? ` ${ds > 0 ? "+" : ""}${ds}st` : ""}`)
+          // the game keeps the last foe that struck each hero; named on the page where the hero lost health
+          const by = dh < 0 && h.lastBlow ? ` (hit by ${h.lastBlow})` : ""
+          if (dh || ds) delta.push(`${h.name}${dh ? ` ${dh > 0 ? "+" : ""}${dh}hp` : ""}${ds ? ` ${ds > 0 ? "+" : ""}${ds}st` : ""}${by}`)
         }
         for (const k of new Set([...Object.keys(prev.supplies ?? {}), ...Object.keys(p.supplies ?? {})])) {
           const d = (p.supplies?.[k] ?? 0) - (prev.supplies?.[k] ?? 0)
