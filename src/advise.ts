@@ -38,6 +38,7 @@ export const RULE = {
   goldPerPoint: 500, // RULE: every 500 gold the road leaves in the coffers counts for one point, up to goldCap
   goldCap: 4,
   brokeRoad: 20, // RULE: a road the coffers cannot provision counts this much against itself
+  packFree: 4, // RULE: the pack slots I want left free for what they find (C79)
   turnBackBroken: 2, // RULE: when this many of the four have broken, I bring them home
   // how I weigh a party's fighting shape (Soushi, 2026-10-10: "take into account heroes' positions and their abilities")
   reachPerRank: 1, // RULE: each enemy rank the four can strike from their seats (C32)

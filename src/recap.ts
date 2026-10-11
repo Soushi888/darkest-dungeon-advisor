@@ -5,6 +5,7 @@ import { copyFileSync, existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import type { Snap } from "./chronicle.ts"
 import { whereLine } from "./map.ts"
+import { packRules, slotsOf } from "./pack.ts"
 import { install } from "./paths.ts"
 import { journalPage, pageTitle, plain } from "./words.ts"
 
@@ -13,7 +14,7 @@ export interface Recap {
   tally: { rooms: number; battles: number; lost: number }
   where: string
   four: { rank: number; name: string; hp: number; maxHp: number; stress: number; tags: string[] }[]
-  packs: { light: number; items: { key: string; label: string; n: number; icon?: string; kind: "provision" | "loot" | "page" }[] }
+  packs: { light: number; items: { key: string; label: string; n: number; icon?: string; kind: "provision" | "loot" | "page" }[]; slots?: { used: number; of: number } }
   since?: string; advice: string
 }
 
@@ -42,7 +43,7 @@ const order = (x: { key: string; kind: string }) => (x.kind === "page" ? 4 : x.k
 
 /** The recap of one page: the tally of the road, where they stand, the four, the packs, and the Caretaker's own words. */
 export async function buildRecap(p: Snap, raw: any, page: string, savedAt: number, words: { advice: string; since?: string }, out: string): Promise<Recap> {
-  const start = Number(raw?.raid?.party?.start_heroes_size ?? p.heroes.length)
+  const start = Number(raw?.raid?.party?.start_heroes_size ?? p.heroes.length), pk = await packRules()
   // a journal page goes by the game's title for it and is a page of the story, not loot (pm, 2026-10-11)
   const items = (await Promise.all(Object.entries(p.supplies).filter(([, n]) => n > 0).map(async ([key, n]) => {
     const jp = journalPage(key)
@@ -55,7 +56,7 @@ export async function buildRecap(p: Snap, raw: any, page: string, savedAt: numbe
     where: whereLine(p.map),
     four: p.heroes.map((h, i) => ({ rank: i + 1, name: h.name, hp: Math.round(h.hp), maxHp: h.maxHp, stress: h.stress,
       tags: [h.affliction, h.virtue, h.deathsDoor ? "Death's Door" : "", h.stunned ? "stunned" : ""].filter(Boolean) as string[] })),
-    packs: { light: p.torch, items },
+    packs: { light: p.torch, items, ...(pk.slots ? { slots: { used: slotsOf(p.supplies, pk), of: pk.slots } } : {}) },
     ...(words.since ? { since: words.since } : {}), advice: words.advice,
   }
 }
