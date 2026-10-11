@@ -2,6 +2,7 @@
 // compiled page. One fixed file name, so the picks a reader makes survive every rebuild of the board.
 // The board speaks only as the Caretaker, in the Hamlet's own words (C13): no file, field or save is named on it.
 // Where each figure comes from goes to sources.md beside it (C14).
+import { campTell } from "./camp.ts"
 import { checkTale } from "./talecheck.ts"
 import { copyFileSync, existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
@@ -464,30 +465,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   if (opts.camp && chosen) {
     const camp = opts.camp, off = t.campDiscount, q = chosen.quest
     const reach = (sel: string) => (sel === "party_other" ? 3 : sel === "party" ? 4 : 1)
-    const who = (sel: string) => ({ self: "the one who uses it", individual: "one hero", party_other: "each companion", party: "the whole party" })[sel] ?? sel.replace(/_/g, " ")
-    const says = (e: { type: string; selection: string; amount: number; sub: string }) => ({
-      stress_heal_amount: `relieves ${e.amount} stress for ${who(e.selection)}`, stress_damage_amount: `adds ${e.amount} stress to ${who(e.selection)}`,
-      health_heal_max_health_percent: `heals ${Math.round(e.amount * 100)}% of health for ${who(e.selection)}`, health_damage_max_health_percent: `costs ${who(e.selection)} ${Math.round(e.amount * 100)}% of health`,
-      remove_bleeding: `stops bleeding on ${who(e.selection)}`, remove_poison: `clears blight on ${who(e.selection)}`, remove_disease: `cures a disease of ${who(e.selection)}`,
-      remove_deaths_door_recovery_buffs: `lifts the weakness left by Death's Door from ${who(e.selection)}`, reduce_ambush_chance: "guards the camp against a night ambush",
-      loot: "turns up some loot", reduce_torch: "dims the torch", buff: `${boon(e)} for ${who(e.selection)} until the next fight`,
-    } as Record<string, string>)[e.type] ?? e.type.replace(/_/g, " ")
-    // a boon named from its own id: campingDMGLowBuff is damage, campingStressResistBuff stress resistance
-    function boon(e: { sub: string; amount: number }) {
-      const w = e.sub.replace(/^camping/, "").replace(/Buff$/, "").replace(/(Low|High)$/, "").replace(/DMG/g, "Damage").replace(/Resist$/, "Resistance").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()
-      const n = Math.abs(e.amount)
-      return `${n < 2 ? `${Math.round(n * 100)}%` : n} ${w || "boon"}`.trim()
-    }
-    // the same effect told once: a boon split in two halves (low and high damage), or a cost that differs by who takes it
-    // and one effect whose amount depends on who takes it (religious or not, say) told as "10 or 20"
-    const tell = (k: CampSkill) => {
-      const groups = new Map<string, number[]>()
-      for (const e of k.effects) if (/^stress_(heal|damage)_amount$/.test(e.type)) groups.set(`${e.type}|${e.selection}`, [...(groups.get(`${e.type}|${e.selection}`) ?? []), e.amount])
-      return [...new Set(k.effects.map((e) => {
-        const g = groups.get(`${e.type}|${e.selection}`)
-        return g && new Set(g).size > 1 ? says(e).replace(/\d+/, `${[...new Set(g)].join(" or ")}`) + ", by who they are" : says(e)
-      }))].join("; ")
-    }
+    const tell = campTell
     const worth = (k: CampSkill) => k.effects.reduce((v, e) => v + (e.type === "stress_heal_amount" ? e.amount * reach(e.selection) * RULE.campStress
       : e.type === "stress_damage_amount" ? -e.amount * reach(e.selection) * RULE.campStress / 2 : e.type === "health_heal_max_health_percent" ? e.amount * RULE.campHealth * reach(e.selection)
       : /^remove_/.test(e.type) ? RULE.campCure : e.type === "reduce_ambush_chance" ? RULE.campGuard : e.type === "buff" ? RULE.campBoon : 0), 0)

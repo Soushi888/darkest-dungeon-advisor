@@ -5,9 +5,10 @@
 // PAI Inference tool, then posts the answer through say(). A call that fails or times out posts nothing and prints a WARN.
 // It never imports a model SDK and never spawns claude; it only writes the road thread (ISA A1).
 import { homedir } from "node:os"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
 import { appendFileSync, statSync } from "node:fs"
 import { nowText } from "./now.ts"
+import { campBrief, camping } from "./camp.ts"
 import { current, feed, say, sayRecap } from "./road.ts"
 import type { Snap } from "./chronicle.ts"
 import { outDir } from "./board.ts"
@@ -32,14 +33,19 @@ export const SYSTEM = [
 // what a page in a fight asks of him: short, and the fight alone
 export const FIGHT = "This page is in a fight. Comment the fight alone, in one or two short paragraphs: which foe threatens whom, which foe to strike first and why, and who needs healing. Nothing about the packs, the map or the road ahead."
 
+// C74: the campfire council, his one visit on a road in camp mode (#8; Soushi, 06:09: "Only at the camp ... for bilan of the
+// situation and advices")
+export const COUNCIL = "Your four have made camp, and you have come out from the Hamlet to their fire for one council; you will not speak again on this road unless the Heir asks. Speak as one who has walked out to them, conversational and clear, to the Heir. Cover, in this order and in short paragraphs: the road so far, from every page since they left (what they fought, found and lost, each with its cause); how each of the four stands now (health, stress, any affliction, disease or quirk the road gave them); the packs; how far the quest has come; what lies ahead, only as far as the page names it; and what to do at this fire: which camping skill on whom, and why, from the skills they took to camp, spending the camp points well. The card beside your words carries the numbers, so name only those that carry your advice."
+
 /** The prompt for one page or one question: the page whole, then the last lines of the thread, then what to answer. */
-export async function promptFor(kind: "page" | "ask", snapshot: string, ask = "", since: string[] = []): Promise<string> {
+export async function promptFor(kind: "page" | "ask" | "camp", snapshot: string, ask = "", since: string[] = []): Promise<string> {
   const thread = (await feed()).lines.slice(-10).map((l) => `${l.from === "soushi" ? "The Heir" : "The Caretaker"}: ${l.text}`).join("\n")
   const ways = await readWays()
   // C73: every page told since his last word, in the stream's own words, so a change he names has its cause in front of him
   return [ways.length ? `THE HEIR'S WAYS\n${ways.map((w) => `- ${w}`).join("\n")}` : "", since.length ? `WHAT HAPPENED SINCE MY LAST WORD\n${since.join("\n")}` : "", `THE PAGE\n${snapshot}`, thread ? `THE THREAD SO FAR\n${thread}` : "",
     kind === "ask" ? `THE HEIR ASKS\n${ask}\nAnswer him. If he states a standing habit of his own, end with one last line \"WAY: <the habit, in one short line>\"; otherwise do not.`
       // C71: in a fight he speaks of the fight alone (Soushi, 05:42: "more focused on it and clear")
+      : kind === "camp" ? COUNCIL
       : /\nFOES front to back:/.test(snapshot) ? FIGHT : "Comment this page."].filter(Boolean).join("\n\n")
 }
 
@@ -62,7 +68,7 @@ export async function ask(system: string, user: string): Promise<{ text?: string
 }
 
 /** Comment one page or answer one question, posting through say(); a failure posts nothing and prints a WARN. */
-export async function comment(kind: "page" | "ask", snapshot: string, page: string, question = "", since: string[] = []): Promise<boolean> {
+export async function comment(kind: "page" | "ask" | "camp", snapshot: string, page: string, question = "", since: string[] = []): Promise<boolean> {
   const r = await ask(SYSTEM, await promptFor(kind, snapshot, question, since))
   if (!r.text) { console.log(`WARN ${clock()} caretaker: no comment on page ${page} (${r.error})`); return false }
   // a page's comment is his recap, the report beside the conversation (C66); an answer to the Heir is a plain line
@@ -74,21 +80,33 @@ export async function comment(kind: "page" | "ask", snapshot: string, page: stri
     const ways = await readWays()
     if (!ways.some((w) => w.toLowerCase() === way[1]!.trim().toLowerCase())) appendFileSync(waysFile(), `- ${way[1]!.trim()}\n`)
   }
-  if (kind === "page") await sayRecap(page, { advice: text })
+  if (kind !== "ask") await sayRecap(page, { advice: text })
   else say(text, page)
   console.log(`SAID ${clock()} page ${page}: ${r.text.replace(/\s+/g, " ").slice(0, 160)}`)
   return true
 }
 
-/** The stream read by the Caretaker (C73): one report per CHRON page and one answer per ASK, each prompt holding every page
- *  told since his last word (Soushi, 05:59: "It should see all the pages, but only make one report"). A plain PAGE is only
- *  kept; a CHRON he failed to comment stays among the kept pages for the next report. */
-export function streamFlow(post: typeof comment, snapshot: () => Promise<{ text: string; page: string } | undefined>) {
-  let block: string[] = [], since: string[] = []
+/** The stream read by the Caretaker. In live mode (C73), one report per CHRON page and one answer per ASK, each prompt holding
+ *  every page told since his last word (Soushi, 05:59: "It should see all the pages, but only make one report"); a plain PAGE
+ *  is only kept, and a CHRON he failed to comment stays kept. In camp mode (C74, the default), every page is kept from the moment
+ *  the party leaves the Hamlet, and he speaks once per camp: when a page first shows them at the fire, with the whole road so
+ *  far; an ASK is answered at any time and spends nothing. */
+export function streamFlow(post: typeof comment, snapshot: () => Promise<{ text: string; page: string } | undefined>,
+  opts: { mode?: "live" | "camp"; atCamp?: (page: string) => Promise<{ text: string } | undefined> } = {}) {
+  const mode = opts.mode ?? "live"
+  let block: string[] = [], since: string[] = [], fire = false
   const end = async () => {
     if (!block.length) return
     const lines = block; block = []
     const page = lines[0]!.match(/#(\d+)/)?.[1], text = lines.map((l) => l.replace(/^MORE /, "")).join("\n")
+    if (mode === "camp") {
+      since.push(text)
+      const camp = page && opts.atCamp ? await opts.atCamp(page) : undefined
+      // one council per camp: the first page at the fire calls him, the pages after it while they rest do not
+      if (camp && !fire) fire = await post("camp", camp.text, page!, "", since.slice(0, -1).concat(text))
+      if (!camp) fire = false
+      return
+    }
     if (lines[0]!.startsWith("PAGE ")) { since.push(text); return }
     // the page whole, as the MORE lines carry it; the head line's own changes go first
     if (page && await post("page", text, page, "", since)) since = []
@@ -97,10 +115,26 @@ export function streamFlow(post: typeof comment, snapshot: () => Promise<{ text:
   const line = async (l: string) => {
     if (l.startsWith("MORE ") && block.length) { block.push(l); return }
     await end()
+    // a new road: the pages kept are the last road's (camp mode keeps them for the whole road)
+    if (l.startsWith("SAVE ") && / dungeon$/.test(l)) { since = []; fire = false; return }
     if (l.startsWith("CHRON ") || l.startsWith("PAGE ")) block.push(l)
-    else if (l.startsWith("ASK ")) { const s = await snapshot(); if (s && await post("ask", s.text, s.page, l.replace(/^ASK \S+ page \S+: /, ""), since)) since = [] }
+    else if (l.startsWith("ASK ")) { const s = await snapshot(); if (s && await post("ask", s.text, s.page, l.replace(/^ASK \S+ page \S+: /, ""), since) && mode === "live") since = [] }
   }
   return { line, end }
+}
+
+/** The page at the fire, whole, with what the four took to camp, or undefined when this page shows no camp (C74). */
+async function atCamp(page: string): Promise<{ text: string } | undefined> {
+  const c = current()
+  if (!c.file) return undefined
+  const file = join(dirname(c.file), `${page}.json`), prevFile = join(dirname(c.file), `${String(Number(page) - 1).padStart(page.length, "0")}.json`)
+  const p = (await Bun.file(file).json().catch(() => undefined)) as Snap | undefined, raw = await Bun.file(file.replace(/\.json$/, ".raw.json")).json().catch(() => undefined)
+  if (!p) return undefined
+  const prev = (await Bun.file(prevFile).json().catch(() => undefined)) as Snap | undefined
+  const why = camping(prev, p, raw)
+  if (!why) return undefined
+  console.log(`CAMP ${clock()} page ${page}: ${why}`)
+  return { text: `${await nowText(p, raw, page, statSync(file).mtimeMs)}\n${await campBrief(p, raw)}` }
 }
 
 async function snapshotNow(): Promise<{ text: string; page: string } | undefined> {
@@ -113,10 +147,12 @@ async function snapshotNow(): Promise<{ text: string; page: string } | undefined
 if (import.meta.main) {
   // the live stream under the caretaker's own mark, so the agent's stream keeps its own place (C62)
   const live = Bun.spawn(["bun", join(import.meta.dir, "live.ts")], { env: { ...process.env, DD_LIVE_MARK: "caretaker-last.txt" }, stdout: "pipe" })
-  console.log(`CARETAKER ${clock()} commenting CHRON pages and ASKs through ${inference()} at ${level()}`)
+  console.log(`CARETAKER ${clock()} ${process.env.DD_CARETAKER_MODE === "live" ? "commenting CHRON pages" : "keeping the pages for the campfire council"} and answering ASKs through ${inference()} at ${level()}`)
   // stopping the Caretaker stops his stream too, so no live process is left behind
   for (const sig of ["SIGTERM", "SIGINT"] as const) process.on(sig, () => { live.kill(); process.exit(0) })
-  const flow = streamFlow(comment, snapshotNow)
+  // camp is the default for now (Soushi, 06:09); DD_CARETAKER_MODE=live brings back a word on every CHRON page
+  const mode = process.env.DD_CARETAKER_MODE === "live" ? "live" : "camp"
+  const flow = streamFlow(comment, snapshotNow, { mode, atCamp })
   let buf = ""
   const decoder = new TextDecoder()
   for await (const chunk of live.stdout) {
