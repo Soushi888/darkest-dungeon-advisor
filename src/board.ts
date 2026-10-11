@@ -268,13 +268,14 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     const gets = seats > 0
     if (gets) seats--
     const purse = tr.cost <= left
-    const lean = gets && purse ? 0 : 1
+    // a hero in the ward cannot board the coach: never lean on treating one of the four I would send (Soushi, 2026-10-10)
+    const lean = gets && purse && !tr.inParty ? 0 : 1
     if (lean === 0) left -= tr.cost
     cards.push(`- q: ${y(`Treat ${tr.hero.name}'s ${tr.quirk.name}?`)}`, `  image: ${y(portrait(tr.hero))}`)
     cards.push(`  context: ${y(`${tr.hero.name}, ${tr.hero.clsName} level ${tr.hero.level}${tr.inParty ? ", in the party I would send" : ""}. ${tr.quirk.name}${tr.quirk.description ? `: ${tr.quirk.description}` : "."}${tr.quirk.locked ? " It has set in, and the ward asks more for it." : ""} The ${tw.name} has ${tw.slots} seat${tw.slots === 1 ? "" : "s"}, ${tw.slots - tw.used} free this week.`)}`, "  options:")
-    cards.push(`    - pick: ${y(tw.name)}`, `      effect: ${y(`${tr.cost ? coin(tr.cost) : "free this week"}; the ward works on ${tr.quirk.name} before the next expedition.`)}`)
+    cards.push(`    - pick: ${y(tw.name)}`, `      effect: ${y(`${tr.cost ? coin(tr.cost) : "free this week"}; the ward works on ${tr.quirk.name}, and ${tr.hero.name} stays in the Hamlet while it does.`)}`)
     cards.push(`    - pick: "Not this week"`, `      effect: ${y(`${tr.hero.name} keeps it for now.`)}`)
-    cards.push(`  lean: ${lean}`, `  lean_why: ${y(!gets ? "the seat goes to someone the road needs more." : !purse ? `${firstRoad}.` : `${tr.why}.`)}`)
+    cards.push(`  lean: ${lean}`, `  lean_why: ${y(tr.inParty ? `${tr.hero.name} rides with the party I would send, and a hero in the ward cannot board the coach; treat it in a week they stay home.` : !gets ? "the seat goes to someone the road needs more." : !purse ? `${firstRoad}.` : `${tr.why}.`)}`)
   }
   const stuck = a.relief.filter((r) => !r.options.length)
   if (cards.length) L.push("```board-decisions", ...cards, "```", "")

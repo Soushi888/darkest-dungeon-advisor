@@ -229,7 +229,8 @@ export async function advise(t: Town): Promise<Advice> {
     const q = hit[0]!
     treat.push({ hero: h, quirk: q, why: hit[1], cost: q.locked ? ward.lockedQuirkCost ?? ward.cost : ward.cost, inParty: inPartyNow })
   }
-  treat.sort((x, y) => Number(y.inParty) - Number(x.inParty) || y.hero.level - x.hero.level)
+  // the four I would send are on the road this week, so the ward's seats go first to those who stay home
+  treat.sort((x, y) => Number(x.inParty) - Number(y.inParty) || y.hero.level - x.hero.level)
   // a thief I would not pay to cure is a thief I would let go, if they are not needed on the road
   for (const h of free.filter((h) => h.level === 0 && !inParty.has(h.guid) && h.quirks.some((q) => q.thief && !q.positive))) {
     if (!dismiss.some((d) => d.hero.guid === h.guid)) dismiss.push({ hero: h, why: `level 0, and ${h.quirks.find((q) => q.thief)!.name}: they keep for themselves what the party finds` })
