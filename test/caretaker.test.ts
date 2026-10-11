@@ -3,7 +3,7 @@
 import { describe, expect, spyOn, test } from "bun:test"
 import { mkdirSync, rmSync } from "node:fs"
 import { join } from "node:path"
-import { comment, promptFor, SYSTEM, streamFlow } from "../src/caretaker.ts"
+import { comment, COUNCIL, promptFor, SYSTEM, streamFlow } from "../src/caretaker.ts"
 import { feed } from "../src/road.ts"
 import { root } from "../src/paths.ts"
 
@@ -87,7 +87,7 @@ describe("C64: the Caretaker comments by himself", () => {
   test("run as bun run caretaker, it comments a CHRON page by itself", async () => {
     await fresh()
     await Bun.write(join(out, "chronicle", "generated_1_t", "0001.json"), JSON.stringify({ ...page, tally: { BATTLE_COMPLETED: 1 } }))
-    const p = Bun.spawn(["bun", "src/caretaker.ts"], { cwd: root, env: { ...process.env, DD_TOWN_OUT: out, DD_INFERENCE: stub("ok"), DD_LIVE_REPLAY: "1" }, stdout: "pipe" })
+    const p = Bun.spawn(["bun", "src/caretaker.ts"], { cwd: root, env: { ...process.env, DD_TOWN_OUT: out, DD_INFERENCE: stub("ok"), DD_LIVE_REPLAY: "1", DD_CARETAKER_MODE: "live" }, stdout: "pipe" })
     let lines: { page?: string }[] = []
     for (let i = 0; i < 30 && !lines.length; i++) { await Bun.sleep(300); lines = (await Bun.file(join(out, "road", "comments.jsonl")).text().catch(() => "")).split("\n").filter(Boolean).map((l) => JSON.parse(l)) }
     p.kill("SIGTERM")
@@ -143,5 +143,60 @@ describe("C73: he sees every page since his last word, and makes one report", ()
 
   test("he is told that every change he names carries its cause, and when he may say it is unknown", () => {
     expect(SYSTEM).toMatch(/Every change you name.*carries its cause.*WHAT HAPPENED SINCE MY LAST WORD.*unknown only when no page there holds one/)
+  })
+})
+
+// C74: the campfire council (#8; Soushi, 2026-10-11 06:09: "Only at the camp ... for bilan of the situation and advices").
+describe("C74: in camp mode he speaks once, at the fire", () => {
+  const road = [
+    "SAVE 06:10:00 dungeon",
+    "PAGE 06:11:00 #0001 saved 06:11:00 light 100 | Guernon 19/19hp 20st || changed: hallway step completed +1",
+    "CHRON 06:12:00 #0002 saved 06:12:00 light 94 | Guernon 15/19hp 37st || changed: narrated: trap; Guernon +17st; Guernon -4hp",
+    "MORE   4. Guernon 15/19 health, 37 stress",
+    "PAGE 06:13:00 #0003 saved 06:13:00 light 88 | Guernon 15/19hp 37st || changed: room visited +1",
+    "CHRON 06:14:00 #0004 saved 06:14:00 light 82 | Guernon 13/19hp 40st || changed: battle completed +1",
+    "CHRON 06:15:00 #0005 saved 06:15:00 light 80 | Guernon 13/19hp 40st || changed: firewood -1",
+    "PAGE 06:15:30 #0006 saved 06:15:30 light 80 | Guernon 13/19hp 30st || changed: Guernon -10st",
+  ]
+  test("a run of PAGEs and CHRONs then one camp page give exactly one post, holding the whole road", async () => {
+    const posts: { kind: string; page: string; text: string; since: string[] }[] = []
+    const atFire = new Set(["0005", "0006"]) // the camp lasts two saves; the council is called once
+    const flow = streamFlow(async (kind, text, page, _q = "", since = []) => { posts.push({ kind, page, text, since: [...since] }); return true }, async () => undefined,
+      { mode: "camp", atCamp: async (page) => (atFire.has(page) ? { text: `PAGE ${page} AT THE FIRE` } : undefined) })
+    for (const l of road) await flow.line(l)
+    await flow.end()
+    expect(posts.map((p) => [p.kind, p.page])).toEqual([["camp", "0005"]])
+    expect(posts[0]!.since.map((s) => s.match(/#(\d+)/)?.[1])).toEqual(["0001", "0002", "0003", "0004", "0005"])
+    expect(posts[0]!.since.join("\n")).toContain("Guernon +17st")
+    const prompt = await promptFor("camp", posts[0]!.text, "", posts[0]!.since)
+    expect(prompt).toContain(COUNCIL)
+    expect(prompt).toMatch(/WHAT HAPPENED SINCE MY LAST WORD\n[\s\S]*#0001[\s\S]*#0005[\s\S]*THE PAGE\nPAGE 0005 AT THE FIRE/)
+  })
+
+  test("an ASK is answered at any time and spends none of the road; a new road starts afresh", async () => {
+    const posts: { kind: string; since: string[] }[] = []
+    const flow = streamFlow(async (kind, _t, _p, _q = "", since = []) => { posts.push({ kind, since: [...since] }); return true }, async () => ({ text: "PAGE 0003", page: "0003" }),
+      { mode: "camp", atCamp: async (page) => (page === "0005" ? { text: "fire" } : undefined) })
+    for (const l of road.slice(0, 5)) await flow.line(l)
+    await flow.line("ASK 06:13:10 page 0003: how is Guernon?")
+    for (const l of road.slice(5)) await flow.line(l)
+    await flow.end()
+    expect(posts.map((p) => p.kind)).toEqual(["ask", "camp"])
+    expect(posts[1]!.since.length).toBe(5)
+    await flow.line("SAVE 07:00:00 dungeon")
+    await flow.line("CHRON 07:01:00 #0001 saved 07:01:00 light 100 | Guernon 19/19hp 0st || changed: hallway step completed +1")
+    await flow.line("CHRON 07:02:00 #0005 saved 07:02:00 light 100 | Guernon 19/19hp 0st || changed: firewood -1")
+    await flow.end()
+    expect(posts.at(-1)!.since.map((s) => s.match(/#(\d+)/)?.[1])).toEqual(["0001", "0005"])
+  })
+
+  test("a camp is read from the signs it must leave, and the skills they took are told in the game's words", async () => {
+    const { camping, campTell } = await import("../src/camp.ts")
+    const snap = (firewood: number) => ({ supplies: { firewood } }) as any
+    expect(camping(snap(2), snap(1), {})).toBe("a firewood burnt")
+    expect(camping(snap(1), snap(1), { raid: { camp: { phase: 2, camping_skill_points: 12, skill_log: {} } } })).toBe("the camp's phase 2")
+    expect(camping(snap(1), snap(1), { raid: { camp: { phase: 0, camping_skill_points: 0, skill_log: {}, party_skill_log: {} } } })).toBe("")
+    expect(campTell({ id: "x", name: "X", points: 3, limit: 1, classes: [], gold: 0, effects: [{ type: "stress_heal_amount", selection: "party_other", amount: 10, sub: "" }, { type: "remove_bleeding", selection: "individual", amount: 0, sub: "" }] }))
+      .toBe("relieves 10 stress for each companion; stops bleeding on one hero")
   })
 })
