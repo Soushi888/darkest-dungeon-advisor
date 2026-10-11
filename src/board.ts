@@ -9,7 +9,7 @@ import { join } from "node:path"
 import { homedir } from "node:os"
 import { advise, fills, readiness, road, seatParty, RULE, RULE_FOOD, type Advice, type Party } from "./advise.ts"
 export { road, type RoadItem } from "./advise.ts"
-import { campingSkills, supplyPrices, type CampSkill, nameOf } from "./game.ts"
+import { campingSkills, supplyPrices, type CampSkill, type Cost, nameOf } from "./game.ts"
 import { install, root } from "./paths.ts"
 import { DIFFICULTY, LENGTH, type HeroView, type Town, type Upgrade } from "./town.ts"
 import { buildSkin } from "./skin.ts"
@@ -544,7 +544,8 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     const short = (u: Upgrade) => u.cost.filter((c) => c.amount > (t.wallet[c.type] ?? 0)).map((c) => `${c.amount - (t.wallet[c.type] ?? 0)} ${c.type}s`).join(" and ")
     const cost = (u: Upgrade) => u.cost.map((c) => `${c.amount} ${c.type}s`).join(" and ")
     const coachOut = a.coach.filter((u) => !u.affordable)
-    const coachNote = coachOut.length ? ` Out of reach at the Stage Coach: ${coachOut.map((u) => `${u.label.replace(/^[^:]+: /, "")} (${cost(u)}; ${short(u)} short)`).join("; ")}.` : ""
+    const waitsWords = (u: Upgrade) => u.blockedBy.replace(/^needs /, "").split(", ").map((w) => inWords(`needs ${w}`)).join(", ")
+    const coachNote = coachOut.length ? ` Out of reach at the Stage Coach: ${coachOut.map((u) => `${u.label.replace(/^[^:]+: /, "")} (${cost(u)}; ${u.blockedBy ? `it waits on ${waitsWords(u)}` : `${short(u)} short`})`).join("; ")}.` : ""
     if (a.heirlooms.length || coachOut.length) {
       L.push("```board-decisions")
       L.push(`- q: "Where do the heirlooms go?"`, `  context: ${y(`The estate holds ${t.wallet.crest ?? 0} crests, ${t.wallet.bust ?? 0} busts, ${t.wallet.portrait ?? 0} portraits, ${t.wallet.deed ?? 0} deeds.${coachNote}`)}`, "  options:")
@@ -558,7 +559,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
       const seasoned = a.coach.find((u) => u.tree === "stage_coach.upgraded_recruits"), si = seasoned ? a.heirlooms.indexOf(seasoned) : -1
       const youngWhy = a.young && seasoned ? `my habit: ${a.young.low} of your ${a.young.of} heroes are level 1 or lower, so the Stage Coach's seasoned recruits come first` : ""
       const lean = youngWhy ? (si >= 0 ? si : a.heirlooms.length) : most >= 0 ? most : san >= 0 ? san : a.heirlooms.length
-      const why = youngWhy ? (si >= 0 ? `${youngWhy}.` : `${youngWhy}; I keep the heirlooms for them, ${cost(seasoned!)}, ${short(seasoned!)} short.`) : most >= 0 ? `it opens what the party is waiting for: ${opens[most]!.map((b) => `${b.hero} ${b.label}`).join(", ")}.` : san >= 0 ? `${a.disease.length} of your heroes are ill; cheaper treatment pays back quickly.` : "nothing affordable opens anything the party is waiting for."
+      const why = youngWhy ? (si >= 0 ? `${youngWhy}.` : seasoned!.blockedBy ? `${youngWhy}; I keep the heirlooms for them, and the road to them comes first: it waits on ${waitsWords(seasoned!)}.` : `${youngWhy}; I keep the heirlooms for them, ${cost(seasoned!)}, ${short(seasoned!)} short.`) : most >= 0 ? `it opens what the party is waiting for: ${opens[most]!.map((b) => `${b.hero} ${b.label}`).join(", ")}.` : san >= 0 ? `${a.disease.length} of your heroes are ill; cheaper treatment pays back quickly.` : "nothing affordable opens anything the party is waiting for."
       L.push(`  lean: ${lean}`, `  lean_why: ${y(why)}`)
       L.push("```", "")
       // U22: saving is a plan, not a wait (Soushi, 05:22: "when you propose to save for later, at least give a vision")
@@ -780,7 +781,19 @@ async function compile(board: string, sources: string): Promise<string> {
 export function savingPlan(t: Town, a: Advice, target: Upgrade, rates: Record<string, { trips: number; got: number }>): string[] {
   const held = (k: string) => t.wallet[k] ?? 0
   const lines: string[] = []
-  for (const c of target.cost.filter((c) => c.amount > held(c.type))) {
+  // U29: the whole road to the target, every upgrade it waits on in an order the Hamlet allows, from the game's upgrade files
+  // (Soushi, 06:16: "detail better the target we save for ... we need armorsmith first for Stage Coach seasoned recruits")
+  const chain = target.chain?.length ? target.chain : [{ tree: target.tree, code: target.code, label: target.label, cost: target.cost, ready: target.affordable, waits: [] }]
+  const costs = (c: Cost[]) => c.map((x) => `${x.amount} ${x.type}s`).join(" and ")
+  if (chain.length > 1) {
+    const step = (k: string) => chain.findIndex((x) => `${x.tree} ${x.code}` === k) + 1
+    lines.push(`It waits on ${chain.length - 1} other upgrade${chain.length > 2 ? "s" : ""} first. In an order the Hamlet allows: ${chain.map((x, i) => `${i + 1}. ${x.label}, ${costs(x.cost)}, ${x.ready ? "buyable tonight" : x.waits.length ? `after ${x.waits.map((w) => step(w) ? `step ${step(w)}` : inWords(`needs ${w}`)).join(" and ")}` : `${x.cost.filter((c) => c.amount > held(c.type)).map((c) => `${c.amount - held(c.type)} ${c.type}${c.amount - held(c.type) === 1 ? "" : "s"}`).join(" and ")} short`}`).join("; ")}.`)
+  } else lines.push(`Nothing has to be built before it: the game asks for no other upgrade first.`)
+  // what the whole road costs, against what the estate holds
+  const need = new Map<string, number>()
+  for (const x of chain) for (const c of x.cost) need.set(c.type, (need.get(c.type) ?? 0) + c.amount)
+  if (chain.length > 1) lines.push(`The whole road costs ${[...need].map(([k, n]) => `${n} ${k}s (you hold ${held(k)})`).join(", ")}.`)
+  for (const c of [...need].map(([type, amount]) => ({ type, amount })).filter((c) => c.amount > held(c.type))) {
     const k = c.type, short = c.amount - held(k), plural = `${k}s`
     const roads = t.quests.filter((q) => !q.plot && q.rewards.some((r) => new RegExp(`^\\d+ ${k}s?$`).test(r)))
       .map((q) => `the ${q.dungeonName}, ${(LENGTH[q.length] ?? "").toLowerCase()} (${q.goal}), paying ${q.rewards.find((r) => new RegExp(`^\\d+ ${k}s?$`).test(r))}`)
@@ -790,9 +803,9 @@ export function savingPlan(t: Town, a: Advice, target: Upgrade, rates: Record<st
     lines.push(per > 0 ? `The ${r!.trips} roads I kept the story of brought home ${r!.got} ${plural}, about ${Math.round(per * 10) / 10} a trip; at that rate, ${Math.ceil(short / per)} more trips.` : r?.trips ? `None of the ${r.trips} roads I kept the story of brought ${plural} home, so I cannot say how many trips.` : `I have kept no road's story yet, so I cannot say how many trips.`)
   }
   // what the rest can buy without touching what the target needs
-  const keep = Object.fromEntries(target.cost.map((c) => [c.type, Math.min(c.amount, held(c.type))]))
+  const keep = Object.fromEntries([...need].map(([k, n]) => [k, Math.min(n, held(k))]))
   const spare = (k: string) => held(k) - (keep[k] ?? 0)
-  const free = a.heirlooms.filter((u) => u !== target && u.cost.every((c) => c.amount <= spare(c.type)))
+  const free = a.heirlooms.filter((u) => u !== target && !chain.some((x) => x.tree === u.tree && x.code === u.code) && u.cost.every((c) => c.amount <= spare(c.type)))
   const sparing = Object.keys(t.wallet).filter((k) => ["crest", "bust", "portrait", "deed"].includes(k) && spare(k) > 0).map((k) => `${spare(k)} ${k}s`)
   lines.push(free.length ? `Without delaying it, the ${sparing.join(", ")} it does not need can pay for any one of these now: ${free.map((u) => `${u.label} (${u.cost.map((c) => `${c.amount} ${c.type}s`).join(" and ")})`).join("; ")}.` : `Nothing else the heirlooms can buy now leaves the target untouched.`)
   return ["```board-stickies", `- title: ${JSON.stringify(`My plan for the ${target.label.replace(/^[^:]+: /, "")}`)}`, "  kind: model", `  body: ${JSON.stringify(lines.join(" "))}`, "```", ""]

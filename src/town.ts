@@ -23,7 +23,12 @@ export interface HeroView {
 }
 export interface Activity { building: string; buildingName: string; activity: string; name: string; locked: boolean; baseCost: number; cost: number; lockedQuirkCost?: number; heal: number; cure: number; slots: number; used: number; barred: string[]; caretaker?: number }
 export interface Quest { foeResist?: { bleed: number; blight: number; foes: number }; unknownTypes: string[]; bleeders: string[]; blighters: string[]; walked: boolean; idx: number; dungeon: string; dungeonName: string; type: string; goal: string; difficulty: number; length: number; plot: boolean; rewards: string[]; known: string[]; unknownCount: number; types: string[] }
-export interface Upgrade { hero?: string; toLevel?: number; where?: string; tree: string; label: string; code: string; cost: Cost[]; affordable: boolean; blockedBy: string }
+export interface Upgrade { hero?: string; toLevel?: number; where?: string; tree: string; label: string; code: string; cost: Cost[]; affordable: boolean; blockedBy: string
+  // a building upgrade's whole road (U29): every upgrade not yet bought that it waits on, in an order the Hamlet allows, itself last
+  chain?: Step[] }
+/** One upgrade on the road to another, as the game's upgrade files require it: buyable now when everything it waits on is bought
+ *  and the estate can pay for it. */
+export interface Step { tree: string; code: string; label: string; cost: Cost[]; ready: boolean; waits: string[] }
 export interface Town {
   week: number; inRaid: boolean; raidDungeon: string; estate: string
   wallet: Record<string, number>; heroes: HeroView[]; fallen: HeroView[]; recruits: HeroView[]; rosterSize: number; rosterCap: number
@@ -60,6 +65,7 @@ const TREE_WORDS: Record<string, string> = {
   cost: "lower prices", disease_quirk_cost: "cheaper cures for disease", slots: "more beds", weapon: "better weapons", armour: "better armour",
   skill_levels: "higher teachings", numrecruits: "more recruits each week", rostersize: "a larger roster", upgraded_recruits: "seasoned recruits", numitems: "more wares",
 }
+const TIERS = ["first", "second", "third", "fourth", "fifth", "sixth"]
 const titleWord = (w: string) => w.charAt(0).toUpperCase() + w.slice(1)
 const LENGTH = ["", "Short", "Medium", "Long"]
 const DIFFICULTY: Record<number, string> = { 1: "Apprentice", 3: "Veteran", 5: "Champion", 6: "Darkest" }
@@ -304,14 +310,39 @@ export async function town(save: Save): Promise<Town> {
     }
   }
   const buildingUpgrades: Upgrade[] = []
-  for (const b of ["abbey", "tavern", "sanitarium", "blacksmith", "guild", "stage_coach", "nomad_wagon", "camping_trainer"]) {
+  const BUILDINGS = ["abbey", "tavern", "sanitarium", "blacksmith", "guild", "stage_coach", "nomad_wagon", "camping_trainer"]
+  // every building's upgrade trees, so a prerequisite in another building can be followed (U29: seasoned recruits wait on the
+  // Guild and the Blacksmith, as stage_coach.upgrades.json's prerequisite_requirements say)
+  const trees = new Map<string, Awaited<ReturnType<typeof buildingTrees>> extends Map<string, infer R> ? R : never>()
+  for (const b of BUILDINGS) for (const [id, reqs] of await buildingTrees(b)) trees.set(id, reqs)
+  const treeWords = async (id: string) => {
+    const [b, part] = id.split(".") as [string, string]
+    return `${await nameOf("building", b)}: ${TREE_WORDS[part] ?? `${await nameOf("activity", part)}, improved`}`
+  }
+  const costOf = (r: { cost: Cost[] }) => r.cost.filter((c) => c.amount > 0)
+  const pays = (cost: Cost[]) => cost.every((c) => c.amount <= (wallet[c.type] ?? 0))
+  const unmet = (r: { pre?: { tree: string; code: string }[] }) => (r.pre ?? []).filter((p) => !bought.has(`${p.tree}:${p.code}`))
+  // the upgrades not yet bought that this one waits on, depth first, so each comes after everything it needs
+  async function road(tree: string, code: string, seen = new Set<string>()): Promise<Step[]> {
+    const key = `${tree}:${code}`
+    if (seen.has(key) || bought.has(key)) return []
+    seen.add(key)
+    const r = trees.get(tree)?.find((x) => x.code === code)
+    if (!r) return []
+    const before: Step[] = []
+    for (const p of unmet(r)) before.push(...await road(p.tree, p.code, seen))
+    const waits = unmet(r).map((p) => `${p.tree} ${p.code}`)
+    return [...before, { tree, code, label: `${await treeWords(tree)}, ${TIERS[code.charCodeAt(0) - 97] ?? code} tier`, cost: costOf(r), ready: !waits.length && pays(costOf(r)), waits }]
+  }
+  for (const b of BUILDINGS) {
     for (const [id, reqs] of await buildingTrees(b)) {
       const next = reqs.find((r) => !bought.has(`${id}:${r.code}`))
       if (!next) continue
-      const affordable = next.cost.every((c) => c.amount <= (wallet[c.type] ?? 0))
-      const part = id.split(".")[1]!
-      const what = TREE_WORDS[part] ?? `${await nameOf("activity", part)}, improved`
-      buildingUpgrades.push({ tree: id, label: `${await nameOf("building", b)}: ${what}`, code: next.code, cost: next.cost.filter((c) => c.amount > 0), affordable, blockedBy: "" })
+      const waits = unmet(next)
+      // an upgrade that waits on another cannot be bought tonight, whatever the coffers hold
+      const affordable = pays(next.cost) && !waits.length
+      buildingUpgrades.push({ tree: id, label: await treeWords(id), code: next.code, cost: costOf(next), affordable,
+        blockedBy: waits.length ? `needs ${waits.map((p) => `${p.tree} ${p.code}`).join(", ")}` : "", chain: await road(id, next.code) })
     }
   }
 
