@@ -52,6 +52,8 @@ setInterval(async () => {
       // names (the curio searched, the foe met or slain), and the loot a battle laid out (Soushi, 2026-10-11: "ensure you see all details")
       const delta: string[] = []
       if (prev) {
+        const said = (p.narrated ?? []).slice((prev.narrated ?? []).length).filter((e: string) => !/^(kill_monster|victory|loot)$/.test(e))
+        if (said.length) delta.push(`narrated: ${said.map((e: string) => e.replace(/_/g, " ")).join(", ")}`)
         if (p.torch !== prev.torch) delta.push(`light ${p.torch > prev.torch ? "+" : ""}${p.torch - prev.torch}`)
         for (const h of p.heroes ?? []) {
           const w = (prev.heroes ?? []).find((x: any) => x.guid === h.guid)

@@ -19,7 +19,7 @@ export const CHRONICLE_RULE = {
 export interface SnapHero { guid: number; name: string; cls: string; hp: number; maxHp: number; stress: number; affliction: string; virtue: string; deathsDoor: boolean; lastBlow: string }
 export interface Snap {
   at: string; dungeon: string; difficulty: number; length: number; quest: string; key: string
-  torch: number; inBattle: boolean; supplies: Record<string, number>
+  torch: number; inBattle: boolean; supplies: Record<string, number>; narrated?: string[]
   tally: Record<string, number> // the game's own counts: ROOM_VISITED, BATTLE_COMPLETED, AMBUSHED, CURIO_INVESTIGATED, ...
   heroes: SnapHero[]
   // the fight under way, as the game keeps it (raid.battle): the round, and the foes in rank order with their health and who last struck them
@@ -78,6 +78,8 @@ export async function snapshot(save: Save): Promise<Snap | undefined> {
     battle,
     at: new Date().toISOString(), dungeon: ri.dungeon, difficulty: Number(ri.difficulty ?? 0), length: Number(ri.length ?? 0), quest: String(ri.type ?? ""),
     key: `${ri.id}:${r.start_elapsed_time ?? ""}`, torch: Math.round(f32(r.torchlight)), inBattle: !!r.inbattle, supplies, tally, heroes,
+    // the narrator's log of this trip, one entry per event it spoke over: the only record of a trap sprung or an obstacle cleared by hand
+    narrated: Object.values<any>((save.narration as any)?.raid_entry_log ?? {}).map((e) => String(e.entry_type ?? "")),
   }
 }
 
@@ -100,7 +102,7 @@ export async function capture(save: Save): Promise<string | undefined> {
   // the whole record beside the summary, decoded: every entry of the game's tally with its parameters, and the four's full
   // hero records, for what later readings (a knowledge graph of the campaign) will need that the summary does not keep
   const roster = (save.roster as any)?.heroes ?? {}
-  await Bun.write(join(dir, `${n}.raw.json`), JSON.stringify({ raid: save.raid, heroes: Object.fromEntries(s.heroes.map((h) => [h.guid, roster[h.guid]])) }))
+  await Bun.write(join(dir, `${n}.raw.json`), JSON.stringify({ raid: save.raid, narration: (save.narration as any)?.raid_entry_log, heroes: Object.fromEntries(s.heroes.map((h) => [h.guid, roster[h.guid]])) }))
   return f
 }
 
