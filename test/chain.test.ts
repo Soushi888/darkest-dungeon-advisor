@@ -65,6 +65,6 @@ describe.skipIf(!profile || !existsSync(profile))("U40: the road starts tonight"
     const card = md.split(/\n- q: /).find((c) => c.startsWith('"Where do the heirlooms go?"'))!
     const picks = [...card.matchAll(/- pick: "([^"]+)"/g)].map((m) => m[1]!), lean = Number(card.match(/\n {2}lean: (\d+)/)![1])
     expect(picks[lean]).not.toBe("Save them")
-    expect(ready.map((x) => x.label.replace(/, \w+ tier$/, ""))).toContain(picks[lean])
+    expect(ready.map((x) => x.label.replace(/, \w+ tier$/, ""))).toContain(picks[lean]!)
   })
 })
