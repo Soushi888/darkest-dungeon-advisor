@@ -376,9 +376,14 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
       L.push("```board-decisions")
       L.push(`- q: "Where do the heirlooms go?"`, `  context: ${y(`The estate holds ${t.wallet.crest ?? 0} crests, ${t.wallet.bust ?? 0} busts, ${t.wallet.portrait ?? 0} portraits, ${t.wallet.deed ?? 0} deeds.`)}`, "  options:")
       for (const u of a.heirlooms) L.push(`    - pick: ${y(u.label)}`, `      effect: ${y(`costs ${u.cost.map((c) => `${c.amount} ${c.type}s`).join(" and ")}.`)}`)
-      L.push(`    - pick: "Save them"`, `      effect: ${y("Keep the heirlooms for a bigger upgrade later (the Blacksmith's first tier opens weapon upgrades).")}`)
+      L.push(`    - pick: "Save them"`, `      effect: ${y("Keep the heirlooms for a bigger upgrade later.")}`)
+      // an affordable building upgrade that opens the party's own waiting upgrades comes first (Soushi, 2026-10-10)
+      const opens = a.heirlooms.map((u) => a.blocked.filter((b) => b.blockedBy.includes(`${u.tree} ${u.code}`)))
+      const most = opens.reduce((best, o, i) => (o.length > (opens[best]?.length ?? 0) ? i : best), -1)
       const san = a.heirlooms.findIndex((u) => u.tree === "sanitarium.disease_quirk_cost" || u.tree === "sanitarium.cost")
-      L.push(`  lean: ${san >= 0 ? san : a.heirlooms.length}`, `  lean_why: ${y(san >= 0 ? `${a.disease.length} of your heroes are ill; cheaper treatment pays back quickly.` : "nothing affordable changes much yet.")}`)
+      const lean = most >= 0 ? most : san >= 0 ? san : a.heirlooms.length
+      const why = most >= 0 ? `it opens what the party is waiting for: ${opens[most]!.map((b) => `${b.hero} ${b.label}`).join(", ")}.` : san >= 0 ? `${a.disease.length} of your heroes are ill; cheaper treatment pays back quickly.` : "nothing affordable opens anything the party is waiting for."
+      L.push(`  lean: ${lean}`, `  lean_why: ${y(why)}`)
       L.push("```", "")
     }
     if (a.trinkets.length) {
