@@ -462,7 +462,7 @@ describe.skipIf(!has)("on the local save", () => {
     const at = (h: string) => heads.findIndex((x) => x.startsWith(h))
     expect(at("Who stays, who goes")).toBeLessThan(at("The next expedition"))
     expect(at("Who rests, who prays")).toBeLessThan(at("The next expedition"))
-    if (at("Provisions for the road") >= 0) expect(at("Provisions for the road")).toBeGreaterThan(at("The next expedition"))
+    if (at("Provisions for the") >= 0) expect(at("Provisions for the")).toBeGreaterThan(at("The next expedition"))
   })
 
   // the best party's score for one road, with the habits as they stand or with one of them set to nothing
@@ -506,7 +506,11 @@ describe.skipIf(!has)("on the local save", () => {
     const a = await advise(t)
     const seat = a.parties.flatMap((p) => p.seats).find((s) => s.hero.guid === hw.guid && s.rank > 1)
     expect(seat).toBeDefined()
-    expect(seat!.swaps).toContainEqual({ equip: await name("duelist_advance"), for: await name("point_blank_shot") })
+    // the learned skill goes in, in place of one that cannot be used from the seat
+    const swap = seat!.swaps!.find((w) => w.equip === "Duelist's Advance")
+    expect(swap).toBeDefined()
+    const out = hw.skills.find((x) => x.name === swap!.for)!
+    expect(cls.skills.get(out.id)!.launch).not.toContain(seat!.rank)
   })
 
   test("C35: a mark and a hand that strikes the marked count together", async () => {

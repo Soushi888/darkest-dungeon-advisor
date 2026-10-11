@@ -113,7 +113,9 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   L.push(`# The *Hamlet*, week ${t.week}`, "")
   L.push(`You are back, and the estate stands. ${t.heroes.length} names on the roster, ${coin(gold)} in the coffers, ${t.quests_won} of ${t.quests_done} expeditions won. I have gone through the ledgers and walked the streets; here is what I would do before the coach leaves again, in the order I would do it: the estate, who stays, who rests, then the road, the training and the provisions last. Where a number is only my own habit, I say so.`, "")
   L.push("```board-idea")
-  L.push(`headline: ${y(chosen ? `${chosen.quest.dungeonName} next,\nwith ${chosen.seats.map((s) => s.hero.name).join(", ")}.` : "Rest first.\nNo four are fit to go.")}`)
+  // the road chosen (his pick, or my lean) is named the same way at the top, in the readiness and in the provisions
+  const roadName = chosen ? `${chosen.quest.dungeonName}, ${(LENGTH[chosen.quest.length] ?? "").toLowerCase()} ${chosen.quest.type}` : ""
+  L.push(`headline: ${y(chosen ? `Next: the ${roadName},\nwith ${chosen.seats.map((s) => s.hero.name).join(", ")}.` : "Rest first.\nNo four are fit to go.")}`)
   L.push(`detail: ${y(a.afflicted.length ? `${a.afflicted.map((h) => h.name).join(" and ")} cannot be trusted in the dark until the Abbey or the Tavern has had them.` : "Nobody is afflicted. Spend on the party first, the estate second.")}`)
   L.push("```", "")
 
@@ -177,7 +179,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   // C28: how ready the party is, by my conditions; it rises as the Hamlet prepares. Never presented as odds
   if (chosen) {
     const r = readiness(t, chosen, reserve)
-    L.push(`## How ready they are: ${r.met} of ${r.of} {wide}`, "")
+    L.push(`## How ready they are for the ${roadName}: ${r.met} of ${r.of} {wide}`, "")
     L.push(`${r.verdict} This is my reckoning of what is ready for the road to the ${chosen.quest.dungeonName}, not a promise about the dark: rest them, cure them, buy what they need, and it rises.`, "")
     L.push("```board-tally", `- n: ${r.pct}`, `  label: ${y("% of my conditions met")}`, `  pct: ${r.pct}`, "```", "")
     L.push("| | Condition | Now |", "|---|---|---|")
@@ -343,7 +345,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   if (chosen) {
     const q = chosen.quest
     const len = Math.max(1, Math.min(3, q.length))
-    L.push("## Provisions for the road {wide}", "")
+    L.push(`## Provisions for the ${roadName} {wide}`, "")
     L.push(`What to buy at the Provisioner for the ${q.dungeonName}. The counts are my habit for a ${LENGTH[len]?.toLowerCase()} expedition, nothing more; I ask for bandages and antivenom only where foes you know there have already bled or poisoned you.`, "")
     // one table, not a sticky per item (Soushi, 2026-10-10): what to buy, how many, at what price
     L.push("| Buy | How many (my habit) | Each | Cost | Why |", "|---|---|---|---|---|")
@@ -485,7 +487,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
 export const ACTING_ORDER = ["The coach is back",
   "This week in the Hamlet", "This week so far", "Did you do what you chose?", "The estate's coffers", "Heirlooms and trinkets",
   "Who stays, who goes", "Who rests, who prays", "The next expedition", "How ready they are", "The Guild and the Blacksmith",
-  "Provisions for the road", "How I keep the accounts",
+  "Provisions for the", "How I keep the accounts",
 ]
 export function inActingOrder(md: string): string {
   const parts = md.split(/\n(?=## )/)
