@@ -110,6 +110,9 @@ export interface Beat { i: number; kind: "battle" | "ambush" | "curio" | "dark" 
 /** The trip in order, from one snapshot to the next (C40). */
 export function beats(snaps: Snap[], fell: string[] = []): Beat[] {
   const out: Beat[] = []
+  // the roster keeps the last blow of an earlier trip until a new one lands; a blow already there on the first page is not this road's
+  const stale = new Map((snaps[0]?.heroes ?? []).map((h) => [h.guid, h.lastBlow]))
+  snaps = snaps.map((s) => ({ ...s, heroes: s.heroes.map((h) => (h.lastBlow && stale.get(h.guid) === h.lastBlow ? { ...h, lastBlow: "" } : h)) }))
   for (let i = 1; i < snaps.length; i++) {
     const a = snaps[i - 1]!, b = snaps[i]!, d = (k: string) => (b.tally[k] ?? 0) - (a.tally[k] ?? 0)
     if (d("BATTLE_COMPLETED") > 0) out.push({ i, kind: "battle", text: `${d("BATTLE_COMPLETED") > 1 ? `${d("BATTLE_COMPLETED")} battles` : "a battle"} won`, bad: false })
