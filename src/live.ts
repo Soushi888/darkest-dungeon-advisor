@@ -19,6 +19,7 @@ import { messagesFile } from "./road.ts"
 import { newlySeen, whereLine } from "./map.ts"
 import { effectWords, plain, wrap } from "./words.ts"
 import { turnKind } from "./turns.ts"
+import { alreadyTold, inOrder } from "./livemark.ts"
 
 const log = join(outDir(), "answers-log.md")
 const game = join(profileDir(), "persist.game.json")
@@ -32,10 +33,12 @@ let sent = mtime(log), saved = mtime(game), seen = await digest(), out = await i
 const chron = join(outDir(), "chronicle")
 const pages = () => { try { return readdirSync(chron).flatMap((d) => readdirSync(join(chron, d)).filter((f) => /^\d+\.json$/.test(f)).map((f) => join(chron, d, f))) } catch { return [] } }
 // DD_LIVE_REPLAY=n tells the last n pages again on start, to check what a page reports
-const replay = Number(process.env.DD_LIVE_REPLAY ?? 0), all = pages().sort()
+// pages in the order they were saved, never by path: a trip folder's name does not follow its age (C62)
+const bySave = (fs: string[]) => inOrder(fs.flatMap((f) => { try { return [{ path: f, mtime: statSync(f).mtimeMs }] } catch { return [] } })).map((p) => p.path)
+const replay = Number(process.env.DD_LIVE_REPLAY ?? 0), all = bySave(pages())
 // a restarted stream resumes after the last page it told, so a page saved while it was down is still told
 const mark = join(outDir(), "live-last.txt"), lastTold = existsSync(mark) ? (await Bun.file(mark).text()).trim() : ""
-const told = new Set(replay ? all.slice(0, -replay) : lastTold ? all.filter((f) => f <= lastTold) : all)
+const told = alreadyTold(all.map((f) => ({ path: f, mtime: statSync(f).mtimeMs })), lastTold, replay)
 const last = new Map<string, any>(), prevFile = new Map<string, string>(), lastBody = new Map<string, string>()
 // the page before the first one told is what the next page is compared with
 for (const f of all.filter((f) => told.has(f))) { try { last.set(f.split("/").slice(-2, -1)[0]!, await Bun.file(f).json()); prevFile.set(f.split("/").slice(-2, -1)[0]!, f.replace(/\.json$/, ".raw.json")) } catch {} }
@@ -45,7 +48,7 @@ let clashSeen = mtime(clashes)
 let asked = existsSync(messagesFile()) ? (await Bun.file(messagesFile()).text()).split("\n").filter(Boolean).length : 0
 console.log(`LIVE ${now()} watching ${outDir()} and ${game}`)
 setInterval(async () => {
-  for (const f of pages().filter((f) => !told.has(f)).sort()) {
+  for (const f of bySave(pages().filter((f) => !told.has(f)))) {
     told.add(f)
     if (!replay) await Bun.write(mark, f)
     try {
