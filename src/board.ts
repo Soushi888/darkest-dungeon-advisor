@@ -134,6 +134,8 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   const firstRoad = `the road comes first: I keep ${coin(reserve)} for provisions, and ${left ? `only ${coin(left)} is` : "nothing is"} free`
 
   L.push(`# The *Hamlet*, week ${t.week}`, "")
+  // C84: the estate's tally under the headline, from the same figures as the opening line
+  estateTally = { won: t.quests_won, done: t.quests_done, roster: t.heroes.length, cap: t.rosterCap, gold }
   L.push(`You are back, and the estate stands. ${t.heroes.length} names on the roster, ${coin(gold)} in the coffers, ${t.quests_won} of ${t.quests_done} expeditions won. I have gone through the ledgers and walked the streets; here is what I would do before the coach leaves again, in the order I would do it: the estate, who stays, who rests, then the road, the training and the provisions last. Where a number is only my own habit, I say so.`, "")
   L.push("```board-idea")
   // the road chosen (his pick, or my lean) is named the same way at the top, in the readiness and in the provisions
@@ -803,6 +805,19 @@ export function estateIcons(html: string): string {
   return html.replace("</head>", `${css}</head>`)
 }
 
+// the estate's tally for the header, filled while the board is written (C84)
+let estateTally: { won: number; done: number; roster: number; cap: number; gold: number } | undefined
+
+/** The estate's tally set under the headline (C84; Soushi, 07:10: "I would like the number of expedition won / total expedition
+ *  to be more visible"): expeditions won of all as the lead figure, the roster against its limit, the gold. */
+export function headerTally(html: string, x: typeof estateTally): string {
+  if (!x) return html
+  const coin = existsSync(join(outDir(), "img", "currency.gold.png")) ? `<img class="coin" src="img/currency.gold.png" alt="">` : ""
+  const box = `<div class="estate-tally"><div class="et-lead"><b>${x.won}</b><span>of ${x.done}</span><small>expeditions won</small></div><div><b>${x.roster}</b><span>of ${x.cap}</span><small>on the roster</small></div><div><b>${coin}${x.gold.toLocaleString("en-US")}</b><small>gold in the coffers</small></div></div>`
+  const css = `<style>.estate-tally{display:flex;flex-wrap:wrap;gap:.6rem 2.2rem;align-items:flex-end;margin:.6rem 0 1rem}.estate-tally>div{display:flex;flex-direction:column;line-height:1.05}.estate-tally b{font-family:var(--title,inherit);font-size:2rem;color:var(--ink);font-weight:normal;display:inline-flex;align-items:center;gap:.35rem}.estate-tally .et-lead b{font-size:3.2rem;color:var(--gold)}.estate-tally span{font-size:1rem;color:var(--ink);margin-top:.1rem}.estate-tally small{font-size:.8rem;color:var(--dim);text-transform:lowercase;letter-spacing:.04em;margin-top:.15rem}.estate-tally img.coin{height:1.6rem;width:auto}@media (max-width:520px){.estate-tally .et-lead b{font-size:2.4rem}.estate-tally b{font-size:1.6rem}}</style>`
+  return html.replace(/(<header class="hero"><div><h1>[\s\S]*?<\/h1>)/, `$1${box}`).replace("</head>", `${css}</head>`)
+}
+
 // the portraits the seat stickies show, by hero name, filled while the board is written (U30)
 let faces = new Map<string, string>()
 
@@ -823,7 +838,8 @@ async function compile(board: string, sources: string): Promise<string> {
   const out = join(outDir(), "town.html")
   const proc = Bun.spawnSync(["bun", BOARD, src, "--no-sketch", "--out", out], { stdout: "pipe", stderr: "pipe" })
   if (proc.exitCode !== 0) throw new Error(`board build failed: ${proc.stderr.toString()}`)
-  await Bun.write(out, seatFaces(estateIcons(await Bun.file(out).text()), faces))
+  await Bun.write(out, headerTally(seatFaces(estateIcons(await Bun.file(out).text()), faces), estateTally))
+  estateTally = undefined
   return out
 }
 
