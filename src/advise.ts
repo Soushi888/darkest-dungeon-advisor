@@ -2,11 +2,12 @@
 // Figures come from the Town (save + game files). Thresholds marked RULE are the Caretaker's own judgement,
 // stated as such on the board, never presented as the game's numbers (ISA A2).
 import { heroClass, heroTrees, nameOf, quirks, supplyPrices, type Skill } from "./game.ts"
+import { bearing, CHRONICLE_RULE, untried } from "./chronicle.ts"
 import type { Activity, HeroView, Quest, QuirkView, Town, Upgrade } from "./town.ts"
 
 export const RULE_FOOD = [0, 8, 12, 16] // RULE: food and torches by expedition length
 
-export interface RoadItem { id: string; label: string; count: number; price: number }
+export interface RoadItem { id: string; label: string; count: number; price: number; why?: string }
 /** What the road to a quest asks of the Provisioner (counts are RULE), priced from the game's list with this week's event applied (C22). */
 export function road(t: Town, p: Party | undefined, prices: Map<string, number>): RoadItem[] {
   if (!p) return []
@@ -16,6 +17,14 @@ export function road(t: Town, p: Party | undefined, prices: Map<string, number>)
   const out = [item("provision", "Food", RULE_FOOD[len]!), item("torch", "Torches", RULE_FOOD[len]!), item("shovel", "Shovels", len)]
   if (q.bleeders.length) out.push(item("bandage", "Bandages", len + 1))
   if (q.blighters.length) out.push(item("antivenom", "Antivenom", len + 1))
+  // C42: what past trips on this dungeon taught, at this difficulty or lower; and a margin on a road harder than any yet
+  const taught = bearing(t.ledger ?? [], q)
+  const add = (id: string, n: number, why: string) => { const it = out.find((x) => x.id === id); if (it && n) { it.count += n; it.why = [it.why, why].filter(Boolean).join("; ") } }
+  for (const [kind, id, n] of [["light", "torch", CHRONICLE_RULE.lessonTorches], ["food", "provision", CHRONICLE_RULE.lessonFood]] as const) {
+    const trips = [...new Set(taught.filter((l) => l.kind === kind).map((l) => l.trip))]
+    if (trips.length) add(id, n, `+${n}: ${kind === "light" ? "they broke in the dark" : "the food ran out"} (${trips.join(", ")})`)
+  }
+  if (untried(t.ledger ?? [], q, t.trips)) for (const id of ["torch", "provision"]) add(id, CHRONICLE_RULE.untriedMargin, `+${CHRONICLE_RULE.untriedMargin}: no expedition this hard yet`)
   return out
 }
 
@@ -36,6 +45,7 @@ export const RULE = {
   moveWorth: 0.5, // RULE: a skill that moves its user, to win a seat back (C33)
   markPair: 3, // RULE: a mark carried with a hand that strikes the marked harder (C35)
   dotWorth: 1.5, // RULE: a bleed or blight, times the share the road's known foes fail to resist (C36)
+  lessonHeal: 4, // RULE: a true healer's extra weight on a road where healing failed before (C42)
 }
 
 /** What a skill is worth from rank r on road q, by my habits: an attack by how many ranks it reaches, a heal by what it
@@ -231,6 +241,12 @@ export async function advise(t: Town): Promise<Advice> {
     p.score += p.left < 0 ? -RULE.brokeRoad : Math.min(RULE.goldCap, p.left / RULE.goldPerPoint)
     p.green = p.seats.filter((s) => s.hero.level === 0).length >= RULE.greenParty
     if (p.green) p.score -= RULE.greenPerStep * Math.max(0, p.quest.length - 1)
+  }
+  // C42: a road where a past trip lacked healing weighs a true healer more, and says why
+  for (const p of parties) {
+    const hurt = [...new Set(bearing(t.ledger ?? [], p.quest).filter((l) => l.kind === "healing").map((l) => l.trip))]
+    if (hurt.length && p.healer) p.score += RULE.lessonHeal
+    if (hurt.length) p.notes.push(`healing failed on this road before (${hurt.join(", ")})`)
   }
   parties.sort((a, b) => b.score - a.score)
   const best = parties[0]

@@ -4,6 +4,7 @@
 import { existsSync, statSync, watch as fsWatch } from "node:fs"
 import { join } from "node:path"
 import { buildBoard, buildFarewell, outDir } from "./board.ts"
+import { capture } from "./chronicle.ts"
 import { profileDir } from "./paths.ts"
 import { readSave } from "./read.ts"
 import { town, type Town } from "./town.ts"
@@ -17,9 +18,13 @@ const port = Number(args.find((a) => a.startsWith("--port="))?.split("=")[1] ?? 
 /** Returns the board path, or null when the party is out (C8: refused in character). */
 let last: Town | undefined
 async function once(): Promise<string | null> {
-  const t = await town(await readSave())
+  const save = await readSave()
+  const t = await town(save)
   last = t
   if (t.inRaid) {
+    // C39: every dungeon save that changed the party is kept, because the game deletes its own record on return
+    const kept = await capture(save)
+    if (kept) console.log(`chronicle: ${kept}`)
     // one farewell per expedition, on its first save (C24); after that the board waits for the return (C16)
     const keyFile = Bun.file(join(outDir, "farewell.key"))
     if (t.raid && (!(await keyFile.exists()) || (await keyFile.text()) !== t.raid.key)) {

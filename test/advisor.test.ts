@@ -11,6 +11,7 @@ import { town } from "../src/town.ts"
 import { profileDir, root } from "../src/paths.ts"
 import { boardOptions, mergePicks, parseAnswers, reconcile } from "../src/reconcile.ts"
 import { contradictions } from "../src/coherence.ts"
+import { beats, bearing, capture, chronicleDir, judge, remember, loadLedger, untried, CHRONICLE_RULE, type Snap } from "../src/chronicle.ts"
 import { ACTING_ORDER, road, source, weekSoFar } from "../src/board.ts"
 import { supplyPrices } from "../src/game.ts"
 import { advise, readiness, seatParty, skillWorth, RULE } from "../src/advise.ts"
@@ -536,7 +537,7 @@ describe.skipIf(!has)("on the local save", () => {
     const heads = [...md.matchAll(/^## (.+?)(?: \{wide\})?$/gm)].map((m) => m[1]!)
     expect(heads[0]).toBe("The coach is back")
     const zone = md.slice(md.indexOf("## The coach is back"), md.indexOf("\n## ", md.indexOf("## The coach is back") + 5))
-    for (const h of t.back.heroes) expect(zone).toContain(h.died ? `${h.name} fell in the` : `${h.name} is home`)
+    for (const h of t.back.heroes) expect(zone).toContain(h.died ? `${h.name} fell in the` : t.heroes.some((x) => x.guid === h.guid) ? `${h.name} is home` : `${h.name} is no longer on the roster`)
     expect(zone).toContain(t.back.success ? "with the work done" : "without the work done")
     expect(zone).toMatch(/So this week (I would send|nobody is fit)/)
   })
@@ -552,5 +553,70 @@ describe.skipIf(!has)("on the local save", () => {
     const found = contradictions(bad)
     expect(found.some((f) => f.includes(`${four[0]} is in the four`))).toBe(true)
     expect(found.some((f) => f.includes("Nobody, who is not in the four"))).toBe(true)
+  })
+
+  test.skipIf(!existsSync(join(raidCopy, "persist.raid.json")))("C39: a dungeon save is chronicled once per change, never in the save folder", async () => {
+    rmSync(chronicleDir(), { recursive: true, force: true })
+    const save = await readSave(raidCopy)
+    const first = await capture(save)
+    expect(first).toBeDefined()
+    expect(first!.startsWith(townOut)).toBe(true)
+    expect(await capture(save)).toBeUndefined() // nothing changed, nothing kept
+    expect(existsSync(join(profile, "chronicle"))).toBe(false)
+    const snap = (await Bun.file(first!).json()) as Snap
+    expect(snap.heroes.length).toBeGreaterThan(0)
+    expect(snap.torch).toBeGreaterThan(0)
+  })
+
+  // a trip that began well and broke in the dark: three saves, as the chronicle would keep them
+  const hero = (name: string, o: Partial<Snap["heroes"][number]> = {}) => ({ guid: name.length, name, cls: "vestal", hp: 20, maxHp: 24, stress: 10, affliction: "", virtue: "", deathsDoor: false, lastBlow: "", ...o })
+  const snap = (torch: number, battles: number, heroes: Snap["heroes"]): Snap => ({ at: "", dungeon: "cove", difficulty: 1, length: 1, quest: "cleanse", key: "k", torch, inBattle: false, supplies: { food: 4 }, tally: { BATTLE_COMPLETED: battles }, heroes })
+  const trip = [
+    snap(100, 0, [hero("Ana"), hero("Bo"), hero("Cy")]),
+    snap(80, 2, [hero("Ana"), hero("Bo"), hero("Cy")]),
+    snap(30, 3, [hero("Ana", { affliction: "Masochistic", stress: 100 }), hero("Bo", { affliction: "Abusive", stress: 100 }), hero("Cy", { deathsDoor: true, lastBlow: "Drowned Thrall" })]),
+    snap(20, 3, [hero("Ana", { affliction: "Masochistic", stress: 100 }), hero("Bo", { affliction: "Abusive", stress: 100 })]),
+  ]
+
+  test("C40: the survivors' tale tells the trip in order, with its turning point and the foe that struck", () => {
+    const bs = beats(trip, ["Cy"])
+    expect(bs[0]!.kind).toBe("battle")
+    const turn = bs.findIndex((b) => b.bad && b.kind !== "ambush" && b.kind !== "spike")
+    expect(turn).toBeGreaterThan(0)
+    expect(bs.map((b) => b.text).join(" ")).toContain("Drowned Thrall")
+    expect(bs.some((b) => b.kind === "fell" && b.who === "Cy")).toBe(true)
+  })
+
+  test("C41: what went well and wrong is tied to the light, the healing and the retreat", () => {
+    const j = judge(trip, beats(trip, ["Cy"]), { dungeon: "cove", dungeonName: "Cove", difficulty: 1, length: 1, week: 13, success: false, healer: false })
+    expect(j.well.join(" ")).toMatch(/went their way/)
+    expect(j.wrong.join(" ")).toMatch(/dark/)
+    expect(j.wrong.join(" ")).toMatch(/Two had broken/)
+    expect(j.lessons.map((l) => l.kind).sort()).toEqual(["healing", "light", "retreat"])
+  })
+
+  test("C42: lessons are kept once, bear only on their dungeon at their level or worse, and change the board with their trip named", async () => {
+    rmSync(join(townOut, "lessons.json"), { force: true })
+    const j = judge(trip, beats(trip, ["Cy"]), { dungeon: "cove", dungeonName: "Cove", difficulty: 1, length: 1, week: 13, success: false, healer: false })
+    await remember(j.lessons); await remember(j.lessons)
+    const all = await loadLedger()
+    expect(all.length).toBe(j.lessons.length)
+    expect(bearing(all, { dungeon: "cove", difficulty: 1 }).length).toBe(all.length)
+    expect(bearing(all, { dungeon: "cove", difficulty: 3 }).length).toBe(all.length)
+    expect(bearing(all, { dungeon: "weald", difficulty: 1 })).toEqual([])
+    expect(bearing([{ ...all[0]!, difficulty: 3 }], { dungeon: "cove", difficulty: 1 })).toEqual([])
+    expect(untried(all, { difficulty: 3 }, [{ difficulty: 1 }])).toBe(true)
+    expect(untried(all, { difficulty: 1 }, [{ difficulty: 1 }])).toBe(false)
+    // the torches on a Cove road rise by the habit, and say which trip taught it
+    const t = await town(await readSave(copyProfile()))
+    t.ledger = all
+    const a = await advise(t), cove = a.parties.find((p) => p.quest.dungeon === "cove")
+    if (!cove) return
+    const torch = road(t, cove, await supplyPrices()).find((i) => i.id === "torch")!
+    t.ledger = []
+    const plain = road(t, cove, await supplyPrices()).find((i) => i.id === "torch")!
+    expect(torch.count - plain.count).toBe(CHRONICLE_RULE.lessonTorches)
+    expect(torch.why).toContain("Cove, week 13")
+    rmSync(join(townOut, "lessons.json"), { force: true })
   })
 })

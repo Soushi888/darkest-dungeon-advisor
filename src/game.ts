@@ -21,7 +21,7 @@ export const P = {
 }
 
 const json = async (rel: string) => Bun.file(join(install, rel)).json()
-const text = async (rel: string) => Bun.file(join(install, rel)).text()
+export const text = async (rel: string) => Bun.file(join(install, rel)).text()
 
 // ---------- English names ----------
 let en: Map<string, string> | undefined

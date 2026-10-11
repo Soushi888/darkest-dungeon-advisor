@@ -13,6 +13,8 @@ import { DIFFICULTY, LENGTH, type HeroView, type Town } from "./town.ts"
 import { buildSkin } from "./skin.ts"
 import { loadPicks, reconcile, type Check } from "./reconcile.ts"
 import { contradictions } from "./coherence.ts"
+import { beats, chronicleFor, judge, loadLedger, remember, untried, type Beat, type Lesson } from "./chronicle.ts"
+import { heroClass } from "./game.ts"
 
 // DD_TOWN_OUT lets the tests build elsewhere, so they never touch the live board or its picks
 export const outDir = process.env.DD_TOWN_OUT ?? join(root, ".local", "town")
@@ -96,7 +98,8 @@ export function weekSoFar(t: Town, start: WeekStart | undefined): string[] {
   return out
 }
 
-export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: Answers; own?: Party; checks?: Check[]; prices?: Map<string, number>; soFar?: string[] }): { board: string; sources: string } {
+export interface Tale { snaps: number; beats: Beat[]; well: string[]; wrong: string[]; lessons: Lesson[] }
+export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: Answers; own?: Party; checks?: Check[]; prices?: Map<string, number>; soFar?: string[]; tale?: Tale }): { board: string; sources: string } {
   const L: string[] = []
   const picked = (opts.answers.expedition && a.parties.find((p) => questLabel(p) === opts.answers.expedition)) || a.best
   const chosen = opts.own ?? picked
@@ -121,8 +124,24 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     const road = `the ${b.dungeonName}, ${(LENGTH[b.length] ?? "").toLowerCase()} ${b.quest}`.replace(/\s+/g, " ")
     L.push("## The coach is back {wide}", "")
     L.push(`${b.success ? `They came back from ${road}, with the work done.` : `They came back from ${road}, without the work done.`} ${fell.length ? `${fell.map((h) => h.name).join(" and ")} did not come back.` : "All four came back."} Here is what the road did to them, and what it changes for the week ahead.`, "")
+    // C40: the survivors' tale, from the chronicle kept on the road; C41: what went well, what went wrong
+    const tale = opts.tale
+    if (tale && tale.snaps > 1) {
+      const told = tale.beats.map((x) => x.text)
+      const turn = tale.beats.findIndex((x) => x.bad && x.kind !== "ambush" && x.kind !== "spike")
+      const start = turn < 0 ? told : told.slice(0, turn), rest = turn < 0 ? [] : told.slice(turn)
+      L.push(`**What the survivors told me.** ${start.length ? `It began well: ${start.join(", ")}.` : "It went badly from the start."}${rest.length ? ` Then it turned: ${rest.join(", then ")}.` : " Nothing turned against them."}`, "")
+      if (tale.well.length || tale.wrong.length) {
+        L.push("```board-stickies")
+        for (const w of tale.well) L.push(`- title: ${y(w)}`, "  kind: works")
+        for (const w of tale.wrong) L.push(`- title: ${y(w)}`, "  kind: gotcha")
+        L.push("```", "")
+      }
+      if (tale.lessons.length) L.push(`**What I will remember.** ${tale.lessons.map((l) => `In the ${b.dungeonName}: ${l.text}.`).join(" ")} I keep it for the next road there, at this level of danger or worse.`, "")
+    } else L.push("Nobody kept the story of this road as it happened: I only know how it ended.", "")
     L.push("```board-stickies")
     for (const h of fell) L.push(`- title: ${y(`${h.name} fell in the ${b.dungeonName}`)}`, "  kind: gotcha", `  body: ${y(`${t.fallen.find((x) => x.guid === h.guid)?.clsName ?? "One of yours"}. The roster is one name shorter.`)}`)
+    for (const h of b.heroes.filter((h) => !h.died && !here(h.guid))) L.push(`- title: ${y(`${h.name} is no longer on the roster`)}`, "  kind: model", `  body: ${y("They came home, and have since been let go.")}`)
     for (const h of home) {
       const marks = [h.affliction ? `afflicted (${h.affliction})` : "", h.quirks.filter((q) => q.disease).map((q) => `ill (${q.name})`).join(", "), `${h.stress} stress`].filter(Boolean)
       L.push(`- title: ${y(`${h.name} is home`)}`, `  kind: ${h.affliction || h.stress >= RULE.restAbove ? "gotcha" : "works"}`, `  body: ${y(`${h.clsName}, level ${h.level}: ${marks.join(", ")}.`)}`)
@@ -213,7 +232,10 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     L.push("```board-decisions")
     const twins = [...new Set(a.parties.map((p) => p.quest.dungeon))].filter((d) => a.parties.filter((p) => p.quest.dungeon === d).length > 1)
     const twinNote = twins.map((d) => { const ps = a.parties.filter((p) => p.quest.dungeon === d); return ` ${ps.length} roads go to the ${ps[0]!.quest.dungeonName}: ${ps.map((p) => `the ${(LENGTH[p.quest.length] ?? "").toLowerCase()} ${p.quest.type} pays ${p.quest.rewards[p.quest.rewards.length - 1]}`).join(", ")}.` }).join("")
-    L.push(`- q: "Which expedition next?"`, `  context: ${y(`${twinNote.trim()}${twinNote ? " " : ""}Your heroes able to go now (under ${RULE.sendBelow} stress, not afflicted, not ill, not in a building): ${a.ready.map((h) => h.name).join(", ")}.`)}`, "  options:")
+    // C42: a road harder than any in the ledger is untried; the provisions carry a margin for it
+    const hard = a.parties.filter((p) => untried(t.ledger ?? [], p.quest, t.trips)).map((p) => questLabel(p).split(":")[0])
+    const untriedNote = hard.length ? ` No road of mine yet has been as dangerous as ${hard.join(", ")}: my habits are untried there, so I carry a margin of light and food.` : ""
+    L.push(`- q: "Which expedition next?"`, `  context: ${y(`${twinNote.trim()}${untriedNote}${twinNote || untriedNote ? " " : ""}Your heroes able to go now (under ${RULE.sendBelow} stress, not afflicted, not ill, not in a building): ${a.ready.map((h) => h.name).join(", ")}.`)}`, "  options:")
     for (const p of a.parties) {
       const q = p.quest
       const foes = q.walked ? (q.known.length ? `foes you know: ${q.known.slice(0, 6).join(", ")}${q.known.length > 6 ? ` and ${q.known.length - 6} more` : ""}; ${q.unknownCount} kind${q.unknownCount === 1 ? "" : "s"} you have not met` : `${q.unknownCount} kind${q.unknownCount === 1 ? "" : "s"} of foe you have not met`) : "you have never walked it; I will not speak of what lives there"
@@ -327,7 +349,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     L.push("| Buy | How many (my habit) | Each | Cost | Why |", "|---|---|---|---|---|")
     for (const i of roadItems) {
       const why = i.id === "bandage" ? `known there to bleed you: ${q.bleeders.join(", ")}` : i.id === "antivenom" ? `known there to poison you: ${q.blighters.join(", ")}` : (t.supply[i.id] ?? "").replace(/\|/g, "/")
-      L.push(`| ${i.label} | ${i.count} | ${coin(i.price)} | ${coin(i.count * i.price)} | ${why} |`)
+      L.push(`| ${i.label} | ${i.count} | ${coin(i.price)} | ${coin(i.count * i.price)} | ${i.why ? `${why}${why ? " " : ""}**What I learnt:** ${i.why.replace(/\|/g, "/")}` : why} |`)
     }
     L.push(`| **In all** | | | **${coin(reserve)}** | ${gold >= reserve ? `set aside in the coffers; ${coin(gold - reserve)} left over` : `you have ${coin(gold)}: buy food and torches first`} |`, "")
     const notes = (t.event?.provisions ?? []).map((pv) => `${pv.item === "provision" ? "Food" : "Torches, shovels and the rest"} ${pv.cost ? `cost ${pv.cost <= -1 ? "nothing" : `${Math.round(-pv.cost * 100)}% less`}` : `come in ${Math.round(-pv.amount * 100)}% smaller lots`} this week, for the ${t.event!.title}.`)
@@ -475,6 +497,21 @@ export function inActingOrder(md: string): string {
 export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): Promise<string> {
   mkdirSync(join(outDir, "img"), { recursive: true })
   const answers = await readAnswers()
+  // C40 to C42: the survivors' tale of the road just walked, and its lessons kept before this week is advised
+  let tale: Tale | undefined
+  if (t.back) {
+    const snaps = await chronicleFor(t.back), fellNames = t.back.heroes.filter((h) => h.died).map((h) => h.name)
+    const bs = beats(snaps, fellNames)
+    const healer = (await Promise.all(t.back.heroes.map(async (bh) => {
+      const h = [...t.heroes, ...t.fallen].find((x) => x.guid === bh.guid), sk = h ? (await heroClass(h.cls)).skills : undefined
+      return !!h && h.skills.some((s) => sk?.get(s.id)?.targetsAllies && sk.get(s.id)!.healAvg >= RULE.realHeal)
+    }))).some(Boolean)
+    const first = snaps[0]
+    const j = judge(snaps, bs, { dungeon: t.back.dungeon, dungeonName: t.back.dungeonName, difficulty: first?.difficulty ?? 0, length: t.back.length, week: t.week - 1, success: t.back.success, healer })
+    if (snaps.length > 1) await remember(j.lessons)
+    tale = { snaps: snaps.length, beats: bs, ...j }
+  }
+  t.ledger = await loadLedger()
   const a = await advise(t)
   // a party Soushi named in a note, seated for the expedition he picked
   let own: Party | undefined
@@ -492,7 +529,7 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
     start = { week: t.week, heroes: t.heroes.map((h) => ({ guid: h.guid, name: h.name })), bought: [...t.bought], gold: t.wallet.gold ?? 0, purchases: t.purchases.map((p) => `${p.guid}|${p.key}`) }
     await Bun.write(wsFile, JSON.stringify(start, null, 1))
   }
-  const { board, sources } = source(t, a, { foresight: !!opts.foresight, answers, own, checks, prices: await supplyPrices(), soFar: weekSoFar(t, start) })
+  const { board, sources } = source(t, a, { foresight: !!opts.foresight, answers, own, checks, prices: await supplyPrices(), soFar: weekSoFar(t, start), tale })
   // C38: every build is read back for advice that contradicts itself; the live session is told through coherence.json
   const clash = contradictions(board)
   await Bun.write(join(outDir, "coherence.json"), JSON.stringify({ week: t.week, contradictions: clash }, null, 1))

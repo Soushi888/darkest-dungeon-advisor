@@ -2,6 +2,7 @@
 // is a save field or a game-file value, and every piece of advice carries the paths it came from (C14).
 import type { Dson } from "./dson.ts"
 import type { Save } from "./read.ts"
+import type { Lesson } from "./chronicle.ts"
 import {
   P, applied, buildingData, buildingTrees, describeQuirk, dungeonMonsters, heroClass, heroTrees, levelOf, levelThresholds,
   monster, nameOf, quirks, strings, townEvents, trinkets, type Cost, type Monster,
@@ -27,6 +28,8 @@ export interface Town {
   activities: Activity[]; quests: Quest[]; witnessedSkills: number; dungeonsUnlocked: string[]
   quests_done: number; quests_won: number; lastQuest: string; lastWon: boolean
   // the expedition the coach just brought back, as the campaign log's latest chapter records it (C37)
+  trips: { dungeon: string; difficulty: number }[] // every expedition the campaign log records
+  ledger?: Lesson[] // the lessons kept from past expeditions (C42), loaded by the board before it advises
   back?: { dungeon: string; dungeonName: string; quest: string; length: number; success: boolean; heroes: { guid: number; name: string; cls: string; died: boolean }[] }
   skillDiscount: number; gearDiscount: number; visited: string[]; knownVariants: string[]
   heroUpgrades: Upgrade[]; buildingUpgrades: Upgrade[]; estateTrinkets: { id: string; name: string; classes: string[]; rank: number }[]
@@ -123,6 +126,7 @@ export async function town(save: Save): Promise<Town> {
   const chapters = Object.values<any>((save.campaign_log as any)?.chapters ?? {})
   const thisWeek = chapters.length ? Object.values<any>(chapters[chapters.length - 1]).find((x) => x && typeof x === "object" && "town_event_result_id" in x)?.town_event_result_id : undefined
   const trip = chapters.length ? Object.values<any>(chapters[chapters.length - 1]).find((x) => x && typeof x === "object" && x.heroes && typeof x.dungeon_type === "string") : undefined
+  const trips = chapters.flatMap((c) => Object.values<any>(c).filter((x) => x && typeof x === "object" && x.heroes && typeof x.dungeon_type === "string").map((x) => ({ dungeon: String(x.dungeon_type), difficulty: Number(x.difficulty ?? 0) })))
   const back = trip ? {
     dungeon: trip.dungeon_type, dungeonName: await nameOf("dungeon", trip.dungeon_type), quest: String(trip.quest ?? ""), length: Number(trip.length ?? 0), success: !!trip.success,
     heroes: Object.values<any>(trip.heroes).map((h) => ({ guid: Number(h.guid), name: String(h.name), cls: String(h.class), died: !!h.died })),
@@ -314,7 +318,7 @@ export async function town(save: Save): Promise<Town> {
     estate: g?.estatename ?? "", wallet, heroes, fallen, recruits, rosterSize: heroes.length, rosterCap,
     activities, quests, witnessedSkills: known.size, dungeonsUnlocked,
     quests_done: prog?.total_quests_finished ?? 0, quests_won: prog?.total_successful_quests_finished ?? 0,
-    lastQuest: typeof prog?.last_quest_played_id === "string" ? prog.last_quest_played_id : "", lastWon: !!prog?.last_raid_success, back,
+    lastQuest: typeof prog?.last_quest_played_id === "string" ? prog.last_quest_played_id : "", lastWon: !!prog?.last_raid_success, back, trips,
     skillDiscount, gearDiscount, visited: [...visited], knownVariants: [...knownVariants],
     heroUpgrades, buildingUpgrades, estateTrinkets, worn, trinketSlots, bought, supply: await supplies(), event, raid,
     purchases: Object.values<any>((save.upgrades as any)?.purchases ?? {}).filter((p) => p.is_purchased !== false).map((p) => ({ key: `${p.tree_id}:${p.requirement_code}`, guid: Number(p.instance_number) || 0 })),
