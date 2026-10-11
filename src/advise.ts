@@ -150,8 +150,9 @@ async function bestParty(pool: HeroView[], q: Quest): Promise<Party | undefined>
     }
     return kits.get(key)!
   }
-  // which ranks each hero can fight from: at least two of the skills they would carry there launch there
-  const ranksFor = (h: HeroView) => [1, 2, 3, 4].filter((r) => kit(h, r).filter((s) => s.k?.launch.includes(r)).length >= 2)
+  // which ranks each hero can fight from: at least two of the skills they would carry there launch there, and one of them
+  // strikes a foe (Wissant at rank 1 had only Transform and Absolution: Soushi, 2026-10-11, "really not good at rank 1")
+  const ranksFor = (h: HeroView) => [1, 2, 3, 4].filter((r) => { const here = kit(h, r).filter((s) => s.k?.launch.includes(r)); return here.length >= 2 && here.some((s) => s.k!.target.length) })
   const usable = (h: HeroView, r: number) => kit(h, r).filter((s) => s.k?.launch.includes(r)).map((s) => s.name)
   // the best heal on an ally each hero can cast from rank r, by the hit points it restores
   const healAt = (h: HeroView, r: number): Heal | undefined => kit(h, r).filter(({ k }) => k?.heal && k.targetsAllies && k.launch.includes(r)).map(({ name, k }) => ({ by: h.name, skill: name, avg: k!.healAvg })).sort((x, y) => y.avg - x.avg)[0]
@@ -402,7 +403,7 @@ export function readiness(t: Town, p: Party, reserve: number): Readiness {
     { label: "Rested", met: !tired.length, why: tired.length ? `${tired.join(", ")} at ${RULE.sendBelow} stress or more` : `all four under ${RULE.sendBelow} stress` },
     { label: "Sound in mind and body", met: !unfit.length, why: unfit.length ? `${unfit.join(", ")} afflicted, ill or still in a building` : "nobody afflicted, ill or held in town" },
     { label: "A healer goes with them", met: p.healer, why: p.healer ? `${p.heal!.by}'s ${p.heal!.skill}, about ${p.heal!.avg} hit points a cast` : p.heal ? `only ${p.heal.by}'s ${p.heal.skill}, about ${p.heal.avg} hit points a cast: a light heal, not a healer` : "nobody in the four heals another from where they stand" },
-    { label: "A stun goes with them", met: p.stunner, why: p.stunner ? "someone can stop a foe's turn" : "nobody in the four can stun" },
+    { label: "A stun goes with them", met: p.stunner, why: p.stunner ? "someone can stop a foe's turn" : "nobody can stun from the seat I gave them" },
     { label: "Every rank can fight", met: !short.length, why: short.length ? `${short.join(", ")} with fewer than two skills that reach from their rank` : "each has at least two skills that reach from their rank" },
     { label: "A road you have walked", met: p.quest.walked, why: p.quest.walked ? `${p.quest.known.length} foes there you know` : "you have never walked it" },
     { label: "No quirk turns against them there", met: !against.length, why: against.length ? `${against.join("; ")}` : "no quirk in the four works against this road" },

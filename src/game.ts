@@ -117,7 +117,10 @@ export async function heroClass(id: string): Promise<HeroClass> {
     if (!line.startsWith("combat_skill:") || !line.includes(".level 0")) continue
     const sid = line.match(/\.id "([^"]+)"/)?.[1]
     if (!sid) continue
-    const launch = (line.match(/\.launch (\d+)/)?.[1] ?? "").split("").map(Number)
+    // a skill only the Abomination's beast can use is out of reach from a seat: the change costs the other three stress
+    // (base.effects.darkest, beast_stress_party), so the seating counts the man as he stands (Soushi, 2026-10-11)
+    const beastOnly = /\.valid_modes beast\b/.test(line) && !/\.valid_modes[^.]*\bhuman\b/.test(line)
+    const launch = beastOnly ? [] : (line.match(/\.launch (\d+)/)?.[1] ?? "").split("").map(Number)
     const target = line.match(/\.target (\S*)/)?.[1] ?? ""
     const fx = await Promise.all([...(line.match(/\.effect((?: "[^"]+")+)/)?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((e) => effect(e[1]!)))
     const mv = line.match(/\.move (\d+) (\d+)/)
