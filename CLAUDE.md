@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A read-only town advisor for a Darkest Dungeon (DD1, base game only) playthrough. It decodes a copy of the player's save, reads the game's own data files from the install, and writes a niceboard (an interactive HTML page) in the voice of the Caretaker, in English, first person. It advises only in the Hamlet, never inside a dungeon. `README.md` is the user-facing guide; `ISA.md` is the spec of record: claims C1 to C17 and anti-claims A1 to A4, each with its falsifier and evidence. Tests are named after those claims.
+A read-only town advisor for a Darkest Dungeon (DD1, base game only) playthrough. It decodes a copy of the player's save, reads the game's own data files from the install, and writes a niceboard (an interactive HTML page) in the voice of the Caretaker, in English, first person. It advises only in the Hamlet, never inside a dungeon. `README.md` is the user-facing guide; `ISA.md` is the spec of record: numbered claims (C1 onward) and anti-claims A1 to A4, each with its falsifier and evidence, plus the decisions and what is not yet specified. Tests are named after those claims.
 
 ## Commands
 
@@ -26,7 +26,7 @@ Environment: `DD_INSTALL` (game folder, default `~/.steam/steam/steamapps/common
 
 ## Pipeline
 
-`paths.ts` → `read.ts` → `town.ts` → `advise.ts` (+ `reconcile.ts`) → `board.ts` → `cli.ts`
+`paths.ts` → `read.ts` → `town.ts` → `advise.ts` (+ `reconcile.ts`, `chronicle.ts`) → `board.ts` (+ `coherence.ts`) → `cli.ts`; `live.ts` streams events for a live session
 
 - `read.ts` copies every `persist.*.json` into `.dd-runtime/profile/` and decodes the copy with `dson.ts` (DSON, ported from robojumper's spec). The original profile is only ever read.
 
@@ -40,7 +40,11 @@ Environment: `DD_INSTALL` (game folder, default `~/.steam/steam/steamapps/common
 
 - `board.ts` writes the niceboard markdown in his voice, copies portraits into `.local/town/img/`, and compiles with the external compiler plus the skin.
 
-- `cli.ts` serves the page with an injected "Send to the Caretaker" button. It POSTs the board's answers to `/answers`, which writes `.local/town/answers.md` and rebuilds. `readAnswers()` in `board.ts` parses them by matching card titles with regexes, so **card titles and the order of the first cards must stay stable**, or picks drift onto the wrong card. Rebuilds are serialized, with at most one queued rerun.
+- `chronicle.ts` keeps a snapshot of the party at every dungeon save (`.local/town/chronicle/<expedition>/`, a summary plus the whole decoded record), turns it into the survivors' tale and the lessons on return, and keeps the ledger (`.local/town/lessons.json`).
+
+- `coherence.ts` reads every built board back and lists advice that contradicts itself into `.local/town/coherence.json`.
+
+- `cli.ts` serves the page with an injected "Send to the Caretaker" button (also Ctrl+Shift+Enter). It POSTs the board's answers to `/answers`, which writes `.local/town/answers.md`, merges `.local/town/picks.json` and rebuilds. The page keeps picks by card number, so a head script re-attaches each stored pick to its question text, and the server drops a pick that is not one of its card's options (C18); `readAnswers()` in `board.ts` still finds the expedition and party picks by card title, so keep those titles stable. The page reloads on `/version` (`<watcher start>-<build count>`, served `no-store`). Rebuilds are serialized, with at most one queued rerun.
 
 ## Invariants the tests and ISA enforce
 
@@ -48,7 +52,7 @@ Environment: `DD_INSTALL` (game folder, default `~/.steam/steam/steamapps/common
 
 - **Knowledge boundary (C5, C6, A3).** A monster may be named only if it lives in a dungeon level the campaign log records as walked *and* one of its attacks is in `persist.game_knowledge.json`. Attack ids are shared across tiers, so the walked level is what tells variants apart. A dungeon never walked gets no foe named. Curio interactions are never shown. The `--foresight` flag is the only exception, and it names kinds, never monsters.
 
-- **No figure from memory or the wiki (A2, C14).** Every number comes from the save or a game file and is listed with its source in `.local/town/sources.md`, never on the board. The advisor's own thresholds (`RULE` in `advise.ts`, `RULE_FOOD` in `board.ts`) are labelled "my habit" on the board.
+- **No figure from memory or the wiki (A2, C14).** Every number comes from the save or a game file and is listed with its source in `.local/town/sources.md`, never on the board. The advisor's own thresholds (`RULE` and `RULE_FOOD` in `advise.ts`, `CHRONICLE_RULE` in `chronicle.ts`) are labelled "my habit" on the board.
 
 - **The board stays in the fiction (C13).** Everything on it is the Caretaker speaking in the Hamlet's words: no save, file, field, upgrade code or tool named. Name upgrade trees through `TREE_WORDS` in `town.ts` and prerequisites through `inWords()` in `board.ts`. The C13 test greps the board for meta vocabulary.
 
@@ -56,7 +60,7 @@ Environment: `DD_INSTALL` (game folder, default `~/.steam/steam/steamapps/common
 
 - **No game art or wiki text committed (A4).** Art is inlined into `.local/` at build time; `.local/`, `data/` and `.dd-runtime/` are gitignored. Fonts in `skin/fonts/` are SIL OFL and are the only committed assets.
 
-- **The road is paid for first (C22).** `road()` in `board.ts` prices the expedition's provisions from `inventory/base.supply.inventory.items.darkest` (with the week's event applied); every spending lean on the board draws only on the gold left after that reserve.
+- **The road is paid for first (C22).** `road()` in `advise.ts` prices the expedition's provisions from `inventory/base.supply.inventory.items.darkest` (with the week's event applied); every spending lean on the board draws only on the gold left after that reserve.
 
 - **The fallen are never advised (C21).** `persist.roster.json` keeps dead heroes; `town.ts` sets aside every guid the campaign log records as `died`.
 
