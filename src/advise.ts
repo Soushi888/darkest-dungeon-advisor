@@ -192,10 +192,16 @@ export async function advise(t: Town): Promise<Advice> {
   const heirlooms = t.buildingUpgrades.filter((u) => u.affordable)
 
   // trinkets in the estate that a party member may wear
-  const trinkets = t.estateTrinkets.flatMap((tr) => {
-    const who = best?.seats.find((s) => !tr.classes.length || tr.classes.includes(s.hero.cls))
-    return who ? [{ trinket: tr.name, to: who.hero.name, why: tr.classes.length ? `only a ${who.hero.clsName} may wear it` : "anyone may wear it" }] : []
+  // class trinkets are placed first, then each open one goes to whoever holds fewest so far; listed by hero, back rank first like the party (Soushi, 2026-10-10)
+  const held = new Map<number | string, number>()
+  const placed = [...t.estateTrinkets].sort((x, z) => z.classes.length - x.classes.length).flatMap((tr) => {
+    const fit = (best?.seats ?? []).filter((s) => !tr.classes.length || tr.classes.includes(s.hero.cls))
+    const who = fit.sort((x, z) => (held.get(x.hero.guid) ?? 0) - (held.get(z.hero.guid) ?? 0))[0]
+    if (!who) return []
+    held.set(who.hero.guid, (held.get(who.hero.guid) ?? 0) + 1)
+    return [{ rank: who.rank, trinket: tr.name, to: who.hero.name, why: tr.classes.length ? `only a ${who.hero.clsName} may wear it` : "anyone may wear it" }]
   })
+  const trinkets = placed.sort((x, z) => z.rank - x.rank).map(({ rank: _r, ...tr }) => tr)
 
   // the Treatment Ward (C25), by my habit (RULE): a quirk that steals the party's loot first, then one that shuts a hero out of
   // a place of relief, then one that turns against the road the party takes next. Others I do not rank, so I do not name them.
