@@ -2,7 +2,8 @@
 // compiled page. One fixed file name, so the picks a reader makes survive every rebuild of the board.
 // The board speaks only as the Caretaker, in the Hamlet's own words (C13): no file, field or save is named on it.
 // Where each figure comes from goes to sources.md beside it (C14).
-import { campTell } from "./camp.ts"
+import { campTell, campWorth } from "./camp.ts"
+import { upkeep, upkeepWords, type UpItem } from "./upkeep.ts"
 import { checkTale } from "./talecheck.ts"
 import { copyFileSync, existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
@@ -434,6 +435,33 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   // guild and blacksmith
   L.push("## The Guild and the Blacksmith {wide}", "")
   L.push(`What the trainers and the smith can teach the party next, and at what price: the Guild knocks ${Math.round(t.skillDiscount * 100)}% off its lessons and the Blacksmith ${Math.round(t.gearDiscount * 100)}% off his work, for what the estate has already paid them.`, "")
+  // C78: the upkeep of the four who leave, one plan per hero, from the gold the road leaves free (Soushi, 06:42: "ensure the heroes
+  // that go in expedition are well upgraded so we take the opportunity each time to maintain and upgrade the roster")
+  if (chosen) {
+    const seated = new Map(chosen.seats.map((s) => [s.hero.name, s]))
+    const items: UpItem[] = t.heroUpgrades.filter((u) => seated.has(u.hero ?? "")).map((u) => {
+      const kind = /\.weapon$/.test(u.tree) ? "weapon" : /\.armour$/.test(u.tree) ? "armour" : "skill", s = seated.get(u.hero!)!
+      return { hero: u.hero!, what: `${u.label} to level ${u.toLevel}`, kind, gold: u.cost.find((c) => c.type === "gold")?.amount ?? 0,
+        heal: kind === "skill" && /medicine|reconstruction|grace|comfort|heal/i.test(u.label), used: kind !== "skill" || (s.carry ?? s.skills).some((k) => k.toLowerCase() === u.label.toLowerCase()),
+        ...(u.blockedBy ? { blockedBy: inWords(u.blockedBy) } : {}) } as UpItem
+    })
+    // the camping skill most worth learning for each, by the same habit as the Survivalist's card (C47)
+    if (opts.camp) for (const s of chosen.seats) {
+      const known = s.hero.campKnown ?? s.hero.campEquipped ?? []
+      const k = [...opts.camp.values()].filter((x) => x.classes.includes(s.hero.cls) && !known.includes(x.id) && x.gold > 0).sort((x, z) => campWorth(z, RULE) - campWorth(x, RULE) || x.gold - z.gold)[0]
+      if (k) items.push({ hero: s.hero.name, what: `${k.name} at the Survivalist`, kind: "camp", gold: Math.round(k.gold * (1 - t.campDiscount)) })
+    }
+    const plan = upkeep(items, left, { camps: chosen.quest.length >= 2, dismiss: new Map(a.dismiss.map((d) => [d.hero.name, d.why])) })
+    L.push(`**Before the coach leaves, the four's upkeep (my habit).** ${coin(left)} is free once the road's provisions are kept back. I would spend it in this order: healing, then the weapon and the armour, then the other skills they carry from their seats, then a camping skill if the road camps. That spends ${coin(plan.spent)} and leaves ${coin(plan.left)}. A skill they do not carry from their seat is not worth the gold this week, and a hero I would dismiss gets nothing.`, "")
+    // one colour for all four, so the board keeps them in seat order (it groups stickies by colour)
+    L.push("```board-stickies")
+    for (const s of chosen.seats) {
+      const mine = plan.lines.filter((l) => l.item.hero === s.hero.name)
+      if (!mine.length) continue
+      L.push(`- title: ${y(`${s.hero.name}'s upkeep`)}`, "  kind: model", `  body: ${y(`${mine.map((l) => upkeepWords(l, coin)).join("; ")}.`.replace(/^./, (c) => c.toUpperCase()))}`)
+    }
+    L.push("```", "")
+  }
   if (a.buys.length) {
     L.push("```board-decisions")
     const preferred = opts.answers.preferred ?? []
@@ -466,11 +494,8 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   // Survivalist, it will be important to include it in the board")
   if (opts.camp && chosen) {
     const camp = opts.camp, off = t.campDiscount, q = chosen.quest
-    const reach = (sel: string) => (sel === "party_other" ? 3 : sel === "party" ? 4 : 1)
     const tell = campTell
-    const worth = (k: CampSkill) => k.effects.reduce((v, e) => v + (e.type === "stress_heal_amount" ? e.amount * reach(e.selection) * RULE.campStress
-      : e.type === "stress_damage_amount" ? -e.amount * reach(e.selection) * RULE.campStress / 2 : e.type === "health_heal_max_health_percent" ? e.amount * RULE.campHealth * reach(e.selection)
-      : /^remove_/.test(e.type) ? RULE.campCure : e.type === "reduce_ambush_chance" ? RULE.campGuard : e.type === "buff" ? RULE.campBoon : 0), 0)
+    const worth = (k: CampSkill) => campWorth(k, RULE)
     const price = (k: CampSkill) => Math.round(k.gold * (1 - off))
     const camps = q.length >= 2
     L.push("## The Survivalist {wide}", "")
