@@ -606,6 +606,9 @@ describe.skipIf(!has)("on the local save", () => {
     Object.assign(hw, { stress: 0, affliction: "", busy: "", quirks: hw.quirks.filter((q) => !q.disease), level: 5 })
     expect(cls.skills.get("point_blank_shot")!.launch).toEqual([1])
     for (const h of t.heroes) if (h.guid !== hw.guid && h.cls === "highwayman") h.busy = "elsewhere"
+    // a sound Crusader holds the front, so the live roster (whoever is tired or away this week) never pushes the Highwayman there
+    const front = t.heroes.find((h) => h.cls === "crusader")
+    if (front) Object.assign(front, { stress: 0, affliction: "", busy: "", quirks: front.quirks.filter((q) => !q.disease), level: 5 })
     const a = await advise(t)
     const seat = a.parties.flatMap((p) => p.seats).find((s) => s.hero.guid === hw.guid && s.rank > 1)
     expect(seat).toBeDefined()
@@ -614,6 +617,21 @@ describe.skipIf(!has)("on the local save", () => {
     expect(swap).toBeDefined()
     const out = hw.skills.find((x) => x.name === swap!.for)!
     expect(cls.skills.get(out.id)!.launch).not.toContain(seat!.rank)
+  })
+
+  test("C50: the Abomination is seated as a man, and every seat strikes a foe", async () => {
+    // the beast's own skills launch from nowhere a seat can count on; the man's keep their ranks
+    const ab = await heroClass("abomination")
+    for (const id of ["rake", "rage", "slam"]) expect(ab.skills.get(id)!.launch).toEqual([])
+    expect(ab.skills.get("manacles")!.launch).toEqual([3, 2])
+    expect(ab.skills.get("transform")!.launch.length).toBeGreaterThan(0)
+    const a = await advise(await town(await readSave(copyProfile())))
+    for (const s of a.parties.flatMap((p) => p.seats)) {
+      // Transform and Absolution alone reach rank 1 and 4, and neither strikes: Wissant was "really not good at rank 1"
+      if (s.hero.cls === "abomination") expect([2, 3]).toContain(s.rank)
+      // the Grave Robber's Lunge launches from 4 and 3, her daggers and darts from 4 to 2 (Soushi, 2026-10-11)
+      if (s.hero.cls === "grave_robber") expect([3, 4]).toContain(s.rank)
+    }
   })
 
   test("C35: a mark and a hand that strikes the marked count together", async () => {
