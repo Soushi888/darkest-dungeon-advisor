@@ -128,7 +128,8 @@ describe("C54: the road zone keys its map and takes the board's pins", () => {
   test("the zone is markdown to the comment tool, and its blocks become paragraphs", async () => {
     const { roadPanel } = await import("../src/road.ts")
     expect(roadPanel).toContain("z.className='zone wide md'")
-    // the party, the map and the thread each pass through the paragraph step after they are written
-    for (const el of ["put(document.getElementById(\"roadParty\")", "para(M)", "para(T)"]) expect(roadPanel).toContain(el)
+    // the report and the conversation are written as paragraphs from the start (C66): seats, messages, captions
+    for (const el of ['<p class="seat', '<p class="msg ', '<p class="meta">', '<p class="said">']) expect(roadPanel).toContain(el)
+    expect(roadPanel).not.toContain('<div class="msg')
   })
 })
