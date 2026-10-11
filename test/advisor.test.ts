@@ -463,7 +463,7 @@ describe.skipIf(!has)("on the local save", () => {
 
   test("C43: a recruit who brings the true healer the four lack leans Recruit, and frees a place when the roster is full", async () => {
     const card = (md: string, q: string) => md.match(new RegExp(`- q: "${q}"[\\s\\S]*?\\n  lean: (\\d+)\\n  lean_why: "(.*)"`))
-    const build = async (holdHealers: boolean, cap: (t: Awaited<ReturnType<typeof town>>) => number) => {
+    const build = async (holdHealers: boolean, cap: (t: Awaited<ReturnType<typeof town>>) => number, tendSpare = false) => {
       const t = await town(await readSave(copyProfile()))
       // nobody fit to go carries a true heal: every hero who has learned one is held in town
       if (holdHealers) for (const h of t.heroes) { const sk = (await heroClass(h.cls)).skills; if ((h.learned ?? h.skills).some((s) => sk.get(s.id)?.targetsAllies && sk.get(s.id)!.healAvg >= RULE.realHeal)) h.busy = "the Abbey" }
@@ -473,9 +473,13 @@ describe.skipIf(!has)("on the local save", () => {
       t.recruits = [vestal, ...t.recruits.filter((r) => r.cls !== "vestal")]
       t.rosterCap = cap(t)
       const a = await advise(t)
-      // a level 0 hero outside the four, with nothing to recommend them, for a full roster to let go
-      const spare = t.heroes.find((h) => !h.busy && !a.best?.seats.some((s) => s.hero.guid === h.guid) && !a.dismiss.some((d) => d.hero.guid === h.guid))
-      if (spare) Object.assign(spare, { level: 0, quirks: [] })
+      // a level 0 hero outside the four, with nothing to recommend them, for a full roster to let go: joined after the advice, so it
+      // does not seat them, with the cap raised alongside so the places free stay as built
+      const spare = { ...t.heroes[0]!, guid: 990002, name: "Osric", level: 0, quirks: [] as typeof t.heroes[0]["quirks"], busy: "" }
+      t.heroes.push(spare); t.rosterSize++; t.rosterCap++
+      // the same spare, made the worst on the roster and sent to the Sanitarium this week, so the swap has to look past them
+      const bad = t.heroes.flatMap((h) => h.quirks).find((q) => !q.positive && !q.disease)
+      if (tendSpare && bad) { spare.quirks = [bad, bad, bad, bad, bad]; a.disease.push(spare) }
       return { t, a, md: source(t, a, { foresight: false, answers: {}, prices: await supplyPrices() }).board, spare }
     }
     // a place free: the Vestal leans Recruit, and the reason names the missing healer and her heal
@@ -488,13 +492,13 @@ describe.skipIf(!has)("on the local save", () => {
     expect(contradictions(open.md)).toEqual([])
     // the roster full: the place is freed by letting go of a level 0 hero outside the four, and the board still agrees with itself
     const full = await build(true, (t) => t.rosterSize)
-    if (full.spare) {
-      expect(card(full.md, "Recruit Aldith, Vestal\\?")![1]).toBe("0")
-      const d = card(full.md, `Dismiss ${full.spare.name}\\?`)
-      expect(d![1]).toBe("0")
-      expect(full.md).toContain("Aldith at the coach brings the true healer the four lack")
-    }
+    // the one let go is the weakest level 0 hero outside the four, whoever that is on this save; never one the board tends this week
+    const freed = (md: string) => [...md.matchAll(/- q: "Dismiss (.+?)\?"\n[\s\S]*?context: "[^"]*Aldith at the coach brings the true healer the four lack/g)].map((m) => m[1])
+    expect(card(full.md, "Recruit Aldith, Vestal\\?")![1]).toBe("0")
+    expect(freed(full.md)).toHaveLength(1)
     expect(contradictions(full.md)).toEqual([])
+    const tended = await build(true, (t) => t.rosterSize, true)
+    expect(freed(tended.md)).not.toContain("Osric")
     // the stun the same way: a recruit who carries one is named for a four without one, and one gap goes to one recruit only
     const r = (guid: number, own: boolean) => ({ hero: { guid, name: `R${guid}` }, why: "", stun: { skill: "Stunning Blow", own } }) as any
     const f = fills({ healer: true, stunner: false } as any, [r(1, false), r(2, true)])
