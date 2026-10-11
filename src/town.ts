@@ -27,6 +27,8 @@ export interface Town {
   skillDiscount: number; gearDiscount: number; visited: string[]; knownVariants: string[]
   heroUpgrades: Upgrade[]; buildingUpgrades: Upgrade[]; estateTrinkets: { id: string; name: string; classes: string[] }[]
   bought: Set<string>
+  /** every purchase with the hero it was bought for (0 for a building), from persist.upgrades.json instance_number (C26) */
+  purchases: { key: string; guid: number }[]
   supply: Record<string, string>
   event?: TownEvent
   raid?: Raid
@@ -293,6 +295,7 @@ export async function town(save: Save): Promise<Town> {
     lastQuest: typeof prog?.last_quest_played_id === "string" ? prog.last_quest_played_id : "", lastWon: !!prog?.last_raid_success,
     skillDiscount, gearDiscount, visited: [...visited], knownVariants: [...knownVariants],
     heroUpgrades, buildingUpgrades, estateTrinkets, bought, supply: await supplies(), event, raid,
+    purchases: Object.values<any>((save.upgrades as any)?.purchases ?? {}).filter((p) => p.is_purchased !== false).map((p) => ({ key: `${p.tree_id}:${p.requirement_code}`, guid: Number(p.instance_number) || 0 })),
   }
 }
 

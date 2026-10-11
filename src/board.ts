@@ -65,7 +65,7 @@ export function questLabel(p: Party): string {
 }
 
 /** The Hamlet as the week found it, kept on the first board of each week, so later boards can say what was done since (C26). */
-export interface WeekStart { week: number; heroes: { guid: number; name: string }[]; bought: string[]; gold: number | null }
+export interface WeekStart { week: number; heroes: { guid: number; name: string }[]; bought: string[]; gold: number | null; purchases?: string[] }
 
 /** What the saves show was done this week, whether or not it was ever sent from the board (C26). */
 export function weekSoFar(t: Town, start: WeekStart | undefined): string[] {
@@ -80,8 +80,16 @@ export function weekSoFar(t: Town, start: WeekStart | undefined): string[] {
   const left = start.heroes.filter((h) => !now.has(h.guid))
   if (left.length) out.push(`Gone from the roster: ${left.map((h) => `${h.name}${fell.has(h.guid) ? " (fallen)" : ""}`).join(", ")}.`)
   // code "0" is the level every hero (and every recruit at the coach) starts with, not a purchase
-  const had = new Set(start.bought), got = [...t.bought].filter((b) => !had.has(b) && !b.endsWith(":0"))
-  const named = (b: string) => { const [tree, code] = b.split(":"); const u = [...t.heroUpgrades, ...t.buildingUpgrades].find((x) => x.tree === tree); return u ? `${u.hero ? `${u.hero}'s ` : ""}${u.label}, ${TIER[Number.isNaN(Number(code)) ? code!.charCodeAt(0) - 97 : Number(code)] ?? code} step` : inWords(`${tree} ${code}`) }
+  // each purchase is named for the hero the save records it was bought for, never for the first hero of that class
+  const tag = (p: { key: string; guid: number }) => `${p.guid}|${p.key}`
+  const had = new Set(start.purchases ?? t.purchases.filter((p) => start.bought.includes(p.key)).map(tag))
+  const got = t.purchases.filter((p) => !had.has(tag(p)) && !p.key.endsWith(":0") && (!p.guid || t.heroes.some((h) => h.guid === p.guid) && start.heroes.some((h) => h.guid === p.guid)))
+  const named = (p: { key: string; guid: number }) => {
+    const [tree = "", code = ""] = p.key.split(":"), hero = t.heroes.find((h) => h.guid === p.guid)
+    const step = `${TIER[Number.isNaN(Number(code)) ? code!.charCodeAt(0) - 97 : Number(code)] ?? code} step`
+    const u = hero ? t.heroUpgrades.find((x) => x.tree === tree && x.hero === hero.name) : t.buildingUpgrades.find((x) => x.tree === tree)
+    return hero ? `${hero.name}'s ${u?.label ?? tree.split(".")[1]!.replace(/_/g, " ")}, ${step}` : u ? `${u.label}, ${step}` : inWords(`${tree} ${code}`)
+  }
   if (got.length) out.push(`Bought: ${got.map(named).join("; ")}.`)
   if (start.gold !== null && (t.wallet.gold ?? 0) !== start.gold) out.push(`${coin(Math.abs(start.gold - (t.wallet.gold ?? 0)))} ${(t.wallet.gold ?? 0) < start.gold ? "spent" : "gained"} since the week began.`)
   return out
@@ -430,7 +438,7 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
   const wsFile = Bun.file(join(outDir, "week-start.json"))
   let start = (await wsFile.exists()) ? ((await wsFile.json()) as WeekStart) : undefined
   if (!start || start.week !== t.week) {
-    start = { week: t.week, heroes: t.heroes.map((h) => ({ guid: h.guid, name: h.name })), bought: [...t.bought], gold: t.wallet.gold ?? 0 }
+    start = { week: t.week, heroes: t.heroes.map((h) => ({ guid: h.guid, name: h.name })), bought: [...t.bought], gold: t.wallet.gold ?? 0, purchases: t.purchases.map((p) => `${p.guid}|${p.key}`) }
     await Bun.write(wsFile, JSON.stringify(start, null, 1))
   }
   const { board, sources } = source(t, a, { foresight: !!opts.foresight, answers, own, checks, prices: await supplyPrices(), soFar: weekSoFar(t, start) })
