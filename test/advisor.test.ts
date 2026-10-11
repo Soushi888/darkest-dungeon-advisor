@@ -79,13 +79,16 @@ describe.skipIf(!has)("on the local save", () => {
     // a folder that does not exist yet, as in a fresh worktree: the build's portraits land there, and nowhere near the live board
     const fresh = join(root, ".dd-runtime", "test-town-fresh")
     rmSync(fresh, { recursive: true, force: true })
+    // what the live board's portrait folder holds, and when each was written, read before and after the build
+    const look = () => existsSync(join(live, "img")) ? readdirSync(join(live, "img")).map((f) => `${f}@${statSync(join(live, "img", f)).mtimeMs}`).join() : ""
+    const before = look()
     process.env.DD_TOWN_OUT = fresh
     try {
       const t = await town(await readSave(copyProfile()))
       source(t, await advise(t), { foresight: false, answers: {}, prices: await supplyPrices() })
       expect(outDir()).toBe(fresh)
       expect(readdirSync(join(fresh, "img")).length).toBeGreaterThan(0)
-      expect(fresh.startsWith(live)).toBe(false)
+      expect(look()).toBe(before)
     } finally {
       process.env.DD_TOWN_OUT = townOut
       rmSync(fresh, { recursive: true, force: true })
