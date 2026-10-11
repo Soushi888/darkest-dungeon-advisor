@@ -29,6 +29,9 @@ export function rawNames(md: string): string[] {
 export function contradictions(md: string): string[] {
   const all = cards(md), found: string[] = []
   for (const w of rawNames(md)) found.push(`a raw name is on the board: ${w}`)
+  // no hero is offered the same trinket twice (U23)
+  const offered = [...md.matchAll(/- title: "(.+?) to ([^"]+)"\n {2}kind: idea/g)].map((m) => `${m[1]} to ${m[2]}`)
+  for (const o of new Set(offered.filter((x, i) => offered.indexOf(x) !== i))) found.push(`the same trinket is offered twice: ${o}`)
   const party = all.find((c) => c.q.startsWith("Take this party"))
   const four = party ? [...party.context.matchAll(/\d\. ([^(;]+?) \(/g)].map((m) => m[1]!.trim()) : []
   const going = (n: string) => four.includes(n)
