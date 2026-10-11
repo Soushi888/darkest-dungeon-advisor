@@ -107,7 +107,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   const firstRoad = `the road comes first: I keep ${coin(reserve)} for provisions, and ${left ? `only ${coin(left)} is` : "nothing is"} free`
 
   L.push(`# The *Hamlet*, week ${t.week}`, "")
-  L.push(`You are back, and the estate stands. ${t.heroes.length} names on the roster, ${coin(gold)} in the coffers, ${t.quests_won} of ${t.quests_done} expeditions won. I have gone through the ledgers and walked the streets; here is what I would do before the coach leaves again. Where a number is only my own habit, I say so.`, "")
+  L.push(`You are back, and the estate stands. ${t.heroes.length} names on the roster, ${coin(gold)} in the coffers, ${t.quests_won} of ${t.quests_done} expeditions won. I have gone through the ledgers and walked the streets; here is what I would do before the coach leaves again, in the order I would do it: the estate, who stays, who rests, then the road, the training and the provisions last. Where a number is only my own habit, I say so.`, "")
   L.push("```board-idea")
   L.push(`headline: ${y(chosen ? `${chosen.quest.dungeonName} next,\nwith ${chosen.seats.map((s) => s.hero.name).join(", ")}.` : "Rest first.\nNo four are fit to go.")}`)
   L.push(`detail: ${y(a.afflicted.length ? `${a.afflicted.map((h) => h.name).join(" and ")} cannot be trusted in the dark until the Abbey or the Tavern has had them.` : "Nobody is afflicted. Spend on the party first, the estate second.")}`)
@@ -179,7 +179,8 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     L.push("```", "")
   }
 
-  // expedition first: its cards stay numbered 1 and 2 whatever else changes, so a stored pick never drifts onto them
+  // the expedition: built here, shown after the roster and the rest by inActingOrder (C31); picks follow their question,
+  // not their card number, so moving the cards no longer slides a pick (C18)
   L.push("## The next expedition {wide}", "")
   L.push(`The roads the estate can send you down this week. I name only the foes your heroes have fought, in places they have walked; of the rest I say nothing. ${opts.foresight ? "Travellers' tales do reach me, though, and where I repeat one I say so." : ""}`.trim(), "")
   if (a.parties.length) {
@@ -418,7 +419,23 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   S.push("| Figure | What | Read from |", "|---|---|---|")
   for (const [n, what, from] of rows) S.push(`| ${n} | ${what.replace(/\|/g, "/")} | ${from} |`)
   S.push("", `Save copied from your Steam profile to \`.dd-runtime/profile/\` and decoded there; your files are never written. Game data read from the install. ${t.witnessedSkills} enemy attacks witnessed, dungeons walked: ${t.visited.join(", ") || "none"}. Rules of mine on this page: rest at ${RULE.restAbove} stress, send under ${RULE.sendBelow}, let go of level 0 heroes with ${RULE.dismissNegatives}+ bad quirks.`, "")
-  return { board: L.join("\n"), sources: S.join("\n") }
+  return { board: inActingOrder(L.join("\n")), sources: S.join("\n") }
+}
+
+/** C31: the board reads in the order the week is played, each section changing what the next can advise: what happened,
+ *  the coffers, the estate's upgrades, who stays (the pool), who rests (who is free), the road and the party, how ready they
+ *  are, the party's training, and the road's provisions last, out of what is left (Soushi, 2026-10-10). Sections are built
+ *  in the order their figures depend on (the gold the leans spend, the party the training trains) and shown in this one. */
+export const ACTING_ORDER = [
+  "This week in the Hamlet", "This week so far", "Did you do what you chose?", "The estate's coffers", "Heirlooms and trinkets",
+  "Who stays, who goes", "Who rests, who prays", "The next expedition", "How ready they are", "The Guild and the Blacksmith",
+  "Provisions for the road", "How I keep the accounts",
+]
+export function inActingOrder(md: string): string {
+  const parts = md.split(/\n(?=## )/)
+  const head = parts[0]!, sections = parts.slice(1)
+  const rank = (sec: string) => { const i = ACTING_ORDER.findIndex((t) => sec.startsWith(`## ${t}`)); return i < 0 ? ACTING_ORDER.length : i }
+  return [head, ...sections.map((sec, i) => ({ sec, i })).sort((a, b) => rank(a.sec) - rank(b.sec) || a.i - b.i).map((x) => x.sec)].join("\n")
 }
 
 export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): Promise<string> {

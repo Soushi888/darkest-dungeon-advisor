@@ -10,7 +10,7 @@ import { readSave } from "../src/read.ts"
 import { town } from "../src/town.ts"
 import { profileDir, root } from "../src/paths.ts"
 import { boardOptions, mergePicks, parseAnswers, reconcile } from "../src/reconcile.ts"
-import { road, source, weekSoFar } from "../src/board.ts"
+import { ACTING_ORDER, road, source, weekSoFar } from "../src/board.ts"
 import { supplyPrices } from "../src/game.ts"
 import { advise, readiness, seatParty, RULE } from "../src/advise.ts"
 
@@ -445,5 +445,19 @@ describe.skipIf(!has)("on the local save", () => {
         expect(readiness(t, p, 0).checks.find((c) => c.label === "A healer goes with them")!.met).toBe(false)
       }
     }
+  })
+
+  test("C31: the board reads in the order the week is played", async () => {
+    const t = await town(await readSave(copyProfile()))
+    const md = source(t, await advise(t), { foresight: false, answers: {}, prices: await supplyPrices() }).board
+    const heads = [...md.matchAll(/^## (.+?)(?: \{wide\})?$/gm)].map((m) => m[1]!)
+    const ranks = heads.map((h) => ACTING_ORDER.findIndex((o) => h.startsWith(o)))
+    expect(ranks.every((r) => r >= 0)).toBe(true)
+    expect(ranks).toEqual([...ranks].sort((a, b) => a - b))
+    // what changes the pool comes before the party; what is spent on the party comes after it
+    const at = (h: string) => heads.findIndex((x) => x.startsWith(h))
+    expect(at("Who stays, who goes")).toBeLessThan(at("The next expedition"))
+    expect(at("Who rests, who prays")).toBeLessThan(at("The next expedition"))
+    if (at("Provisions for the road") >= 0) expect(at("Provisions for the road")).toBeGreaterThan(at("The next expedition"))
   })
 })
