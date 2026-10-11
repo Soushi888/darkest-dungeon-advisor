@@ -485,7 +485,9 @@ describe.skipIf(!has)("on the local save", () => {
       const base = t.recruits[0] ?? t.heroes[0]!
       const ids = ["judgement", "dazzling_light", "divine_grace", "divine_comfort"]
       const vestal = { ...base, guid: 990001, name: "Aldith", cls: "vestal", clsName: "Vestal", level: 0, quirks: [], from: undefined, learned: undefined, skills: await Promise.all(ids.map(async (id) => ({ id, name: await nameOf("skill", id, "vestal"), level: 0 }))) }
-      t.recruits = [vestal, ...t.recruits.filter((r) => r.cls !== "vestal")]
+      // the Vestal is the only one at the coach, so the week's own recruits never take the place she is tested for (week 17's
+      // coach brought nine, and Godefroy took the one free place: the test was about the save, not the code)
+      t.recruits = [vestal]
       t.rosterCap = cap(t)
       const a = await advise(t)
       // a level 0 hero outside the four, with nothing to recommend them, for a full roster to let go: joined after the advice, so it
