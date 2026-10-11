@@ -61,7 +61,8 @@ export async function feed() {
       // a foe's full health is the .hp of its own monster file; pages keep no maximum, and a foe's id is reused across fights
       foes: p.battle ? await Promise.all(p.battle.foes.map(async (f: any) => {
         const max = f.cls ? (await monster(f.cls))?.hp ?? 0 : 0
-        return { name: f.name, hp: f.hp, maxHp: Math.max(f.hp, max), stunned: !!f.stunned, dots: f.dots ?? [] }
+        // a corpse is a foe already killed, left lying in its rank: it blocks the line but cannot act
+        return { name: f.name, hp: f.hp, maxHp: Math.max(f.hp, max), stunned: !!f.stunned, dots: f.dots ?? [], dead: /^corpse/.test(f.cls ?? "") }
       })) : null, round: p.battle?.round,
       // C51: the map as the party knows it, drawn without letters, and where they stand in words
       map: mapSvg(p.map), where: whereLine(p.map),
@@ -81,6 +82,7 @@ export const roadPanel = `<style>
 #road .bar.st::after{content:"";position:absolute;left:50%;top:0;bottom:0;border-left:1px dashed var(--gold)}
 #road .bar span{position:absolute;right:.3rem;top:-.12rem;font-size:.72rem;color:var(--gold);mix-blend-mode:difference}
 #road .seat.foe .bar.hp i{background:#4a5a2a}
+#road .seat.foe.dead{opacity:.45}#road .seat.foe.dead .bar.hp i{background:#555}
 #road .tag{color:var(--gold);font-size:.8rem}
 #roadThread{max-height:28rem;overflow-y:auto;margin:.8rem 0;display:flex;flex-direction:column;gap:.5rem}
 #road .msg{max-width:85%;padding:.5rem .7rem;border-radius:4px;border:1px solid var(--line);white-space:pre-wrap;line-height:1.35;background:var(--panel)}
@@ -101,7 +103,7 @@ const time=iso=>new Date(iso).toLocaleTimeString("en-GB",{hour:"2-digit",minute:
 let shown="";
 async function tick(){try{const d=await (await fetch("/road/feed",{cache:"no-store"})).json();z.hidden=!d.out;if(!d.out)return;const s=d.state;
 if(!link&&nav){link=document.createElement('a');link.href='#road';link.textContent='On the road';const l=nav.querySelector('a[href^="#"]');l?l.before(link):nav.prepend(link)}
-if(s)document.getElementById("roadParty").innerHTML='<div class="meta">Page '+esc(s.page)+' in the '+esc(s.dungeon)+' · light '+s.torch+' · '+s.rooms+' rooms, '+s.battles+' battles · '+s.food+' food, '+s.torches+' torches'+(s.foes?' · round '+s.round:'')+'</div>'+(s.foes?'<div class="seat meta"><div>The foes</div><div>Health</div><div></div></div>'+s.foes.map(f=>'<div class="seat foe"><div>'+esc(f.name)+(f.stunned?' <span class="tag">stunned</span>':'')+(f.dots.length?' <span class="tag">'+esc(f.dots.join(', '))+'</span>':'')+'</div><div class="bar hp" title="health"><i style="width:'+Math.max(0,Math.min(100,100*f.hp/f.maxHp))+'%"></i><span>'+f.hp+'/'+f.maxHp+'</span></div><div></div></div>').join(''):'')+'<div class="seat meta"><div>The four</div><div>Health</div><div>Stress (the line is 100, the end 200)</div></div>'+
+if(s)document.getElementById("roadParty").innerHTML='<div class="meta">Page '+esc(s.page)+' in the '+esc(s.dungeon)+' · light '+s.torch+' · '+s.rooms+' rooms, '+s.battles+' battles · '+s.food+' food, '+s.torches+' torches'+(s.foes?' · round '+s.round:'')+'</div>'+(s.foes?'<div class="seat meta"><div>The foes</div><div>Health</div><div></div></div>'+s.foes.map(f=>'<div class="seat foe'+(f.dead?' dead':'')+'"><div>'+(f.dead?'<s>'+esc(f.name)+'</s> <span class="tag">dead, only its body blocks the rank</span>':esc(f.name))+(f.stunned?' <span class="tag">stunned</span>':'')+(f.dots.length?' <span class="tag">'+esc(f.dots.join(', '))+'</span>':'')+'</div><div class="bar hp" title="health"><i style="width:'+Math.max(0,Math.min(100,100*f.hp/f.maxHp))+'%"></i><span>'+f.hp+'/'+f.maxHp+'</span></div><div></div></div>').join(''):'')+'<div class="seat meta"><div>The four</div><div>Health</div><div>Stress (the line is 100, the end 200)</div></div>'+
 s.heroes.map(h=>'<div class="seat"><div>'+esc(h.name)+(h.affliction?' <span class="tag">'+esc(h.affliction)+'</span>':'')+(h.virtue?' <span class="tag">'+esc(h.virtue)+'</span>':'')+(h.deathsDoor?' <span class="tag">Death\\'s Door</span>':'')+'</div>'+
 '<div class="bar hp" title="health"><i style="width:'+Math.max(0,Math.min(100,100*h.hp/h.maxHp))+'%"></i><span>'+h.hp+'/'+h.maxHp+'</span></div>'+
 '<div class="bar st" title="stress, of 200; the line is 100"><i style="width:'+Math.min(100,h.stress/2)+'%"></i><span>'+h.stress+'</span></div></div>').join("");
