@@ -8,7 +8,7 @@ import { feed, roadPanel } from "../src/road.ts"
 
 const hero = (name: string, guid: number, hp: number, stress: number, more: object = {}) => ({ guid, name, cls: "leper", hp, maxHp: 35, stress, affliction: "", virtue: "", deathsDoor: false, lastBlow: "", ...more })
 const page = { at: "", dungeon: "warrens", difficulty: 1, length: 1, quest: "explore", key: "k", torch: 79, inBattle: false, tally: { ROOM_VISITED: 8, BATTLE_COMPLETED: 3 },
-  supplies: { food: 4, torch: 6, holy_water: 1, gold: 1375, portrait: 3, journal_page_13: 1 }, heroes: [hero("Poussin", 1, 35.4, 50), hero("Burci", 2, 22, 56, { affliction: "Paranoid" }), hero("Azor", 3, 20, 16)] }
+  supplies: { food: 4, torch: 6, holy_water: 1, gold: 1375, portrait: 3, journal_page_13: 1, vengeful_greaves: 1, no_such_thing: 1 }, heroes: [hero("Poussin", 1, 35.4, 50), hero("Burci", 2, 22, 56, { affliction: "Paranoid" }), hero("Azor", 3, 20, 16)] }
 
 describe("C66: the recap, built from the page, shown as the report", () => {
   test("every number comes from the page: the tally, the four, the light, the provisions before the loot", () => {
@@ -26,7 +26,10 @@ describe("C66: the recap, built from the page, shown as the report", () => {
     const food = r.packs.items.find((x) => x.key === "food")!
     expect(food.icon).toBe("img/items/food.png")
     expect(existsSync(join(out, "img", "items", "food.png"))).toBe(true)
-    expect(r.packs.items.find((x) => x.key === "journal_page_13")!.icon).toBeUndefined()
+    // journal pages and trinkets carry their own icons too (pm#27); only what the install has no picture for keeps its word
+    expect(r.packs.items.find((x) => x.key === "journal_page_13")!.icon).toBe("img/items/journal_page_13.png")
+    expect(r.packs.items.find((x) => x.key === "vengeful_greaves")!.icon).toBe("img/items/vengeful_greaves.png")
+    expect(r.packs.items.find((x) => x.key === "no_such_thing")!.icon).toBeUndefined()
     expect(r).toMatchObject({ page: "0115", advice: "Light a torch.", since: "Two battles won." })
     rmSync(out, { recursive: true, force: true })
   })

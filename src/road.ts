@@ -110,15 +110,14 @@ export const roadPanel = `<style>
 #road .packs{margin:.8rem 0}#road .words{margin:1rem 0 .4rem;line-height:1.5;font-size:1.05rem}#road .words .said{margin:0 0 .7rem}
 #road .meta{color:var(--dim);font-size:.9rem;margin:.2rem 0 .4rem}
 #road .seat{display:grid;grid-template-columns:7rem minmax(0,1fr) minmax(0,1fr);gap:.6rem;align-items:center;margin:.25rem 0;font-size:.95rem}
-#road .bar{position:relative;display:block;height:.8rem;padding:0;background:#000;border:1px solid var(--line);border-radius:2px;overflow:hidden;box-shadow:none}
+#road .bar{position:relative;display:block;height:1.1rem;padding:0;background:#000;border:1px solid var(--line);border-radius:2px;overflow:hidden;box-shadow:none}
 #road .bar i{position:absolute;inset:0 auto 0 0;display:block}#road .bar.hp i{background:var(--blood)}#road .bar.st i{background:var(--ink)}
 #road .bar.st::after{content:"";position:absolute;left:50%;top:0;bottom:0;border-left:1px dashed var(--gold)}
-#road .bar span{position:absolute;right:.3rem;top:-.12rem;font-size:.72rem;color:var(--gold);mix-blend-mode:difference}
+#road .bar span{position:absolute;right:.35rem;top:50%;transform:translateY(-50%);font-size:.85rem;line-height:1;color:var(--ink);text-shadow:0 0 3px #000,0 0 2px #000}#road .num{font-size:.9rem;color:var(--ink)}
 #road .seat.foe .bar.hp i{background:#4a5a2a}#road .seat.foe.dead{opacity:.45}#road .seat.foe.dead .bar.hp i{background:#555}
 #road .tag{color:var(--gold);font-size:.8rem}
 #road .packs{display:flex;flex-wrap:wrap;gap:.35rem 1rem;align-items:center}
-#road .it{display:inline-flex;align-items:center;gap:.3rem;white-space:nowrap}#road .it img{height:1.6rem;width:auto}#road .it.loot{opacity:.9}
-#road .packs .sep{flex-basis:100%;height:0}
+#road .it{display:inline-flex;flex-direction:column;align-items:center;gap:.15rem;min-width:3.4rem}#road .it .ic{display:inline-flex;align-items:center;gap:.3rem;padding:.2rem .45rem;border-radius:4px;background:#3a332a;border:1px solid var(--line)}#road .it img{height:1.7rem;width:auto}#road .it small{font-size:.72rem;color:var(--dim);text-align:center;max-width:6rem}#road .packs.loot{margin-top:.4rem}#road .packs .lab{font-variant:small-caps;color:var(--gold);margin-right:.4rem;align-self:center}
 #roadThread{max-height:min(70vh,48rem);overflow-y:auto;margin:.8rem 0;display:flex;flex-direction:column;gap:.5rem}
 #road .msg{max-width:92%;padding:.5rem .7rem;border-radius:4px;border:1px solid var(--line);white-space:pre-wrap;line-height:1.35;background:var(--panel);margin:0}
 #road .msg.soushi{align-self:flex-end;border-color:var(--blood)}#road .msg.caretaker{align-self:flex-start}
@@ -143,12 +142,12 @@ const put=(el,h)=>{if(el.dataset.h===h)return;el.dataset.h=h;el.innerHTML=h};
 const pct=(a,b)=>Math.max(0,Math.min(100,100*a/Math.max(1,b)));
 const tags=t=>(t||[]).map(x=>' <span class="tag">'+esc(x)+'</span>').join('');
 const four=hs=>'<p class="seat meta"><span></span><span>Health</span><span>Stress (the line is 100)</span></p>'+hs.map(h=>'<p class="seat"><span>'+esc(h.name)+tags(h.tags)+'</span><span class="bar hp" title="health"><i style="width:'+pct(h.hp,h.maxHp)+'%"></i><span>'+h.hp+'/'+h.maxHp+'</span></span><span class="bar st" title="stress, of 200; the line is 100"><i style="width:'+Math.min(100,h.stress/2)+'%"></i><span>'+h.stress+'</span></span></p>').join('');
-const item=x=>'<span class="it'+(x.kind==='loot'?' loot':'')+'" title="'+esc(x.label)+'">'+(x.icon?'<img src="'+esc(x.icon)+'" alt="'+esc(x.label)+'">':esc(x.label)+' ')+'<b>'+x.n.toLocaleString('en-US')+'</b></span>';
+const item=x=>'<span class="it'+(x.kind==='loot'?' loot':'')+'" title="'+esc(x.label)+'"><span class="ic">'+(x.icon?'<img src="'+esc(x.icon)+'" alt="'+esc(x.label)+'">':'')+'<b>'+x.n.toLocaleString('en-US')+'</b></span><small>'+esc(x.label)+'</small></span>';
 const lost=n=>n?n+' lost':'none lost';
 const words=t=>String(t||'').split(/\\n\\s*\\n/).map(x=>x.trim()).filter(Boolean).map(x=>'<p class="said">'+esc(x)+'</p>').join('');
-const card=r=>'<p class="rc-head">Page '+Number(r.page)+' · '+r.tally.rooms+' rooms · '+r.tally.battles+' battles · '+lost(r.tally.lost)+'</p>'+four(r.four)+'<p class="packs"><span class="it">light <b>'+r.packs.light+'</b></span>'+r.packs.items.filter(x=>x.kind!=='loot').map(item).join('')+'<span class="sep"></span>'+r.packs.items.filter(x=>x.kind==='loot').map(item).join('')+'</p><div class="words">'+words(r.since)+words(r.advice)+'</div>';
+const card=r=>'<p class="rc-head">Page '+Number(r.page)+' · '+r.tally.rooms+' rooms · '+r.tally.battles+' battles · '+lost(r.tally.lost)+'</p>'+four(r.four)+'<p class="packs"><span class="it"><span class="ic"><b>'+r.packs.light+'</b></span><small>light</small></span>'+r.packs.items.filter(x=>x.kind!=='loot').map(item).join('')+'</p>'+(r.packs.items.some(x=>x.kind==='loot')?'<p class="packs loot"><span class="lab">Loot</span>'+r.packs.items.filter(x=>x.kind==='loot').map(item).join('')+'</p>':'')+'<div class="words">'+words(r.since)+words(r.advice)+'</div>';
 const live=s=>'<p class="rc-head">Page '+Number(s.page)+' in the '+esc(s.dungeon)+' · '+s.rooms+' rooms · '+s.battles+' battles</p>'+four(s.heroes.map(h=>({...h,tags:[h.affliction,h.virtue,h.deathsDoor?"Death's Door":""].filter(Boolean)})))+'<p class="packs"><span class="it">light <b>'+s.torch+'</b></span><span class="it">food <b>'+s.food+'</b></span><span class="it">torches <b>'+s.torches+'</b></span></p>';
-const foes=s=>s&&s.foes?'<p class="meta">The foes, round '+s.round+'</p>'+s.foes.map(f=>'<p class="seat foe'+(f.dead?' dead':'')+'"><span>'+(f.dead?'<s>'+esc(f.name)+'</s> <span class="tag">dead, only its body blocks the rank</span>':esc(f.name))+(f.stunned?' <span class="tag">stunned</span>':'')+(f.dots&&f.dots.length?' <span class="tag">'+esc(f.dots.join(', '))+'</span>':'')+'</span><span class="bar hp" title="health"><i style="width:'+pct(f.hp,f.maxHp)+'%"></i><span>'+f.hp+'/'+f.maxHp+'</span></span><span></span></p>').join(''):'';
+const foes=s=>s&&s.foes?'<p class="meta">The foes, round '+s.round+'</p>'+s.foes.map(f=>'<p class="seat foe'+(f.dead?' dead':'')+'"><span>'+(f.dead?'<s>'+esc(f.name)+'</s> <span class="tag">dead, only its body blocks the rank</span>':esc(f.name))+(f.stunned?' <span class="tag">stunned</span>':'')+(f.dots&&f.dots.length?' <span class="tag">'+esc(f.dots.join(', '))+'</span>':'')+'</span><span class="bar hp" title="health"><i style="width:'+pct(f.hp,f.maxHp)+'%"></i><span>'+f.hp+'/'+f.maxHp+'</span></span><span class="num">'+f.hp+' of '+f.maxHp+'</span></p>').join(''):'';
 const who=l=>'<span class="who">'+(l.from==="soushi"?"You":"The Caretaker")+' · '+time(l.at)+(l.page?(l.gameAt?' · about page '+esc(l.page)+', the game was at '+esc(l.gameAt):' · page '+esc(l.page)):'')+'</span>';
 let shown="";
 async function tick(){try{const d=await (await fetch("/road/feed",{cache:"no-store"})).json();z.hidden=!d.out;if(!d.out)return;const s=d.state;
