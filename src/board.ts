@@ -315,9 +315,11 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   if (a.buys.length) {
     L.push("```board-decisions")
     L.push(`- q: "What do we train first?"`, `  context: ${y(`You have ${coin(gold)}. These are the party's upgrades you can afford now, cheapest first.`)}`, "  options:")
-    for (const u of a.buys.slice(0, 5)) L.push(`    - pick: ${y(`${u.hero}: ${u.label} to level ${u.toLevel}`)}`, `      effect: ${y(`${coin(u.cost.find((c) => c.type === "gold")?.amount ?? 0)} at the ${u.where}.`)}`)
-    L.push(`    - pick: "Keep the gold"`, `      effect: ${y("Spend nothing at the Guild this week.")}`)
-    const shown = a.buys.slice(0, 5), price = (u: (typeof shown)[number]) => u.cost.find((c) => c.type === "gold")?.amount ?? 0
+    // the five cheapest lessons, and every piece of the smith's work the coffers can pay for, so an upgrade just opened is never hidden (Soushi, 2026-10-10)
+    const shown = [...a.buys.filter((u) => u.where !== "Blacksmith").slice(0, 5), ...a.buys.filter((u) => u.where === "Blacksmith")]
+    for (const u of shown) L.push(`    - pick: ${y(`${u.hero}: ${u.label} to level ${u.toLevel}`)}`, `      effect: ${y(`${coin(u.cost.find((c) => c.type === "gold")?.amount ?? 0)} at the ${u.where}.`)}`)
+    L.push(`    - pick: "Keep the gold"`, `      effect: ${y("Spend nothing at the Guild or the Blacksmith this week.")}`)
+    const price = (u: (typeof shown)[number]) => u.cost.find((c) => c.type === "gold")?.amount ?? 0
     const heal = shown.findIndex((u) => /medicine|reconstruction|grace|comfort|heal/i.test(u.label) && price(u) <= left)
     const cheap = shown.findIndex((u) => price(u) <= left)
     const pick = heal >= 0 ? heal : cheap
