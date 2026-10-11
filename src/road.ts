@@ -1,7 +1,7 @@
 // The road zone: a conversation with the Caretaker while the party is out (C49). Soushi writes from the dungeon,
 // the agent watching the session answers at every turn, and the page shows both beside the party's latest state.
 //   bun run say "<text>"        the agent's comment on the current page, appended to the expedition's thread
-//   (served by bun run watch)   the board's first zone while the party is out; /road/feed its data, POST /road/message a line from Soushi
+//   (served by bun run watch)   the farewell board's first zone while the party is out; /road/feed its data, POST /road/message a line from Soushi
 // It only reads the chronicle and writes under .local/town/road/ (ISA A1).
 import { appendFileSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs"
 import { join } from "node:path"
@@ -62,8 +62,9 @@ export async function feed() {
   return { trip: c.trip, state, lines }
 }
 
-// C49: the road zone, served at /road inside the board's own shell (Soushi, 2026-10-11: "like another page, but in the same
-// app, not external"). The bar switches between the board and the road in the same tab; the zone draws from /road/feed.
+// C49: the road zone. While the party is out, the farewell board turns into the road: this zone opens it, above the
+// farewell's own zones, in the same page (Soushi, 2026-10-11: "it could be a transformation of the 'The coach has left'
+// page"). It shows only while the party is out, and draws from /road/feed every two seconds.
 export const roadPanel = `<style>
 #road .meta{color:var(--dim);font-size:.9rem;margin:.2rem 0 .4rem}
 #road .seat{display:grid;grid-template-columns:7rem 1fr 1fr;gap:.6rem;align-items:center;margin:.2rem 0;font-size:.95rem}
@@ -79,17 +80,16 @@ export const roadPanel = `<style>
 #roadForm{display:flex;gap:.5rem}#roadForm textarea{flex:1;background:var(--panel);color:var(--ink);border:1px solid var(--line);font:inherit;padding:.5rem;resize:vertical;min-height:3.2rem}
 #road .empty{color:var(--dim);font-style:italic}
 @media (max-width:520px){#road .seat{grid-template-columns:5rem 1fr 1fr}}
-</style><script>(()=>{const road=!!window.DD_ROAD,nav=document.querySelector('nav.bar');
-if(nav){const a=document.createElement('a');a.className='btn';a.href=road?'/':'/road';a.textContent=road?'The board':'On the road';nav.prepend(a)}
-if(!road)return;document.title='On the Road';if(nav)for(const l of nav.querySelectorAll('a[href^="#"]'))l.href='/'+l.getAttribute('href');
-for(const x of document.querySelectorAll('section.zone'))x.hidden=true;
-const z=document.createElement('section');z.className='zone wide';z.id='road';
+</style><script>(()=>{const nav=document.querySelector('nav.bar');
+const z=document.createElement('section');z.className='zone wide';z.id='road';z.hidden=true;
 z.innerHTML='<h2>On the road, with the Caretaker</h2><div id="roadParty"></div><div id="roadThread"></div><form id="roadForm"><textarea id="roadText" placeholder="Write to the Caretaker (Enter sends, Shift+Enter breaks the line)"></textarea><button class="btn primary">Send</button></form>';
 const first=document.querySelector('section.zone');if(first)first.before(z);else document.body.append(z);
+let link=null;
 const esc=s=>String(s??"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"})[c]);
 const time=iso=>new Date(iso).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});
 let shown="";
-async function tick(){try{const d=await (await fetch("/road/feed",{cache:"no-store"})).json();const s=d.state;if(!d.out&&!d.lines.length){document.getElementById('roadParty').innerHTML='<div class="empty">The party is home. This page wakes when they leave again.</div>';return}
+async function tick(){try{const d=await (await fetch("/road/feed",{cache:"no-store"})).json();z.hidden=!d.out;if(!d.out)return;const s=d.state;
+if(!link&&nav){link=document.createElement('a');link.href='#road';link.textContent='On the road';const l=nav.querySelector('a[href^="#"]');l?l.before(link):nav.prepend(link)}
 if(s)document.getElementById("roadParty").innerHTML='<div class="meta">Page '+esc(s.page)+' in the '+esc(s.dungeon)+' · light '+s.torch+' · '+s.rooms+' rooms, '+s.battles+' battles · '+s.food+' food, '+s.torches+' torches'+(s.foes?' · round '+s.round+': '+s.foes.map(f=>esc(f.name)+' '+f.hp+'hp').join(', '):'')+'</div><div class="seat meta"><div></div><div>Health</div><div>Stress (the line is 100, the end 200)</div></div>'+
 s.heroes.map(h=>'<div class="seat"><div>'+esc(h.name)+(h.affliction?' <span class="tag">'+esc(h.affliction)+'</span>':'')+(h.virtue?' <span class="tag">'+esc(h.virtue)+'</span>':'')+(h.deathsDoor?' <span class="tag">Death\\'s Door</span>':'')+'</div>'+
 '<div class="bar hp" title="health"><i style="width:'+Math.max(0,Math.min(100,100*h.hp/h.maxHp))+'%"></i><span>'+h.hp+'/'+h.maxHp+'</span></div>'+

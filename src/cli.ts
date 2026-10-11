@@ -98,9 +98,8 @@ if (cmd === "town") {
         await rebuild()
         return new Response("ok")
       }
-      // C49: /road is the same app on another page: the board's own shell and bar, showing only the road zone
-      if (path === "/" || path === "/town.html" || path === "/road") {
-        const onRoad = path === "/road"
+      if (path === "/road") return Response.redirect("/#road", 302)
+      if (path === "/" || path === "/town.html") {
         const html = await Bun.file(join(outDir, "town.html")).text()
         // the last send's stamp: a page whose inputs predate it forgets them on load, even inputs kept from before this fix
         const log = join(outDir, "answers-log.md")
@@ -113,7 +112,7 @@ if (cmd === "town") {
         const cards = (await md.exists()) ? [...boardOptions(await md.text())].map(([q, o]) => ({ q, o })) : []
         const key = (html.match(/window\.BRAINSTORM_KEY=("(?:[^"\\]|\\.)*")/)?.[1]) ?? '"brainstorm"'
         const rekey = `<script>(()=>{try{const K=${key}+':v1',C=${JSON.stringify(cards).replaceAll("<", "\\u003c")},st=JSON.parse(localStorage.getItem(K)||'{}'),was=JSON.parse(localStorage.getItem('ddCards')||'null');if(st.dec&&was){const byQ={};for(const[id,v]of Object.entries(st.dec)){const q=was[Number(id)-1];if(q)byQ[q]=v}const dec={};C.forEach((c,i)=>{const v=byQ[c.q];if(!v)return;const keep={};if(v.pick&&c.o.includes(v.pick))keep.pick=v.pick;if(v.note)keep.note=v.note;if(keep.pick||keep.note)dec[String(i+1)]=keep});st.dec=dec;localStorage.setItem(K,JSON.stringify(st))}localStorage.setItem('ddCards',JSON.stringify(C.map(c=>c.q)))}catch{}})()</script>`
-        return new Response(html.replace("<head>", `<head>${rekey}`).replace("</body>", `${forget}${reload}<script>window.DD_ROAD=${onRoad}</script>${roadPanel}</body>`), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } })
+        return new Response(html.replace("<head>", `<head>${rekey}`).replace("</body>", `${forget}${reload}${roadPanel}</body>`), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } })
       }
       const f = Bun.file(join(outDir, path.replace(/^\/+/, "")))
       return (await f.exists()) ? new Response(f) : new Response("not found", { status: 404 })
