@@ -9,7 +9,7 @@ import { profileDir } from "./paths.ts"
 import { readSave } from "./read.ts"
 import { town, type Town } from "./town.ts"
 import { boardOptions, loadPicks, mergePicks, picksFile } from "./reconcile.ts"
-import { ask, feed, roadPage } from "./road.ts"
+import { ask, feed, roadPanel } from "./road.ts"
 
 const args = process.argv.slice(2)
 const cmd = args[0] ?? "town"
@@ -71,17 +71,15 @@ if (cmd === "town") {
   // the served page reloads when the board changes, and can send its answers back to the Caretaker from a button in the
   // board's own navbar; once he has them,
   // the page forgets them, so an old pick or sticky is never sent twice (the week's picks live on in picks.json, C18)
-  const reload = `<button id="toCaretaker" class="btn" title="Send to the Caretaker (Ctrl+Shift+Enter)">Send to the Caretaker</button><script>(()=>{let v=null;setInterval(async()=>{try{const r=await fetch('/version');const n=await r.text();if(v!==null&&n!==v)location.reload();v=n}catch{}},2000);const b=document.getElementById('toCaretaker');const nav=document.querySelector('nav.bar'),cp=document.getElementById('copyAll');if(nav){b.classList.add('primary');nav.insertBefore(b,cp||null);const r=document.createElement('a');r.className='btn';r.href='/road';r.target='_blank';r.textContent='On the road';nav.insertBefore(r,b)}b.onclick=async()=>{b.textContent='Sent…';const r=await fetch('/answers',{method:'POST',body:window.brainstormAnswers()});if(r.ok){try{localStorage.removeItem((window.BRAINSTORM_KEY||'brainstorm')+':v1')}catch{}b.textContent='The Caretaker has your answers';location.reload()}else{b.textContent='Not received; send again'}};document.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)&&e.shiftKey&&!e.repeat){e.preventDefault();b.click()}})})()</script>`
+  const reload = `<button id="toCaretaker" class="btn" title="Send to the Caretaker (Ctrl+Shift+Enter)">Send to the Caretaker</button><script>(()=>{let v=null;setInterval(async()=>{try{const r=await fetch('/version');const n=await r.text();if(v!==null&&n!==v)location.reload();v=n}catch{}},2000);const b=document.getElementById('toCaretaker');const nav=document.querySelector('nav.bar'),cp=document.getElementById('copyAll');if(nav){b.classList.add('primary');nav.insertBefore(b,cp||null)}b.onclick=async()=>{b.textContent='Sent…';const r=await fetch('/answers',{method:'POST',body:window.brainstormAnswers()});if(r.ok){try{localStorage.removeItem((window.BRAINSTORM_KEY||'brainstorm')+':v1')}catch{}b.textContent='The Caretaker has your answers';location.reload()}else{b.textContent='Not received; send again'}};document.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)&&e.shiftKey&&!e.repeat){e.preventDefault();b.click()}})})()</script>`
   Bun.serve({
     port, hostname: "127.0.0.1",
     async fetch(req) {
       const path = new URL(req.url).pathname
       // the watcher's start time rides with the counter, so a page left open across a restart still sees the next build (C16)
       if (path === "/version") return new Response(`${started}-${version}`, { headers: { "cache-control": "no-store" } })
-      // C49: the road page, a conversation with the Caretaker while the party is out
-      if (path === "/road") return new Response(roadPage, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } })
-      if (path === "/road/feed") return Response.json(await feed(), { headers: { "cache-control": "no-store" } })
-      if (path === "/road/theme.css") { const f = Bun.file(join(import.meta.dir, "../.local/state/theme.css")); return (await f.exists()) ? new Response(f, { headers: { "content-type": "text/css" } }) : new Response("", { headers: { "content-type": "text/css" } }) }
+      // C49: the road zone's data, a conversation with the Caretaker while the party is out
+      if (path === "/road/feed") return Response.json({ ...await feed(), out: !!last?.inRaid }, { headers: { "cache-control": "no-store" } })
       if (path === "/road/message" && req.method === "POST") {
         const text = (await req.text()).trim().slice(0, 4000)
         if (text) ask(text)
@@ -100,7 +98,9 @@ if (cmd === "town") {
         await rebuild()
         return new Response("ok")
       }
-      if (path === "/" || path === "/town.html") {
+      // C49: /road is the same app on another page: the board's own shell and bar, showing only the road zone
+      if (path === "/" || path === "/town.html" || path === "/road") {
+        const onRoad = path === "/road"
         const html = await Bun.file(join(outDir, "town.html")).text()
         // the last send's stamp: a page whose inputs predate it forgets them on load, even inputs kept from before this fix
         const log = join(outDir, "answers-log.md")
@@ -113,7 +113,7 @@ if (cmd === "town") {
         const cards = (await md.exists()) ? [...boardOptions(await md.text())].map(([q, o]) => ({ q, o })) : []
         const key = (html.match(/window\.BRAINSTORM_KEY=("(?:[^"\\]|\\.)*")/)?.[1]) ?? '"brainstorm"'
         const rekey = `<script>(()=>{try{const K=${key}+':v1',C=${JSON.stringify(cards).replaceAll("<", "\\u003c")},st=JSON.parse(localStorage.getItem(K)||'{}'),was=JSON.parse(localStorage.getItem('ddCards')||'null');if(st.dec&&was){const byQ={};for(const[id,v]of Object.entries(st.dec)){const q=was[Number(id)-1];if(q)byQ[q]=v}const dec={};C.forEach((c,i)=>{const v=byQ[c.q];if(!v)return;const keep={};if(v.pick&&c.o.includes(v.pick))keep.pick=v.pick;if(v.note)keep.note=v.note;if(keep.pick||keep.note)dec[String(i+1)]=keep});st.dec=dec;localStorage.setItem(K,JSON.stringify(st))}localStorage.setItem('ddCards',JSON.stringify(C.map(c=>c.q)))}catch{}})()</script>`
-        return new Response(html.replace("<head>", `<head>${rekey}`).replace("</body>", `${forget}${reload}</body>`), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } })
+        return new Response(html.replace("<head>", `<head>${rekey}`).replace("</body>", `${forget}${reload}<script>window.DD_ROAD=${onRoad}</script>${roadPanel}</body>`), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } })
       }
       const f = Bun.file(join(outDir, path.replace(/^\/+/, "")))
       return (await f.exists()) ? new Response(f) : new Response("not found", { status: 404 })

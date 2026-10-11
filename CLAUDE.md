@@ -80,7 +80,7 @@ When Soushi plays with the board open, watch the session yourself; he should nev
 
 - **On WARN:** the rebuilt board advises two things that cannot both be done (C38, `src/coherence.ts`). Fix the advice at its source before Soushi acts on it, and add a check to `contradictions()` for any new kind of clash he catches.
 
-- **On ASK:** Soushi wrote from the road page (`http://127.0.0.1:4317/road`, C49). Answer there with `bun run say "<text>"`, and keep commenting every dungeon page there too, so the thread is the whole conversation.
+- **On ASK:** Soushi wrote from the road page of the board (`/road`, C49). Answer there with `bun run say "<text>"`, and keep commenting every dungeon page there too, so the thread is the whole conversation.
 
 - **On SAVE dungeon:** the board has turned into the farewell (C24), once per expedition, and then waits (C16). Read `.local/town/town.md` and give him its verdict and its warnings in two or three lines, then say nothing until he is back unless asked.
 
