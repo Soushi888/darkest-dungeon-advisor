@@ -922,7 +922,7 @@ export function farewellSource(t: Town, r: NonNullable<Town["raid"]>, opts: { pr
   L.push("```board-stickies")
   for (const i of habit) {
     const has = r.carried[i.id] ?? 0
-    L.push(`- title: ${y(`${i.label}: ${has} carried, ${i.count} by my habit`)}`, `  kind: ${has >= i.count ? "works" : "risk"}`, `  body: ${y(has >= i.count ? "Enough, by my reckoning." : has === 0 ? `None at all. ${i.id === "bandage" ? "Foes you know there have bled you before." : i.id === "antivenom" ? "Foes you know there have poisoned you before." : "Spend what else they carry with care."}` : `${i.count - has} short of what I would carry. Spend ${i.label.toLowerCase()} only when you must.`)}`)
+    L.push(`- title: ${y(`${i.label}: ${has} carried, ${i.count} by my habit`)}`, `  kind: ${has >= i.count ? "works" : "risk"}`, `  body: ${y((has >= i.count ? "Enough, by my reckoning." : has === 0 ? `None at all. ${i.id === "bandage" ? "Foes you know there have bled you before." : i.id === "antivenom" ? "Foes you know there have poisoned you before." : "Spend what else they carry with care."}` : `${i.count - has} short of what I would carry. Spend ${i.label.toLowerCase()} only when you must.`) + (i.why ? ` What I learnt: ${i.why}.` : ""))}`)
     rows.push([`${has}`, `${i.label} carried`, "`persist.raid.json` party.inventory"])
   }
   for (const [id, n] of Object.entries(r.carried)) {
@@ -964,6 +964,8 @@ export async function buildFarewell(t: Town): Promise<string> {
   mkdirSync(join(outDir(), "img"), { recursive: true })
   const f = Bun.file(join(outDir(), "proposal.json"))
   const proposal = (await f.exists()) ? ((await f.json()) as Proposal) : undefined
+  // U33: the farewell weighs the packs by the same habit the provisions table set, lessons learnt included (C42)
+  t.ledger = await loadLedger()
   const { board, sources } = farewellSource(t, t.raid!, { proposal, checks: reconcile(await loadPicks(outDir()), t), prices: await supplyPrices(), pack: await packRules() })
   return compile(board, sources)
 }
