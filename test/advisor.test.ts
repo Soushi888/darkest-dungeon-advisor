@@ -826,7 +826,8 @@ describe("the road page", () => {
     expect(f.state.heroes[0]).toMatchObject({ name: "Emory", hp: 12, stress: 130 })
     // in a fight, each foe carries its full health from its own monster file (Soushi's pins: foes' life in battle, the good total)
     writeFileSync(join(trip, "0008.json"), JSON.stringify({ dungeon: "cove", torch: 80, heroes: [], battle: { round: 2, foes: [{ name: "Brigand Cutthroat", cls: "brigand_cutthroat_A", hp: 8, guid: 7, stunned: true }] } }))
-    expect((await feed()).state.foes).toEqual([{ name: "Brigand Cutthroat", hp: 8, maxHp: (await monster("brigand_cutthroat_A"))!.hp, stunned: true, dots: [], dead: false }])
+    // C71 adds whether each foe has acted and its effects in words
+    expect((await feed()).state.foes).toEqual([{ name: "Brigand Cutthroat", hp: 8, maxHp: (await monster("brigand_cutthroat_A"))!.hp, stunned: true, dots: [], dead: false, acted: false, effects: [] }])
     expect((await monster("brigand_cutthroat_A"))!.hp).toBeGreaterThan(8)
     // a corpse is marked dead, so a killed foe never reads as one still fighting (Soushi's pin)
     writeFileSync(join(trip, "0009.json"), JSON.stringify({ dungeon: "cove", torch: 80, heroes: [], battle: { round: 3, foes: [{ name: "Corpse", cls: "corpse_A", hp: 6, guid: 9 }] } }))
