@@ -8,7 +8,7 @@ import { monster } from "./game.ts"
 import { whereLine } from "./map.ts"
 import { questLine, questStatus } from "./quest.ts"
 import { current } from "./road.ts"
-import { effectWords, plain, wrap } from "./words.ts"
+import { effectWords, plain, wrap, journalPage, pageTitle } from "./words.ts"
 
 const time = (ms: number) => new Date(ms).toLocaleTimeString("en-GB", { hour12: false })
 
@@ -46,7 +46,10 @@ export async function nowText(p: Snap, raw: any, page: string, savedAt: number):
   }
   const where = whereLine(p.map)
   if (where) out.push(`WHERE ${where}`)
-  out.push(`SUPPLIES ${Object.entries(p.supplies).filter(([, n]) => n > 0).map(([k, n]) => `${plain(k)} ${n}`).join(", ") || "none"}; light ${p.torch}`)
+  const held = Object.entries(p.supplies).filter(([, n]) => n > 0), pages = held.filter(([k]) => journalPage(k))
+  out.push(`SUPPLIES ${held.filter(([k]) => !journalPage(k)).map(([k, n]) => `${plain(k)} ${n}`).join(", ") || "none"}; light ${p.torch}`)
+  // a journal page is a page of the story, with no price anywhere in the game's files: never loot, never counted in gold
+  if (pages.length) out.push(`JOURNAL PAGES (pages of the estate's story, worth no gold) ${(await Promise.all(pages.map(([k]) => pageTitle(journalPage(k)!)))).join("; ")}`)
   return out.join("\n")
 }
 

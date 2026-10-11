@@ -1,7 +1,7 @@
 // The live stream in words (U2): an effect as a chronicle page keeps it ("speed_rating 1 (3)", "beast_blight_buff_1 0.2 (3)",
 // "blight 2 (3) from grave_robber") read back the way the game would say it, from the game's own buff list
 // (shared/buffs/base.buffs.json), and a long line cut into lines short enough for a notification to carry whole.
-import { nameOf, text } from "./game.ts"
+import { nameOf, strings, text } from "./game.ts"
 
 let lib: Map<string, any> | undefined
 const buffs = async () => (lib ??= new Map(JSON.parse(await text("shared/buffs/base.buffs.json")).buffs.map((b: any) => [b.id, b])))
@@ -56,6 +56,16 @@ export async function effectWords(s: string): Promise<string> {
 
 /** A supply, a curio or any id the game names in snake case, in plain words. */
 export const plain = (id: string) => words(id)
+
+// a journal page the party carries, as the chronicle keys it ("journal page 13"): a page of the estate's story, which the game
+// prices nowhere (pm, 2026-10-11), so it is never counted as loot with a value
+export const journalPage = (key: string) => key.match(/^journal[ _]page[ _](\d+)$/)?.[1]
+
+/** The game's own title for a journal page, "A Trampled Journal (2/4)", or its plain inventory title "Journal Page". */
+export async function pageTitle(n: string): Promise<string> {
+  const s = await strings()
+  return s.get(`journal_page_title_${n}`) ?? s.get("str_inventory_title_journal_page") ?? "Journal Page"
+}
 
 /** One event cut at its own seams into lines of at most `max` characters; every line after the first starts with "MORE ". */
 export function wrap(line: string, max = 400): string[] {
