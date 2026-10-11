@@ -45,6 +45,7 @@ if (cmd === "town") {
   await once()
 } else if (cmd === "watch") {
   let version = 0
+  const started = Date.now()
   // one rebuild at a time; a save or an answer arriving mid-build queues exactly one more
   let running: Promise<void> | undefined, again = false
   const rebuild = async (): Promise<void> => {
@@ -74,7 +75,8 @@ if (cmd === "town") {
     port, hostname: "127.0.0.1",
     async fetch(req) {
       const path = new URL(req.url).pathname
-      if (path === "/version") return new Response(String(version))
+      // the watcher's start time rides with the counter, so a page left open across a restart still sees the next build (C16)
+      if (path === "/version") return new Response(`${started}-${version}`, { headers: { "cache-control": "no-store" } })
       if (path === "/answers" && req.method === "POST") {
         const body = await req.text()
         await Bun.write(join(outDir, "answers.md"), body)
@@ -101,7 +103,7 @@ if (cmd === "town") {
         const cards = (await md.exists()) ? [...boardOptions(await md.text())].map(([q, o]) => ({ q, o })) : []
         const key = (html.match(/window\.BRAINSTORM_KEY=("(?:[^"\\]|\\.)*")/)?.[1]) ?? '"brainstorm"'
         const rekey = `<script>(()=>{try{const K=${key}+':v1',C=${JSON.stringify(cards).replaceAll("<", "\\u003c")},st=JSON.parse(localStorage.getItem(K)||'{}'),was=JSON.parse(localStorage.getItem('ddCards')||'null');if(st.dec&&was){const byQ={};for(const[id,v]of Object.entries(st.dec)){const q=was[Number(id)-1];if(q)byQ[q]=v}const dec={};C.forEach((c,i)=>{const v=byQ[c.q];if(!v)return;const keep={};if(v.pick&&c.o.includes(v.pick))keep.pick=v.pick;if(v.note)keep.note=v.note;if(keep.pick||keep.note)dec[String(i+1)]=keep});st.dec=dec;localStorage.setItem(K,JSON.stringify(st))}localStorage.setItem('ddCards',JSON.stringify(C.map(c=>c.q)))}catch{}})()</script>`
-        return new Response(html.replace("<head>", `<head>${rekey}`).replace("</body>", `${forget}${reload}</body>`), { headers: { "content-type": "text/html; charset=utf-8" } })
+        return new Response(html.replace("<head>", `<head>${rekey}`).replace("</body>", `${forget}${reload}</body>`), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } })
       }
       const f = Bun.file(join(outDir, path.replace(/^\/+/, "")))
       return (await f.exists()) ? new Response(f) : new Response("not found", { status: 404 })
