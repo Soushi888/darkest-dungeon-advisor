@@ -64,7 +64,7 @@ export async function feed() {
 
 // C49: the road zone. While the party is out, the farewell board turns into the road: this zone opens it, above the
 // farewell's own zones, in the same page (Soushi, 2026-10-11: "it could be a transformation of the 'The coach has left'
-// page"). The box to write sits on top and the newest line under it (Soushi's pin, 2026-10-11). Under it, while a page or a message from him is newer than my last line (for three minutes at most), it says the Caretaker is reading it (his pin, same night). It shows only while the party is out, and draws from /road/feed every two seconds.
+// page"). The box to write sits on top and the newest line under it (Soushi's pin, 2026-10-11). Under it, while a page or a message from him is newer than my last line (for three minutes at most), it says what the Caretaker is about, a fight read differently from a corridor or a message (his pins, same night). It shows only while the party is out, and draws from /road/feed every two seconds.
 export const roadPanel = `<style>
 #road .meta{color:var(--dim);font-size:.9rem;margin:.2rem 0 .4rem}
 #road .seat{display:grid;grid-template-columns:7rem 1fr 1fr;gap:.6rem;align-items:center;margin:.2rem 0;font-size:.95rem}
@@ -97,7 +97,9 @@ s.heroes.map(h=>'<div class="seat"><div>'+esc(h.name)+(h.affliction?' <span clas
 '<div class="bar st" title="stress, of 200; the line is 100"><i style="width:'+Math.min(100,h.stress/2)+'%"></i><span>'+h.stress+'</span></div></div>').join("");
 const mine=d.lines.filter(l=>l.from==="caretaker").at(-1),asked=d.lines.filter(l=>l.from==="soushi").at(-1),B=document.getElementById("roadBusy");
 const fresh=at=>at&&Date.now()-new Date(at)<180000&&(!mine||at>mine.at);
-const busy=asked&&fresh(asked.at)?"The Caretaker is reading your message…":s&&fresh(s.pageAt)?"The Caretaker is reading page "+esc(s.page)+"…":"";
+const say=(a)=>"The Caretaker is "+a[Math.floor(Date.now()/4000)%a.length]+"…";
+const busy=asked&&fresh(asked.at)?say(["reading your message","thinking over what you wrote","looking through the ledgers for an answer","weighing his words"])
+:s&&fresh(s.pageAt)?say(s.foes?["watching the fight on page "+esc(s.page),"counting who struck whom","looking up the foes' blows","weighing the next turn"]:["reading page "+esc(s.page),"checking the packs","watching the light","tracing the map","noting it for the report"]):"";
 B.hidden=!busy;B.textContent=busy;
 const key=JSON.stringify(d.lines);if(key===shown)return;shown=key;const T=document.getElementById("roadThread");
 T.innerHTML=d.lines.length?[...d.lines].reverse().map(l=>'<div class="msg '+l.from+'"><div class="who">'+(l.from==="soushi"?"You":"The Caretaker")+' · '+time(l.at)+(l.page?' · page '+esc(l.page):'')+'</div>'+esc(l.text)+'</div>').join(""):'<div class="empty">Nothing said yet on this road.</div>';
