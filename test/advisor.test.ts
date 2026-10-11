@@ -14,7 +14,7 @@ import { contradictions } from "../src/coherence.ts"
 import { beats, bearing, capture, chronicleDir, debrief, judge, remember, loadLedger, untried, CHRONICLE_RULE, type Snap } from "../src/chronicle.ts"
 import { ACTING_ORDER, outDir, road, source, weekSoFar } from "../src/board.ts"
 import { supplyPrices } from "../src/game.ts"
-import { advise, readiness, seatParty, skillWorth, RULE } from "../src/advise.ts"
+import { advise, fills, readiness, seatParty, skillWorth, RULE } from "../src/advise.ts"
 
 let profile = ""
 try { profile = profileDir() } catch {}
@@ -459,6 +459,50 @@ describe.skipIf(!has)("on the local save", () => {
     check(t)
     check({ ...t, rosterCap: t.rosterSize })
     check({ ...t, rosterCap: t.rosterSize + 1 })
+  })
+
+  test("C43: a recruit who brings the true healer the four lack leans Recruit, and frees a place when the roster is full", async () => {
+    const card = (md: string, q: string) => md.match(new RegExp(`- q: "${q}"[\\s\\S]*?\\n  lean: (\\d+)\\n  lean_why: "(.*)"`))
+    const build = async (holdHealers: boolean, cap: (t: Awaited<ReturnType<typeof town>>) => number) => {
+      const t = await town(await readSave(copyProfile()))
+      // nobody fit to go carries a true heal: every hero who has learned one is held in town
+      if (holdHealers) for (const h of t.heroes) { const sk = (await heroClass(h.cls)).skills; if ((h.learned ?? h.skills).some((s) => sk.get(s.id)?.targetsAllies && sk.get(s.id)!.healAvg >= RULE.realHeal)) h.busy = "the Abbey" }
+      const base = t.recruits[0] ?? t.heroes[0]!
+      const ids = ["judgement", "dazzling_light", "divine_grace", "divine_comfort"]
+      const vestal = { ...base, guid: 990001, name: "Aldith", cls: "vestal", clsName: "Vestal", level: 0, quirks: [], from: undefined, learned: undefined, skills: await Promise.all(ids.map(async (id) => ({ id, name: await nameOf("skill", id, "vestal"), level: 0 }))) }
+      t.recruits = [vestal, ...t.recruits.filter((r) => r.cls !== "vestal")]
+      t.rosterCap = cap(t)
+      const a = await advise(t)
+      // a level 0 hero outside the four, with nothing to recommend them, for a full roster to let go
+      const spare = t.heroes.find((h) => !h.busy && !a.best?.seats.some((s) => s.hero.guid === h.guid) && !a.dismiss.some((d) => d.hero.guid === h.guid))
+      if (spare) Object.assign(spare, { level: 0, quirks: [] })
+      return { t, a, md: source(t, a, { foresight: false, answers: {}, prices: await supplyPrices() }).board, spare }
+    }
+    // a place free: the Vestal leans Recruit, and the reason names the missing healer and her heal
+    const open = await build(true, (t) => t.rosterSize + 1)
+    if (!open.a.best) return
+    expect(open.a.best.healer).toBe(false)
+    const c = card(open.md, "Recruit Aldith, Vestal\\?")!
+    expect(c[1]).toBe("0")
+    expect(c[2]).toMatch(/no true healer, and Aldith carries Divine Grace, about [\d.]+ hit points a cast/)
+    expect(contradictions(open.md)).toEqual([])
+    // the roster full: the place is freed by letting go of a level 0 hero outside the four, and the board still agrees with itself
+    const full = await build(true, (t) => t.rosterSize)
+    if (full.spare) {
+      expect(card(full.md, "Recruit Aldith, Vestal\\?")![1]).toBe("0")
+      const d = card(full.md, `Dismiss ${full.spare.name}\\?`)
+      expect(d![1]).toBe("0")
+      expect(full.md).toContain("Aldith at the coach brings the true healer the four lack")
+    }
+    expect(contradictions(full.md)).toEqual([])
+    // the stun the same way: a recruit who carries one is named for a four without one, and one gap goes to one recruit only
+    const r = (guid: number, own: boolean) => ({ hero: { guid, name: `R${guid}` }, why: "", stun: { skill: "Stunning Blow", own } }) as any
+    const f = fills({ healer: true, stunner: false } as any, [r(1, false), r(2, true)])
+    expect([...f.keys()]).toEqual([2])
+    expect(f.get(2)!.text).toBe("the four have no stun, and R2 carries Stunning Blow")
+    // the falsifier: with a true healer in the four, the same Vestal is weighed by her quirks alone
+    const healed = await build(false, (t) => t.rosterSize + 1)
+    if (healed.a.best?.healer) expect(card(healed.md, "Recruit Aldith, Vestal\\?")![2]).not.toMatch(/healer/)
   })
 
   test("C18: a stored pick follows its question when cards come or go between builds", async () => {

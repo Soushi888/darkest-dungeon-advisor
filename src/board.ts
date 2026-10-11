@@ -5,7 +5,7 @@
 import { copyFileSync, existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { homedir } from "node:os"
-import { advise, readiness, road, seatParty, RULE, RULE_FOOD, type Advice, type Party } from "./advise.ts"
+import { advise, fills, readiness, road, seatParty, RULE, RULE_FOOD, type Advice, type Party } from "./advise.ts"
 export { road, type RoadItem } from "./advise.ts"
 import { campingSkills, supplyPrices, type CampSkill } from "./game.ts"
 import { install, root } from "./paths.ts"
@@ -493,21 +493,24 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   L.push("## Who stays, who goes {wide}", "")
   // C29: recruits share the places the roster has, counting the ones my dismissals would free (Soushi, 2026-10-10)
   const worth = (h: HeroView) => h.quirks.filter((q) => q.positive).length - h.quirks.filter((q) => !q.positive && !q.disease).length
-  const ranked = [...a.recruits].sort((x, z) => worth(z.hero) - worth(x.hero) || z.hero.level - x.hero.level)
+  const byWorth = [...a.recruits].sort((x, z) => worth(z.hero) - worth(x.hero) || z.hero.level - x.hero.level)
+  // C43: a recruit who brings what the four lack (a true healer, a stun) comes first, whatever their quirks
+  const fill = fills(chosen, byWorth), fillOf = (r: { hero: HeroView }) => fill.get(r.hero.guid)
+  const ranked = [...byWorth].sort((x, z) => Number(!!fillOf(z)) - Number(!!fillOf(x)))
   // a full roster still has choices: a recruit clearly better than a level 0 hero outside the party is worth the swap (RULE: by 2 or more)
   const sendingNow = new Set(chosen?.seats.map((x) => x.hero.guid))
   const named = new Set(a.dismiss.map((d) => d.hero.guid))
   const weak = t.heroes.filter((h) => h.level === 0 && !h.busy && !sendingNow.has(h.guid) && !named.has(h.guid)).sort((x, z) => worth(x) - worth(z))
   let free = Math.max(0, t.rosterCap - t.rosterSize) + a.dismiss.length
   const dismiss = [...a.dismiss]
-  for (const r of ranked.filter((r) => worth(r.hero) > 0)) {
+  for (const r of ranked.filter((r) => fillOf(r) || worth(r.hero) > 0)) {
     if (free > 0) { free--; continue }
     const w = weak.shift()
-    if (!w || worth(r.hero) - worth(w) < 2) break
-    dismiss.push({ hero: w, why: `level 0 with ${w.quirks.filter((q) => !q.positive && !q.disease).length} bad quirks and ${w.quirks.filter((q) => q.positive).length} good; ${r.hero.name} at the coach would serve you better` })
+    if (!w || (!fillOf(r) && worth(r.hero) - worth(w) < 2)) break
+    dismiss.push({ hero: w, why: `level 0 with ${w.quirks.filter((q) => !q.positive && !q.disease).length} bad quirks and ${w.quirks.filter((q) => q.positive).length} good; ${fillOf(r) ? `${r.hero.name} at the coach brings the ${fillOf(r)!.gap === "healer" ? "true healer" : "stun"} the four lack` : `${r.hero.name} at the coach would serve you better`}` })
   }
   const places = Math.max(0, t.rosterCap - t.rosterSize) + dismiss.length
-  const taken = ranked.filter((r) => worth(r.hero) >= 0).slice(0, places)
+  const taken = ranked.filter((r) => fillOf(r) || worth(r.hero) >= 0).slice(0, places)
   L.push(`${t.rosterSize} names on the roster, room for ${t.rosterCap} as the Stage Coach stands: ${t.rosterCap - t.rosterSize} place${t.rosterCap - t.rosterSize === 1 ? "" : "s"} free${dismiss.length ? `, ${places} if you let go of the ones I name` : ""}. My habit: a hero still at level 0 with ${RULE.dismissNegatives} or more bad quirks, outside the party, is worth letting go, and the coach's best take the places there are.`, "")
   const rcards: string[] = []
   for (const d of dismiss) {
@@ -519,7 +522,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     rcards.push(`- q: ${y(`Recruit ${r.hero.name}, ${r.hero.clsName}?`)}`, `  image: ${y(portrait(r.hero))}`, `  context: ${y(`${r.why}.`)}`, "  options:")
     rcards.push(`    - pick: "Recruit"`, `      effect: ${y(`Joins the roster at level ${r.hero.level}.`)}`, `    - pick: "Pass"`, `      effect: ${y(r.hero.from ? "Leave them at the coach." : "The coach brings others next week.")}`)
     const take = taken.includes(r)
-    const why = take ? `${worth(r.hero) > 0 ? "more good quirks than bad" : "as many good quirks as bad"}, and there is a place for them` : worth(r.hero) < 0 ? "more bad quirks than good" : `no place left for them: ${places ? `the ${places === 1 ? "place goes" : `${places} places go`} to ${taken.map((x) => x.hero.name).join(" and ")}` : "the roster is full"}`
+    const why = take && fillOf(r) ? `${fillOf(r)!.text}; there is a place for them` : take ? `${worth(r.hero) > 0 ? "more good quirks than bad" : "as many good quirks as bad"}, and there is a place for them` : worth(r.hero) < 0 ? "more bad quirks than good" : `no place left for them: ${places ? `the ${places === 1 ? "place goes" : `${places} places go`} to ${taken.map((x) => x.hero.name).join(" and ")}` : "the roster is full"}`
     rcards.push(`  lean: ${take ? 0 : 1}`, `  lean_why: ${y(`${why}.`)}`)
   }
   if (rcards.length) L.push("```board-decisions", ...rcards, "```", "")
@@ -570,6 +573,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     rows.push([`${act.slots - act.used} / ${act.slots}`, `${act.name}, free seats`, `${file} slot_upgrades; occupants from \`persist.town.json\``])
   }
   for (const u of a.buys.slice(0, 5)) rows.push([`${u.cost.find((c) => c.type === "gold")?.amount ?? 0}`, `${u.hero}: ${u.label} to level ${u.toLevel}`, `\`upgrades/heroes/${u.tree.split(".")[0]}.upgrades.json\` ${u.tree} code ${u.code}, less ${Math.round((u.where === "Guild" ? t.skillDiscount : t.gearDiscount) * 100)}% from \`${u.where === "Guild" ? "guild" : "blacksmith"}.building.json\``])
+  for (const r of a.recruits) if (fill.get(r.hero.guid)?.gap === "healer") rows.push([`${r.heal!.avg}`, `${r.heal!.skill}, hit points a cast on average`, `\`heroes/${r.hero.cls}/${r.hero.cls}.info.darkest\` .heal range at its first level`])
   for (const u of a.heirlooms) rows.push([u.cost.map((c) => `${c.amount} ${c.type}`).join(", "), u.label, `\`upgrades/building/${u.tree.split(".")[0]}.upgrades.json\` ${u.tree} code ${u.code}`])
   for (const p of a.parties) rows.push([p.quest.rewards.filter((r) => /^\d/.test(r)).join(", "), `${questLabel(p)}, rewards`, "`persist.quest.json` completion_reward"])
   for (const i of roadItems) rows.push([`${i.price}`, `${i.label}, gold each`, `\`inventory/base.supply.inventory.items.darkest\` purchase_gold_value${t.event?.provisions.length ? `, with this week's event (\`${t.event.id}\`)` : ""}`])
