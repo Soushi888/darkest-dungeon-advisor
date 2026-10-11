@@ -16,8 +16,9 @@ import { contradictions } from "./coherence.ts"
 import { beats, chronicleFor, CHRONICLE_RULE, debrief, judge, loadLedger, remember, untried, type Beat, type Debrief, type Lesson } from "./chronicle.ts"
 import { heroClass } from "./game.ts"
 
-// DD_TOWN_OUT lets the tests build elsewhere, so they never touch the live board or its picks
-export const outDir = process.env.DD_TOWN_OUT ?? join(root, ".local", "town")
+// DD_TOWN_OUT lets the tests build elsewhere, so they never touch the live board or its picks. Read at call time: a test file
+// sets it after its imports, so a value fixed at import would send its builds into the live board's folder
+export const outDir = () => process.env.DD_TOWN_OUT ?? join(root, ".local", "town")
 const BOARD = process.env.NICEBOARD ?? join(homedir(), ".claude/skills/Niceboard/Tools/Board.ts")
 const y = (s: string) => JSON.stringify(s) // a JSON string is a valid YAML scalar, quotes and colons included
 const HABIT = "(my habit)" // how a RULE number is labelled on the board, in his voice (A2)
@@ -32,7 +33,7 @@ const GAUGE = `Each bar is the hero's stress on the gauge of ${STRESS.max}: at $
 function portrait(h: HeroView): string {
   const src = join(install, h.portrait)
   const rel = `img/${h.cls}.png`
-  if (existsSync(src)) copyFileSync(src, join(outDir, rel))
+  if (existsSync(src)) { mkdirSync(join(outDir(), "img"), { recursive: true }); copyFileSync(src, join(outDir(), rel)) }
   return rel
 }
 
@@ -49,7 +50,7 @@ function partyLine(p: Party): string {
 
 export interface Answers { expedition?: string; partyOwn?: boolean; partyNames?: string[] }
 export async function readAnswers(): Promise<Answers> {
-  const f = Bun.file(join(outDir, "answers.md"))
+  const f = Bun.file(join(outDir(), "answers.md"))
   if (!(await f.exists())) return {}
   const text = await f.text()
   const a: Answers = {}
@@ -643,7 +644,7 @@ export function inActingOrder(md: string): string {
 }
 
 export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): Promise<string> {
-  mkdirSync(join(outDir, "img"), { recursive: true })
+  mkdirSync(join(outDir(), "img"), { recursive: true })
   const answers = await readAnswers()
   // C40 to C42: the survivors' tale of the road just walked, and its lessons kept before this week is advised
   let tale: Tale | undefined
@@ -674,9 +675,9 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
     // four names that are all on the roster, or the note is not a party
     if (heroes.length === 4) own = await seatParty(heroes, quest)
   }
-  const checks = reconcile(await loadPicks(outDir), t)
+  const checks = reconcile(await loadPicks(outDir()), t)
   // the week's first board keeps the Hamlet as it found it (C26)
-  const wsFile = Bun.file(join(outDir, "week-start.json"))
+  const wsFile = Bun.file(join(outDir(), "week-start.json"))
   let start = (await wsFile.exists()) ? ((await wsFile.json()) as WeekStart) : undefined
   if (!start || start.week !== t.week) {
     start = { week: t.week, heroes: t.heroes.map((h) => ({ guid: h.guid, name: h.name })), bought: [...t.bought], gold: t.wallet.gold ?? 0, purchases: t.purchases.map((p) => `${p.guid}|${p.key}`) }
@@ -685,20 +686,20 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
   const { board, sources } = source(t, a, { foresight: !!opts.foresight, answers, own, checks, prices: await supplyPrices(), soFar: weekSoFar(t, start), tale, camp: await campingSkills() })
   // C38: every build is read back for advice that contradicts itself; the live session is told through coherence.json
   const clash = contradictions(board)
-  await Bun.write(join(outDir, "coherence.json"), JSON.stringify({ week: t.week, contradictions: clash }, null, 1))
+  await Bun.write(join(outDir(), "coherence.json"), JSON.stringify({ week: t.week, contradictions: clash }, null, 1))
   if (clash.length) console.log(`INCOHERENT week ${t.week}: ${clash.join(" | ")}`)
   // what the Caretaker proposed this week, for the farewell to judge the departure against (C24)
   const chosen = own ?? ((answers.expedition && a.parties.find((p) => questLabel(p) === answers.expedition)) || a.best)
-  if (chosen) await Bun.write(join(outDir, "proposal.json"), JSON.stringify({ week: t.week, dungeon: chosen.quest.dungeon, length: chosen.quest.length, type: chosen.quest.type, label: questLabel(chosen), party: chosen.seats.map((x) => x.hero.guid), own: !!own }, null, 1))
+  if (chosen) await Bun.write(join(outDir(), "proposal.json"), JSON.stringify({ week: t.week, dungeon: chosen.quest.dungeon, length: chosen.quest.length, type: chosen.quest.type, label: questLabel(chosen), party: chosen.seats.map((x) => x.hero.guid), own: !!own }, null, 1))
   return compile(board, sources)
 }
 
 async function compile(board: string, sources: string): Promise<string> {
-  const src = join(outDir, "town.md")
+  const src = join(outDir(), "town.md")
   await Bun.write(src, board)
-  await Bun.write(join(outDir, "sources.md"), sources)
+  await Bun.write(join(outDir(), "sources.md"), sources)
   await buildSkin()
-  const out = join(outDir, "town.html")
+  const out = join(outDir(), "town.html")
   const proc = Bun.spawnSync(["bun", BOARD, src, "--no-sketch", "--out", out], { stdout: "pipe", stderr: "pipe" })
   if (proc.exitCode !== 0) throw new Error(`board build failed: ${proc.stderr.toString()}`)
   return out
@@ -789,9 +790,9 @@ export function farewellSource(t: Town, r: NonNullable<Town["raid"]>, opts: { pr
 
 /** Builds the farewell board for the expedition under way. */
 export async function buildFarewell(t: Town): Promise<string> {
-  mkdirSync(join(outDir, "img"), { recursive: true })
-  const f = Bun.file(join(outDir, "proposal.json"))
+  mkdirSync(join(outDir(), "img"), { recursive: true })
+  const f = Bun.file(join(outDir(), "proposal.json"))
   const proposal = (await f.exists()) ? ((await f.json()) as Proposal) : undefined
-  const { board, sources } = farewellSource(t, t.raid!, { proposal, checks: reconcile(await loadPicks(outDir), t), prices: await supplyPrices() })
+  const { board, sources } = farewellSource(t, t.raid!, { proposal, checks: reconcile(await loadPicks(outDir()), t), prices: await supplyPrices() })
   return compile(board, sources)
 }

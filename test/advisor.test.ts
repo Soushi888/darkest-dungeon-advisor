@@ -12,7 +12,7 @@ import { profileDir, root } from "../src/paths.ts"
 import { boardOptions, mergePicks, parseAnswers, reconcile } from "../src/reconcile.ts"
 import { contradictions } from "../src/coherence.ts"
 import { beats, bearing, capture, chronicleDir, debrief, judge, remember, loadLedger, untried, CHRONICLE_RULE, type Snap } from "../src/chronicle.ts"
-import { ACTING_ORDER, road, source, weekSoFar } from "../src/board.ts"
+import { ACTING_ORDER, outDir, road, source, weekSoFar } from "../src/board.ts"
 import { supplyPrices } from "../src/game.ts"
 import { advise, readiness, seatParty, skillWorth, RULE } from "../src/advise.ts"
 
@@ -70,6 +70,26 @@ describe.skipIf(!has)("on the local save", () => {
     expect(proc.exitCode).toBe(0)
     const after = readdirSync(profile).map((f) => statSync(join(profile, f)).mtimeMs)
     expect(after).toEqual(before)
+  })
+
+  test("A1: a test build lands in DD_TOWN_OUT, set after the imports, and never under .local/town", async () => {
+    const live = join(root, ".local", "town")
+    expect(outDir()).toBe(townOut)
+    expect(chronicleDir().startsWith(townOut)).toBe(true)
+    // a folder that does not exist yet, as in a fresh worktree: the build's portraits land there, and nowhere near the live board
+    const fresh = join(root, ".dd-runtime", "test-town-fresh")
+    rmSync(fresh, { recursive: true, force: true })
+    process.env.DD_TOWN_OUT = fresh
+    try {
+      const t = await town(await readSave(copyProfile()))
+      source(t, await advise(t), { foresight: false, answers: {}, prices: await supplyPrices() })
+      expect(outDir()).toBe(fresh)
+      expect(readdirSync(join(fresh, "img")).length).toBeGreaterThan(0)
+      expect(fresh.startsWith(live)).toBe(false)
+    } finally {
+      process.env.DD_TOWN_OUT = townOut
+      rmSync(fresh, { recursive: true, force: true })
+    }
   })
 
   test("C6, A3: with foresight off, the board names no foe you have not fought where you have walked", async () => {

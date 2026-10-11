@@ -102,8 +102,7 @@ export async function snapshot(save: Save): Promise<Snap | undefined> {
   }
 }
 
-// read at call time, so a test that sets DD_TOWN_OUT after its imports never writes into the live board's folder
-const town = () => process.env.DD_TOWN_OUT ?? outDir
+const town = () => outDir()
 export const chronicleDir = (key = "") => join(town(), "chronicle", key.replace(/[^\w.-]+/g, "_"))
 const sig = (s: Snap) => JSON.stringify({ ...s, at: "" })
 
