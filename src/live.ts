@@ -5,6 +5,7 @@
 //   CHRON <time> #<n> <summary>   a page of the chronicle that changes the story (C39): a battle, a room, an ambush, the light
 //                                 past 50 or 25, a break, a virtue, Death's Door, a fall, a hero under 30% health
 //   PAGE <time> #<n> <summary>    any other new page (kept, but not worth waking the agent)
+//   ASK <time> <text>          Soushi wrote to the Caretaker from the road page (C49); answer with bun run say "<text>"
 //   WARN <time> <n> contradictions: ...   the rebuilt board advises two things that cannot both be done (C38)
 // It only reads the profile (ISA A1). See CLAUDE.md, "Live session".
 import { existsSync, readdirSync, statSync } from "node:fs"
@@ -13,6 +14,7 @@ import { outDir } from "./board.ts"
 import { monster, nameOf } from "./game.ts"
 import { decode } from "./dson.ts"
 import { profileDir } from "./paths.ts"
+import { messagesFile } from "./road.ts"
 
 const log = join(outDir, "answers-log.md")
 const game = join(profileDir(), "persist.game.json")
@@ -35,6 +37,8 @@ const last = new Map<string, any>(), prevFile = new Map<string, string>(), lastB
 for (const f of all.filter((f) => told.has(f))) { try { last.set(f.split("/").slice(-2, -1)[0]!, await Bun.file(f).json()); prevFile.set(f.split("/").slice(-2, -1)[0]!, f.replace(/\.json$/, ".raw.json")) } catch {} }
 const clashes = join(outDir, "coherence.json")
 let clashSeen = mtime(clashes)
+// lines Soushi writes on the road page; the stream starts after the ones already there
+let asked = existsSync(messagesFile()) ? (await Bun.file(messagesFile()).text()).split("\n").filter(Boolean).length : 0
 console.log(`LIVE ${now()} watching ${outDir} and ${game}`)
 setInterval(async () => {
   for (const f of pages().filter((f) => !told.has(f)).sort()) {
@@ -138,6 +142,11 @@ setInterval(async () => {
       lastBody.set(trip, body)
       console.log(`${notable ? "CHRON" : "PAGE"} ${now()} #${f.match(/(\d+)\.json$/)![1]} light ${p.torch}, rooms ${tl.ROOM_VISITED ?? 0}, battles ${tl.BATTLE_COMPLETED ?? 0}, food ${p.supplies?.food ?? 0}, torches ${p.supplies?.torch ?? 0} | ${who}${fight}${change}`)
     } catch {}
+  }
+  if (existsSync(messagesFile())) {
+    const ls = (await Bun.file(messagesFile()).text()).split("\n").filter(Boolean)
+    for (const l of ls.slice(asked)) { try { const m = JSON.parse(l); console.log(`ASK ${now()} page ${m.page ?? "?"}: ${String(m.text).replace(/\s+/g, " ")}`) } catch {} }
+    asked = ls.length
   }
   if (mtime(clashes) !== clashSeen) {
     clashSeen = mtime(clashes)

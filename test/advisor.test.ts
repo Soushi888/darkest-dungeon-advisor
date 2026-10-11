@@ -686,3 +686,24 @@ describe("the road's debrief", () => {
     expect(Object.keys(crit.foes[0]!.attacks).join()).not.toContain("Rend")
   })
 })
+
+describe("the road page", () => {
+  test("C49: a line from the road and the Caretaker's answer share one thread, beside the party's latest page", async () => {
+    const { ask, feed, say } = await import("../src/road.ts")
+    rmSync(join(townOut, "road"), { recursive: true, force: true })
+    const trip = join(townOut, "chronicle", "zz_road_test")
+    rmSync(trip, { recursive: true, force: true })
+    mkdirSync(trip, { recursive: true })
+    writeFileSync(join(trip, "0007.json"), JSON.stringify({ dungeon: "cove", torch: 80, supplies: { food: 4, torch: 6 }, tally: { ROOM_VISITED: 2 }, heroes: [{ name: "Emory", cls: "grave_robber", hp: 12, maxHp: 20, stress: 130 }] }))
+    ask("Retreat or push on?")
+    await Bun.sleep(5)
+    say("Push on: the light is high.")
+    const f = await feed()
+    expect(f.trip).toBe("zz_road_test")
+    expect(f.lines.map((l) => [l.from, l.text, l.page])).toEqual([["soushi", "Retreat or push on?", "0007"], ["caretaker", "Push on: the light is high.", "0007"]])
+    expect(f.state.heroes[0]).toMatchObject({ name: "Emory", hp: 12, stress: 130 })
+    // the live board's own folder is never written by a test
+    expect(join(townOut, "road")).not.toContain(join(".local", "town"))
+    rmSync(trip, { recursive: true, force: true })
+  })
+})

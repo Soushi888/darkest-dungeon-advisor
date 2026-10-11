@@ -10,6 +10,7 @@
     "watch": "bun src/cli.ts watch",
     "skin": "bun src/skin.ts",
     "live": "bun src/live.ts",
+    "say": "bun src/road.ts say",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },

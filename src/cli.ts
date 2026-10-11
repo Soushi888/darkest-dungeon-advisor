@@ -9,6 +9,7 @@ import { profileDir } from "./paths.ts"
 import { readSave } from "./read.ts"
 import { town, type Town } from "./town.ts"
 import { boardOptions, loadPicks, mergePicks, picksFile } from "./reconcile.ts"
+import { ask, feed, roadPage } from "./road.ts"
 
 const args = process.argv.slice(2)
 const cmd = args[0] ?? "town"
@@ -70,13 +71,22 @@ if (cmd === "town") {
   // the served page reloads when the board changes, and can send its answers back to the Caretaker from a button in the
   // board's own navbar; once he has them,
   // the page forgets them, so an old pick or sticky is never sent twice (the week's picks live on in picks.json, C18)
-  const reload = `<button id="toCaretaker" class="btn" title="Send to the Caretaker (Ctrl+Shift+Enter)">Send to the Caretaker</button><script>(()=>{let v=null;setInterval(async()=>{try{const r=await fetch('/version');const n=await r.text();if(v!==null&&n!==v)location.reload();v=n}catch{}},2000);const b=document.getElementById('toCaretaker');const nav=document.querySelector('nav.bar'),cp=document.getElementById('copyAll');if(nav){b.classList.add('primary');nav.insertBefore(b,cp||null)}b.onclick=async()=>{b.textContent='Sent…';const r=await fetch('/answers',{method:'POST',body:window.brainstormAnswers()});if(r.ok){try{localStorage.removeItem((window.BRAINSTORM_KEY||'brainstorm')+':v1')}catch{}b.textContent='The Caretaker has your answers';location.reload()}else{b.textContent='Not received; send again'}};document.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)&&e.shiftKey&&!e.repeat){e.preventDefault();b.click()}})})()</script>`
+  const reload = `<button id="toCaretaker" class="btn" title="Send to the Caretaker (Ctrl+Shift+Enter)">Send to the Caretaker</button><script>(()=>{let v=null;setInterval(async()=>{try{const r=await fetch('/version');const n=await r.text();if(v!==null&&n!==v)location.reload();v=n}catch{}},2000);const b=document.getElementById('toCaretaker');const nav=document.querySelector('nav.bar'),cp=document.getElementById('copyAll');if(nav){b.classList.add('primary');nav.insertBefore(b,cp||null);const r=document.createElement('a');r.className='btn';r.href='/road';r.target='_blank';r.textContent='On the road';nav.insertBefore(r,b)}b.onclick=async()=>{b.textContent='Sent…';const r=await fetch('/answers',{method:'POST',body:window.brainstormAnswers()});if(r.ok){try{localStorage.removeItem((window.BRAINSTORM_KEY||'brainstorm')+':v1')}catch{}b.textContent='The Caretaker has your answers';location.reload()}else{b.textContent='Not received; send again'}};document.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)&&e.shiftKey&&!e.repeat){e.preventDefault();b.click()}})})()</script>`
   Bun.serve({
     port, hostname: "127.0.0.1",
     async fetch(req) {
       const path = new URL(req.url).pathname
       // the watcher's start time rides with the counter, so a page left open across a restart still sees the next build (C16)
       if (path === "/version") return new Response(`${started}-${version}`, { headers: { "cache-control": "no-store" } })
+      // C49: the road page, a conversation with the Caretaker while the party is out
+      if (path === "/road") return new Response(roadPage, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } })
+      if (path === "/road/feed") return Response.json(await feed(), { headers: { "cache-control": "no-store" } })
+      if (path === "/road/theme.css") { const f = Bun.file(join(import.meta.dir, "../.local/state/theme.css")); return (await f.exists()) ? new Response(f, { headers: { "content-type": "text/css" } }) : new Response("", { headers: { "content-type": "text/css" } }) }
+      if (path === "/road/message" && req.method === "POST") {
+        const text = (await req.text()).trim().slice(0, 4000)
+        if (text) ask(text)
+        return new Response("ok")
+      }
       if (path === "/answers" && req.method === "POST") {
         const body = await req.text()
         await Bun.write(join(outDir, "answers.md"), body)
