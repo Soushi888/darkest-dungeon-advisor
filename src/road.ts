@@ -3,7 +3,7 @@
 //   bun run say "<text>"        the agent's comment on the current page, appended to the expedition's thread
 //   (served by bun run watch)   the farewell board's first zone while the party is out; /road/feed its data, POST /road/message a line from Soushi
 // It only reads the chronicle and writes under .local/town/road/ (ISA A1).
-import { mapLegend, mapSvg, whereLine } from "./map.ts"
+import { mapIcons, mapLegend, mapSvg, whereLine } from "./map.ts"
 import { isNotable } from "./notable.ts"
 import { buildRecap, type Recap } from "./recap.ts"
 import { questLine, questStatus } from "./quest.ts"
@@ -111,7 +111,8 @@ export async function feed() {
       // C80: the foes this fight has already slain, which the game no longer keeps (Soushi, 06:55: "I still want to see the killed foes")
       slain: p.battle ? await slainAt(c.file!) : [],
       // C51: the map as the party knows it, drawn without letters, and where they stand in words
-      map: mapSvg(p.map), where: whereLine(p.map), legend: mapLegend(),
+      // C83: the game's own map art, copied beside the page once
+      ...(() => { const ic = mapIcons(town()); return { map: mapSvg(p.map, ic), legend: mapLegend(ic) } })(), where: whereLine(p.map),
     }
   } catch {}
   // camp is the Caretaker's default (C74), so a page with no word from him reads as camp
@@ -151,6 +152,10 @@ export const roadPanel = `<style>
 #roadBusy{margin:.6rem 0 0;font-style:italic;color:var(--gold)}
 #road .empty{color:var(--dim);font-style:italic}
 #roadMap{margin:.6rem 0}#roadMap svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:3px}
+#roadMap .mapview{position:relative}#roadMap .mapview svg{display:block;width:100%;height:auto;max-height:70vh;cursor:grab;touch-action:none;background:#0b0a08}#roadMap .mapview svg:active{cursor:grabbing}
+#roadMap .maptools{position:absolute;top:.4rem;right:.4rem;display:flex;gap:.3rem;z-index:2}#roadMap .maptools button{background:var(--panel);color:var(--gold);border:1px solid var(--line);border-radius:3px;font:inherit;font-size:.85rem;padding:.1rem .5rem;cursor:pointer;min-width:2rem}
+#roadMap .mapview:fullscreen{background:#0b0a08;display:flex;align-items:center;justify-content:center}#roadMap .mapview:fullscreen svg{max-height:100vh;height:100vh;border:0}
+#road .legend img.mi{height:1.1rem;width:auto;vertical-align:-.25rem;margin-right:.3rem}
 @media (max-width:520px){#road .seat{grid-template-columns:5rem minmax(0,1fr) minmax(0,1fr)}}
 </style><script>(()=>{const nav=document.querySelector('nav.bar');
 // C66: the road zone in two, the report (the latest recap, the foes in a fight, the map) beside the conversation

@@ -10,6 +10,9 @@
 //   obstacle    the static tile's own field ("shipwreck"): both shovels were spent on exactly those two tiles, which read content 0
 //   areatile    steps from the end the party came in by; the room's door to the corridor names that end (tile_to)
 //   an area id is its name's four bytes, little-endian ("rooB" is 1114599282), and "none" marks a door that leads nowhere
+import { copyFileSync, existsSync, mkdirSync } from "node:fs"
+import { join } from "node:path"
+import { install } from "./paths.ts"
 import type { Save } from "./read.ts"
 
 export interface MapTile { x: number; y: number; known: number; what?: string; code?: number }
@@ -139,28 +142,63 @@ export function newlySeen(prev: MapView | undefined, now: MapView | undefined): 
 const INK = { walked: "#c9b88a", seen: "#7d7258", layout: "#3a362d", edge: "#e8dcb8", fight: "#b3261e", trap: "#d97706", curio: "#e3b341", obstacle: "#5b7a99", done: "#6b6b6b" }
 const mark = (t: MapTile) => !t.what ? "" : /fight/.test(t.what) ? INK.fight : /trap/.test(t.what) ? INK.trap : /, searched$/.test(t.what) ? INK.done : /cleared$/.test(t.what) ? INK.done : /in the way/.test(t.what) ? INK.obstacle : INK.curio
 
-/** The legend under the drawing, in words, each beside its colour. */
-export function mapLegend(): string {
+// C83: the game's own map art (panels/icons_map), copied beside the page (A4) so the map reads as the game draws it
+const ICONS = ["room_battle", "room_curio", "room_entrance", "room_empty", "room_unknown", "room_boss", "room_treasure", "hall_clear", "hall_dim", "hall_dark",
+  "marker_battle", "marker_curio", "marker_trap", "marker_obstacle", "marker_hunger", "marker_room_visited", "indicator"]
+/** Copies the map icons beside the page once; the relative paths by name, or none when the install has no map art. */
+export function mapIcons(out: string): Record<string, string> {
+  const got: Record<string, string> = {}
+  for (const n of ICONS) {
+    const src = join(install, "panels", "icons_map", `${n}.png`), rel = `img/map/${n}.png`
+    if (!existsSync(src)) continue
+    if (!existsSync(join(out, rel))) { mkdirSync(join(out, "img", "map"), { recursive: true }); copyFileSync(src, join(out, rel)) }
+    got[n] = rel
+  }
+  return got
+}
+// a room's icon by what the party knows of it, and a corridor tile's marker by what it holds
+const roomIcon = (a: MapArea, t: MapTile) => /entrance/.test(a.name) ? "room_entrance" : t.known < 2 || t.code === 6 ? "room_unknown" : /fight/.test(t.what ?? "") ? "room_battle"
+  : /not yet searched/.test(t.what ?? "") ? "room_curio" : "room_empty"
+const marker = (t: MapTile) => !t.what ? (t.code === 8 && t.known >= 2 ? "marker_hunger" : "") : /fight/.test(t.what) ? "marker_battle" : /trap/.test(t.what) ? "marker_trap"
+  : /in the way/.test(t.what) ? "marker_obstacle" : /, searched$|cleared$/.test(t.what) ? "marker_room_visited" : "marker_curio"
+
+/** The legend under the drawing, in words, each beside its colour or, with the game's art, its icon. */
+export function mapLegend(icons: Record<string, string> = {}): string {
   const sw = (c: string, w: string, dot = false) => `<span><i${dot ? ' class="dot"' : ""} style="background:${c}"></i>${w}</span>`
+  if (icons.room_empty) {
+    const ic = (n: string, w: string) => (icons[n] ? `<span><img class="mi" src="${icons[n]}" alt="">${w}</span>` : "")
+    return `<p class="legend">${ic("indicator", "the party")}${ic("room_entrance", "the entrance")}${ic("room_empty", "a room walked or empty")}${ic("room_unknown", "a room not yet seen")}${ic("room_battle", "a fight")}${ic("room_curio", "a curio to search")}${ic("hall_clear", "corridor walked")}${ic("hall_dim", "seen or scouted")}${ic("hall_dark", "only its shape on the map")}${ic("marker_trap", "a trap")}${ic("marker_obstacle", "an obstacle in the way")}${ic("marker_hunger", "hunger")}${ic("marker_room_visited", "searched or cleared")}</p>`
+  }
   return `<p class="legend"><span><i class="ring"></i>the party</span>${sw(INK.walked, "walked")}${sw(INK.seen, "seen or scouted, not walked")}${sw(INK.layout, "only its shape on the map")}${sw(INK.fight, "a fight", true)}${sw(INK.curio, "a curio to search", true)}${sw(INK.trap, "a trap", true)}${sw(INK.obstacle, "an obstacle in the way", true)}${sw(INK.done, "searched or cleared", true)}</p>`
 }
 
-/** A small drawing of the known map with the party marked: no letters, the layout dim, what is known shown by its colour. */
-export function mapSvg(v: MapView | undefined): string {
+/** The known map with the party marked. With the game's art (C83): each room by its own icon, each corridor tile by how well it
+ *  is known with its marker, on a grid large enough to stay crisp when zoomed; without it, the small coloured drawing (C51). */
+export function mapSvg(v: MapView | undefined, icons: Record<string, string> = {}): string {
   if (!v) return ""
-  const [x0, x1, y0, y1] = v.bounds, c = 14, pad = 1
+  const art = !!icons.room_empty && !!icons.hall_clear
+  const [x0, x1, y0, y1] = v.bounds, c = art ? 40 : 14, pad = 1
   const W = (x1 - x0 + 1 + 2 * pad) * c, H = (y1 - y0 + 1 + 2 * pad) * c
   const px = (x: number) => (x - x0 + pad) * c, py = (y: number) => (y - y0 + pad) * c
   const shade = (k: number) => (k >= 3 ? INK.walked : k === 2 ? INK.seen : INK.layout)
   const out: string[] = []
-  for (const a of v.areas) for (const t of a.tiles) {
-    const s = a.room ? c * 1.4 : c * 0.7, x = px(t.x) + (c - s) / 2, y = py(t.y) + (c - s) / 2
+  const img = (n: string, x: number, y: number, s: number) => `<image href="${icons[n]}" x="${x}" y="${y}" width="${s}" height="${s}" preserveAspectRatio="xMidYMid meet"/>`
+  // corridors first, rooms over them, as the game lays its rooms over the halls' ends
+  for (const a of [...v.areas].sort((p, q) => Number(p.room) - Number(q.room))) for (const t of a.tiles) {
+    const s = a.room ? c * (art ? 1.7 : 1.4) : c * (art ? 0.95 : 0.7), x = px(t.x) + (c - s) / 2, y = py(t.y) + (c - s) / 2
+    if (art) {
+      out.push(img(a.room ? roomIcon(a, t) : t.known >= 3 ? "hall_clear" : t.known === 2 ? "hall_dim" : "hall_dark", x, y, s))
+      const m = a.room ? "" : marker(t)
+      if (m && icons[m]) out.push(img(m, px(t.x) + c * 0.15, py(t.y) + c * 0.15, c * 0.7))
+      continue
+    }
     // a tile seen ahead or scouted but not yet walked carries a light edge, so what the scouting showed stands out
     out.push(`<rect x="${x}" y="${y}" width="${s}" height="${s}" rx="2" fill="${shade(t.known)}"${t.known === 2 ? ` stroke="${INK.edge}" stroke-width="1.5"` : ""}/>`)
     const m = mark(t)
     if (m) out.push(`<circle cx="${px(t.x) + c / 2}" cy="${py(t.y) + c / 2}" r="${c * 0.22}" fill="${m}"/>`)
   }
   const a = v.areas.find((x) => x.id === v.here?.area), t = a?.tiles[v.here?.tile ?? 0]
-  if (t) out.push(`<circle class="party" cx="${px(t.x) + c / 2}" cy="${py(t.y) + c / 2}" r="${c * 0.62}" fill="none" stroke="#f5f5f4" stroke-width="2"/>`)
+  if (t && art && icons.indicator) out.push(`<circle class="party" cx="${px(t.x) + c / 2}" cy="${py(t.y) + c / 2}" r="${c * 0.75}" fill="none" stroke="#f5f5f4" stroke-width="3"/>`, img("indicator", px(t.x) + c * 0.1, py(t.y) - c * 0.55, c * 0.8))
+  else if (t) out.push(`<circle class="party" cx="${px(t.x) + c / 2}" cy="${py(t.y) + c / 2}" r="${c * 0.62}" fill="none" stroke="#f5f5f4" stroke-width="2"/>`)
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="the map as the party knows it"><rect width="${W}" height="${H}" fill="#0b0a08"/>${out.join("")}</svg>`
 }
