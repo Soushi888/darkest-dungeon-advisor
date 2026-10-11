@@ -19,7 +19,7 @@ export interface HeroView {
   weapon: number; armour: number; trinkets: string[]; dungeons: string[]; portrait: string
   from?: string // the town event that brought a recruit
 }
-export interface Activity { building: string; activity: string; name: string; locked: boolean; baseCost: number; cost: number; lockedQuirkCost?: number; heal: number; cure: number; slots: number; used: number; barred: string[] }
+export interface Activity { building: string; buildingName: string; activity: string; name: string; locked: boolean; baseCost: number; cost: number; lockedQuirkCost?: number; heal: number; cure: number; slots: number; used: number; barred: string[] }
 export interface Quest { foeResist?: { bleed: number; blight: number; foes: number }; unknownTypes: string[]; bleeders: string[]; blighters: string[]; walked: boolean; idx: number; dungeon: string; dungeonName: string; type: string; difficulty: number; length: number; plot: boolean; rewards: string[]; known: string[]; unknownCount: number; types: string[] }
 export interface Upgrade { hero?: string; toLevel?: number; where?: string; tree: string; label: string; code: string; cost: Cost[]; affordable: boolean; blockedBy: string }
 export interface Town {
@@ -114,7 +114,7 @@ export async function town(save: Save): Promise<Town> {
       const cure = d.affliction_cure_upgrades ? (applied(d.affliction_cure_upgrades, tree, bought) as any).chance ?? 0 : 0
       const barred = (d.requirements ?? []).filter((r: any) => r.type === "not_have_quirks").flatMap((r: any) => r.data.quirk_library_names)
       activities.push({
-        building: b, activity: a.id, name: await nameOf("activity", a.id), locked: false,
+        building: b, buildingName: await nameOf("building", b), activity: a.id, name: await nameOf("activity", a.id), locked: false,
         baseCost: cost?.cost_currency?.amount ?? 0, cost: cost?.cost_currency?.amount ?? 0, lockedQuirkCost: lockedCost,
         heal: heal?.heal_high ?? 0, cure, slots: slot.number_of_slots ?? 0, used, barred,
       })

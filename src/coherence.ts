@@ -31,7 +31,8 @@ export function contradictions(md: string): string[] {
   if (head && four.length && list(head).join("|") !== four.join("|")) found.push(`the headline sends ${head}, the party card ${four.join(", ")}`)
   const bridge = md.match(/So this week I would send (.+?) to the /)?.[1]
   if (bridge && four.length && list(bridge).join("|") !== four.join("|")) found.push(`the return section sends ${bridge}, the party card ${four.join(", ")}`)
-  const stick = [...md.matchAll(/title: "Rank \d: ([^"]+)"/g)].map((m) => m[1]!)
+  // a rank note may carry a warning after the name ("Emory (mind the quirk)"); the name is what is compared
+  const stick = [...md.matchAll(/title: "Rank \d: ([^"]+)"/g)].map((m) => m[1]!.replace(/ \([^)]*\)$/, "").replace(/, .*$/, ""))
   if (stick.length && four.length && [...stick].sort().join("|") !== [...four].sort().join("|")) found.push(`the rank notes seat ${stick.join(", ")}, the party card ${four.join(", ")}`)
 
   // nobody in the four is also sent to a building, the ward, or away

@@ -302,9 +302,12 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   L.push("## Who rests, who prays {wide}", "")
   L.push(`The ones the dark has worn down, where the Abbey and the Tavern can take them as the estate has built them up, and the places their own habits forbid them. My habit: anyone at ${RULE.restAbove} stress or more rests before going out again. ${GAUGE}`, "")
   L.push(...stressBars([...t.heroes].filter((h) => h.stress > 0).sort((x, y) => y.stress - x.stress)))
-  const cards: string[] = []
+  // each card is filed under the building I lean it to, so the section reads building by building (Soushi, 2026-10-11:
+  // "organise this section by building you suggest"); a card leaned to wait is filed last
+  const cards: string[] = [], filed: { at: number; place: string }[] = []
   for (const r of a.relief) {
     if (!r.options.length) continue
+    const at = cards.length
     cards.push(`- q: ${y(`Where does ${r.hero.name} go?`)}`, `  image: ${y(portrait(r.hero))}`)
     cards.push(`  context: ${y(`${r.hero.name}, ${r.hero.clsName} level ${r.hero.level}: ${r.why.join(", ")}.`)}`, "  options:")
     for (const o of r.options) cards.push(`    - pick: ${y(o.activity.name)}`, `      effect: ${y(`${o.note}${r.hero.affliction ? `; ${Math.round(o.activity.cure * 100)}% chance to cure the affliction` : ""}.`)}`)
@@ -318,12 +321,15 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
         cards.push(`  lean: ${r.options.indexOf(best)}`, `  lean_why: ${y(`the cheapest place they accept that has a free seat (${best.note}).`)}`)
       } else cards.push(`  lean: ${r.options.length}`, `  lean_why: ${y(`${firstRoad}.`)}`)
     }
+    const leaned = !a.dismiss.some((d) => d.hero.guid === r.hero.guid) && r.options.find((o) => o.activity.cost <= left + o.activity.cost && cards.slice(at).some((l) => l === `  lean: ${r.options.indexOf(o)}`))
+    filed.push({ at, place: leaned ? leaned.activity.buildingName : "" })
   }
   const ward = t.activities.find((x) => x.activity === "disease_treatment")
   let beds = ward ? ward.slots - ward.used : 0
   // the ward's free beds go to the most experienced first; the rest wait
   for (const h of [...a.disease].sort((x, z) => z.level - x.level || z.xp - x.xp)) {
     if (!ward) continue
+    const at = cards.length
     const gets = beds > 0
     if (gets) beds--
     const ill = h.quirks.filter((q) => q.disease).map((q) => q.name).join(", ")
@@ -335,6 +341,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     const lean = gets && h.level >= 1 && purse ? 0 : 1
     if (lean === 0) left -= ward.cost
     cards.push(`  lean: ${lean}`, `  lean_why: ${y(!gets ? "the bed goes to a more experienced hero this week." : h.level < 1 ? "a level 0 hero is cheaper to replace than to cure." : !purse ? `${firstRoad}.` : "a hero with experience is worth the bed.")}`)
+    filed.push({ at, place: lean === 0 ? ward.buildingName : "" })
   }
   // the Treatment Ward (C25): one quirk per hero, by my habit; seats to the party first, then the most experienced
   const tw = t.activities.find((x) => x.activity === "treatment")
@@ -350,6 +357,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     // a hero in the ward cannot board the coach: never lean on treating one of the four I would send (Soushi, 2026-10-10)
     const lean = gets && purse && !tr.inParty ? 0 : 1
     if (lean === 0) left -= tr.cost
+    filed.push({ at: cards.length, place: lean === 0 ? tw.buildingName : "" })
     cards.push(`- q: ${y(`Treat ${tr.hero.name}'s ${tr.quirk.name}?`)}`, `  image: ${y(portrait(tr.hero))}`)
     cards.push(`  context: ${y(`${tr.hero.name}, ${tr.hero.clsName} level ${tr.hero.level}${tr.inParty ? ", in the party I would send" : ""}. ${tr.quirk.name}${tr.quirk.description ? `: ${tr.quirk.description}` : "."}${tr.quirk.locked ? " It has set in, and the ward asks more for it." : ""} The ${tw.name} has ${tw.slots} seat${tw.slots === 1 ? "" : "s"}, ${tw.slots - tw.used} free this week.`)}`, "  options:")
     cards.push(`    - pick: ${y(tw.name)}`, `      effect: ${y(`${tr.cost ? coin(tr.cost) : "free this week"}; the ward works on ${tr.quirk.name}, and ${tr.hero.name} stays in the Hamlet while it does.`)}`)
@@ -357,7 +365,15 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     cards.push(`  lean: ${lean}`, `  lean_why: ${y(tr.inParty ? `${tr.hero.name} rides with the party I would send, and a hero in the ward cannot board the coach; treat it in a week they stay home.` : !gets ? "the seat goes to someone the road needs more." : !purse ? `${firstRoad}.` : `${tr.why}.`)}`)
   }
   const stuck = a.relief.filter((r) => !r.options.length)
-  if (cards.length) L.push("```board-decisions", ...cards, "```", "")
+  if (cards.length) {
+    const spans = filed.sort((x, z) => x.at - z.at).map((f, k, all) => ({ place: f.place, lines: cards.slice(f.at, all[k + 1]?.at ?? cards.length) }))
+    const places = [...new Set(spans.map((x) => x.place).filter(Boolean)), ""]
+    for (const place of places) {
+      const lines = spans.filter((x) => x.place === place).flatMap((x) => x.lines)
+      if (!lines.length) continue
+      L.push(`### ${place || "Waiting this week"}`, "", "```board-decisions", ...lines, "```", "")
+    }
+  }
   if (waiting.length && tw) {
     const inWard = t.heroes.filter((h) => h.busy === tw.name).map((h) => h.name)
     L.push("```board-stickies")
