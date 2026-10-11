@@ -6,6 +6,7 @@ import type { Lesson } from "./chronicle.ts"
 import {
   P, applied, buildingData, buildingTrees, describeQuirk, dungeonMonsters, heroClass, heroTrees, levelOf, levelThresholds,
   monster, nameOf, quirks, strings, townEvents, trinkets, type Cost, type Monster,
+  campingSkills,
 } from "./game.ts"
 
 const raw = (h: any) => h.hero_file_data?.raw_data ?? h
@@ -16,6 +17,8 @@ export interface HeroView {
   affliction: string; busy: string; quirks: QuirkView[]; skills: { id: string; name: string; level: number }[]
   // every combat skill the hero has learned, equipped or not: the equipped four plus every skill tree with a purchase (C34)
   learned?: { id: string; name: string }[]
+  // camping skills: the ones taken to camp, and every one learned (the taken plus each bought at the Survivalist)
+  campEquipped?: string[]; campKnown?: string[]
   weapon: number; armour: number; trinkets: string[]; dungeons: string[]; portrait: string
   from?: string // the town event that brought a recruit
 }
@@ -31,7 +34,7 @@ export interface Town {
   trips: { dungeon: string; difficulty: number }[] // every expedition the campaign log records
   ledger?: Lesson[] // the lessons kept from past expeditions (C42), loaded by the board before it advises
   back?: { dungeon: string; dungeonName: string; quest: string; length: number; success: boolean; heroes: { guid: number; name: string; cls: string; died: boolean }[] }
-  skillDiscount: number; gearDiscount: number; visited: string[]; knownVariants: string[]
+  skillDiscount: number; gearDiscount: number; campDiscount: number; visited: string[]; knownVariants: string[]
   heroUpgrades: Upgrade[]; buildingUpgrades: Upgrade[]; estateTrinkets: { id: string; name: string; classes: string[]; rank: number }[]
   worn: Record<string, { id: string; name: string; rank: number }[]>; trinketSlots: number
   bought: Set<string>
@@ -79,6 +82,7 @@ async function heroView(guid: number, h: any, thr: number[], busy: Map<number, s
     busy: busy.get(guid) ?? "", quirks: qs, skills, weapon: r.weapon_rank ?? 0, armour: r.armour_rank ?? 0,
     trinkets: Object.values<any>(r.trinkets?.items ?? {}).map((t) => t.id).filter(Boolean),
     dungeons: (r.dungeon_history ?? []).filter((d: unknown) => typeof d === "string"), portrait: P.portrait(r.heroClass),
+    campEquipped: Object.keys(r.skills?.selected_camping_skills ?? {}),
   }
 }
 
@@ -169,6 +173,8 @@ export async function town(save: Save): Promise<Town> {
     const combat = (await heroClass(h.cls)).skills, mine = heroBought.get(h.guid) ?? new Set<string>()
     const ids = new Set([...h.skills.map((s) => s.id), ...[...mine].map((k) => k.split(":")[0]!).filter((t) => t.startsWith(`${h.cls}.`)).map((t) => t.slice(h.cls.length + 1)).filter((id) => combat.has(id))])
     h.learned = await Promise.all([...ids].map(async (id) => ({ id, name: h.skills.find((s) => s.id === id)?.name ?? (await nameOf("skill", id, h.cls)) })))
+    const camp = await campingSkills()
+    h.campKnown = [...new Set([...(h.campEquipped ?? []), ...[...mine].map((k) => k.split(":")[0]!).filter((t) => t.startsWith(`${h.cls}.`)).map((t) => t.slice(h.cls.length + 1)).filter((id) => camp.has(id))])]
   }
   const recruits: HeroView[] = []
   for (const [g, h] of Object.entries<any>(tb.stage_coach?.store?.hero_recruit?.generated ?? {})) recruits.push(await heroView(Number(g), h, thr, new Map()))
@@ -265,6 +271,7 @@ export async function town(save: Save): Promise<Town> {
   }
   const skillDiscount = await discount("guild", "combat_skill_cost_discount_upgrades")
   const gearDiscount = await discount("blacksmith", "equipment_cost_discount_upgrades")
+  const campDiscount = await discount("camping_trainer", "camping_skill_cost_discount_upgrades")
 
   // upgrades a hero could buy next: the first unbought code of each tree they own
   const heroUpgrades: Upgrade[] = []
@@ -319,7 +326,7 @@ export async function town(save: Save): Promise<Town> {
     activities, quests, witnessedSkills: known.size, dungeonsUnlocked,
     quests_done: prog?.total_quests_finished ?? 0, quests_won: prog?.total_successful_quests_finished ?? 0,
     lastQuest: typeof prog?.last_quest_played_id === "string" ? prog.last_quest_played_id : "", lastWon: !!prog?.last_raid_success, back, trips,
-    skillDiscount, gearDiscount, visited: [...visited], knownVariants: [...knownVariants],
+    skillDiscount, gearDiscount, campDiscount, visited: [...visited], knownVariants: [...knownVariants],
     heroUpgrades, buildingUpgrades, estateTrinkets, worn, trinketSlots, bought, supply: await supplies(), event, raid,
     purchases: Object.values<any>((save.upgrades as any)?.purchases ?? {}).filter((p) => p.is_purchased !== false).map((p) => ({ key: `${p.tree_id}:${p.requirement_code}`, guid: Number(p.instance_number) || 0 })),
   }

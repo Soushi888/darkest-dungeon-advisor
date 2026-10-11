@@ -218,6 +218,26 @@ describe.skipIf(!has)("on the local save", () => {
     expect(md).toContain("on the gauge of 200")
   })
 
+  test("C47: the Survivalist section names each of the four's camping skills and leans to keep the gold on a road that does not camp", async () => {
+    const proc = Bun.spawnSync(["bun", "src/cli.ts", "town"], { cwd: root, env: { ...process.env, DD_PROFILE: copyProfile() } })
+    expect(proc.exitCode).toBe(0)
+    const md = await Bun.file(join(townOut, "town.md")).text()
+    const from = md.indexOf("## The Survivalist"), sec = md.slice(from, md.indexOf("\n## ", from + 5))
+    expect(from).toBeGreaterThan(0)
+    const four = [...(md.match(/Front to back: ([^"]+?)\. A /)?.[1] ?? "").matchAll(/\d\. (\S+) \(/g)].map((m) => m[1]!)
+    for (const n of four) expect(sec).toContain(`${n}, `)
+    expect(sec).toContain("Takes to camp:")
+    if (/does not camp/.test(sec)) { const opts = [...sec.matchAll(/^ {4}- pick: /gm)].length; expect(sec).toContain(`lean: ${opts - 1}`) }
+  })
+
+  test("C48: the Caretaker's habits are listed one by one with their values, where the old accounts note was", async () => {
+    const md = await Bun.file(join(townOut, "town.md")).text()
+    const from = md.indexOf("## The Caretaker's habits"), sec = md.slice(from)
+    expect(from).toBeGreaterThan(0)
+    expect(md).not.toContain("How I keep the accounts")
+    for (const v of [RULE.restAbove, RULE.sendBelow, RULE.frontHp, RULE.healerWorth, RULE.campGuard]) expect(sec).toMatch(new RegExp(`\\| [+−]?${String(v).replace(".", "\\.")} \\|`))
+  })
+
   test("C13: the board speaks in the Caretaker's voice: no save, file, field or tool is named on it", async () => {
     const dir = copyProfile()
     const proc = Bun.spawnSync(["bun", "src/cli.ts", "town"], { cwd: root, env: { ...process.env, DD_PROFILE: dir } })

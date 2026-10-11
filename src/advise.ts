@@ -45,8 +45,12 @@ export const RULE = {
   moveWorth: 0.5, // RULE: a skill that moves its user, to win a seat back (C33)
   markPair: 3, // RULE: a mark carried with a hand that strikes the marked harder (C35)
   dotWorth: 1.5, // RULE: a bleed or blight, times the share the road's known foes fail to resist (C36)
+  // how I weigh a camping skill (the Survivalist): stress healed counts by how many it reaches, health healed in tenths of
+  // the bar, a cure or a guard on the camp a fixed worth, a boon for the next fight a little, stress dealt to the others against
+  campStress: 1, campHealth: 10, campCure: 4, campGuard: 6, campBoon: 2,
   frontHp: 1.5, // RULE: per hit point above the four's average, at the front; rank 1 counts twice, rank 4 twice against (Soushi, 2026-10-11: "an occultist on front line? he is not really resistant")
   lessonHeal: 4, // RULE: a true healer's extra weight on a road where healing failed before (C42)
+  healerWorth: 8, lightHealWorth: 2, stunWorth: 3, sameClass: 2, levelWorth: 3, stressWeight: 0.1, // RULE: a party's healer, light heal, stun, a doubled class against, each level, each point of stress against
 }
 
 /** What a skill is worth from rank r on road q, by my habits: an attack by how many ranks it reaches, a heal by what it
@@ -157,7 +161,7 @@ async function bestParty(pool: HeroView[], q: Quest): Promise<Party | undefined>
         // a seat is worth what its skills are worth from there, and the front wants hit points
         for (const s of mine) score += skillWorth(s.k, r, q)
         score += [2, 1, -1, -2][i]! * (cls.hp - meanHp) * RULE.frontHp
-        score += h.level * 3 - h.stress / 10 + fit.get(h.guid)!.score
+        score += h.level * RULE.levelWorth - h.stress * RULE.stressWeight + fit.get(h.guid)!.score
         // C32: the enemy ranks this seat can strike
         for (const s of mine) if (s.k?.launch.includes(r)) for (const e of s.k.target) reach.add(e)
         // C33: still able to attack one rank off the seat, or to move back into it
@@ -170,10 +174,10 @@ async function bestParty(pool: HeroView[], q: Quest): Promise<Party | undefined>
       score += RULE.reachPerRank * reach.size
       if (marker && striker) { score += RULE.markPair; pair = { marker: marker.h.name, mark: marker.name, striker: striker.h.name, strike: striker.name } }
       // a true healer is what brings a party home; a light heal helps, but does not stand in for one
-      if (healer) score += 8
-      else if (heal) score += 2
-      if (stunner) score += 3
-      if (new Set(order.map((h) => h.cls)).size < 4) score -= 2
+      if (healer) score += RULE.healerWorth
+      else if (heal) score += RULE.lightHealWorth
+      if (stunner) score += RULE.stunWorth
+      if (new Set(order.map((h) => h.cls)).size < 4) score -= RULE.sameClass
       if (!best || score > best.score) {
         best = {
           quest: q, score, healer, heal, stunner, notes: [], reach: [...reach].sort(), pair,
@@ -364,7 +368,11 @@ export function readiness(t: Town, p: Party, reserve: number): Readiness {
   const tired = p.seats.filter((s) => s.hero.stress >= RULE.sendBelow).map((s) => s.hero.name)
   const unfit = p.seats.filter((s) => s.hero.affliction || s.hero.quirks.some((q) => q.disease) || s.hero.busy).map((s) => s.hero.name)
   const short = p.seats.filter((s) => s.skills.length < 2).map((s) => s.hero.name)
-  const against = p.seats.filter((s) => s.notes.some((n) => n.startsWith("−"))).map((s) => s.hero.name)
+  // each hero with a quirk against this road, the quirk named with what it does (Soushi, 2026-10-11: "what about this?")
+  const against = p.seats.filter((s) => s.notes.some((n) => n.startsWith("−"))).map((s) => {
+    const said = s.notes.filter((n) => n.startsWith("−")).map((n) => n.slice(2)).map((n) => { const d = s.hero.quirks.find((x) => x.name === n)?.description; return d ? `${n} (${d})` : n })
+    return `${s.hero.name} carries ${said.join(" and ")}`
+  })
   const checks = [
     { label: "The road is paid for", met: gold >= reserve, why: gold >= reserve ? `the provisions cost ${n(reserve)} of your ${n(gold)} gold` : `the provisions cost ${n(reserve)} and you have ${n(gold)}` },
     { label: "Rested", met: !tired.length, why: tired.length ? `${tired.join(", ")} at ${RULE.sendBelow} stress or more` : `all four under ${RULE.sendBelow} stress` },
@@ -373,7 +381,7 @@ export function readiness(t: Town, p: Party, reserve: number): Readiness {
     { label: "A stun goes with them", met: p.stunner, why: p.stunner ? "someone can stop a foe's turn" : "nobody in the four can stun" },
     { label: "Every rank can fight", met: !short.length, why: short.length ? `${short.join(", ")} with fewer than two skills that reach from their rank` : "each has at least two skills that reach from their rank" },
     { label: "A road you have walked", met: p.quest.walked, why: p.quest.walked ? `${p.quest.known.length} foes there you know` : "you have never walked it" },
-    { label: "No quirk turns against them there", met: !against.length, why: against.length ? `${against.join(", ")} carry a quirk that works against this road` : "no quirk in the four works against this road" },
+    { label: "No quirk turns against them there", met: !against.length, why: against.length ? `${against.join("; ")}` : "no quirk in the four works against this road" },
     { label: "Seasoned enough for its length", met: !(p.green && p.quest.length > 1), why: p.green && p.quest.length > 1 ? "most of them untried, on a road longer than short" : p.green ? "untried, but the road is short" : "enough of them have seen the dark" },
   ]
   const met = checks.filter((c) => c.met).length, pct = Math.round((met / checks.length) * 100)

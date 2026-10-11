@@ -5,15 +5,15 @@
 import { copyFileSync, existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { homedir } from "node:os"
-import { advise, readiness, road, seatParty, RULE, type Advice, type Party } from "./advise.ts"
+import { advise, readiness, road, seatParty, RULE, RULE_FOOD, type Advice, type Party } from "./advise.ts"
 export { road, type RoadItem } from "./advise.ts"
-import { supplyPrices } from "./game.ts"
+import { campingSkills, supplyPrices, type CampSkill } from "./game.ts"
 import { install, root } from "./paths.ts"
 import { DIFFICULTY, LENGTH, type HeroView, type Town } from "./town.ts"
 import { buildSkin } from "./skin.ts"
 import { loadPicks, reconcile, type Check } from "./reconcile.ts"
 import { contradictions } from "./coherence.ts"
-import { beats, chronicleFor, debrief, judge, loadLedger, remember, untried, type Beat, type Debrief, type Lesson } from "./chronicle.ts"
+import { beats, chronicleFor, CHRONICLE_RULE, debrief, judge, loadLedger, remember, untried, type Beat, type Debrief, type Lesson } from "./chronicle.ts"
 import { heroClass } from "./game.ts"
 
 // DD_TOWN_OUT lets the tests build elsewhere, so they never touch the live board or its picks
@@ -105,7 +105,7 @@ export function weekSoFar(t: Town, start: WeekStart | undefined): string[] {
 }
 
 export interface Tale { snaps: number; beats: Beat[]; well: string[]; wrong: string[]; lessons: Lesson[]; debrief?: Debrief }
-export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: Answers; own?: Party; checks?: Check[]; prices?: Map<string, number>; soFar?: string[]; tale?: Tale }): { board: string; sources: string } {
+export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: Answers; own?: Party; checks?: Check[]; prices?: Map<string, number>; soFar?: string[]; tale?: Tale; camp?: Map<string, CampSkill> }): { board: string; sources: string } {
   const L: string[] = []
   const picked = (opts.answers.expedition && a.parties.find((p) => questLabel(p) === opts.answers.expedition)) || a.best
   const chosen = opts.own ?? picked
@@ -431,6 +431,63 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     L.push("```", "")
   }
 
+  // C47: the Survivalist, the camping skills of the four going, and what is worth teaching them (Soushi, 2026-10-11: "we unlocked
+  // Survivalist, it will be important to include it in the board")
+  if (opts.camp && chosen) {
+    const camp = opts.camp, off = t.campDiscount, q = chosen.quest
+    const reach = (sel: string) => (sel === "party_other" ? 3 : sel === "party" ? 4 : 1)
+    const who = (sel: string) => ({ self: "the one who uses it", individual: "one hero", party_other: "each companion", party: "the whole party" })[sel] ?? sel.replace(/_/g, " ")
+    const says = (e: { type: string; selection: string; amount: number; sub: string }) => ({
+      stress_heal_amount: `relieves ${e.amount} stress for ${who(e.selection)}`, stress_damage_amount: `adds ${e.amount} stress to ${who(e.selection)}`,
+      health_heal_max_health_percent: `heals ${Math.round(e.amount * 100)}% of health for ${who(e.selection)}`, health_damage_max_health_percent: `costs ${who(e.selection)} ${Math.round(e.amount * 100)}% of health`,
+      remove_bleeding: `stops bleeding on ${who(e.selection)}`, remove_poison: `clears blight on ${who(e.selection)}`, remove_disease: `cures a disease of ${who(e.selection)}`,
+      remove_deaths_door_recovery_buffs: `lifts the weakness left by Death's Door from ${who(e.selection)}`, reduce_ambush_chance: "guards the camp against a night ambush",
+      loot: "turns up some loot", reduce_torch: "dims the torch", buff: `${boon(e)} for ${who(e.selection)} until the next fight`,
+    } as Record<string, string>)[e.type] ?? e.type.replace(/_/g, " ")
+    // a boon named from its own id: campingDMGLowBuff is damage, campingStressResistBuff stress resistance
+    function boon(e: { sub: string; amount: number }) {
+      const w = e.sub.replace(/^camping/, "").replace(/Buff$/, "").replace(/(Low|High)$/, "").replace(/DMG/g, "Damage").replace(/Resist$/, "Resistance").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()
+      const n = Math.abs(e.amount)
+      return `${n < 2 ? `${Math.round(n * 100)}%` : n} ${w || "boon"}`.trim()
+    }
+    // the same effect told once: a boon split in two halves (low and high damage), or a cost that differs by who takes it
+    // and one effect whose amount depends on who takes it (religious or not, say) told as "10 or 20"
+    const tell = (k: CampSkill) => {
+      const groups = new Map<string, number[]>()
+      for (const e of k.effects) if (/^stress_(heal|damage)_amount$/.test(e.type)) groups.set(`${e.type}|${e.selection}`, [...(groups.get(`${e.type}|${e.selection}`) ?? []), e.amount])
+      return [...new Set(k.effects.map((e) => {
+        const g = groups.get(`${e.type}|${e.selection}`)
+        return g && new Set(g).size > 1 ? says(e).replace(/\d+/, `${[...new Set(g)].join(" or ")}`) + ", by who they are" : says(e)
+      }))].join("; ")
+    }
+    const worth = (k: CampSkill) => k.effects.reduce((v, e) => v + (e.type === "stress_heal_amount" ? e.amount * reach(e.selection) * RULE.campStress
+      : e.type === "stress_damage_amount" ? -e.amount * reach(e.selection) * RULE.campStress / 2 : e.type === "health_heal_max_health_percent" ? e.amount * RULE.campHealth * reach(e.selection)
+      : /^remove_/.test(e.type) ? RULE.campCure : e.type === "reduce_ambush_chance" ? RULE.campGuard : e.type === "buff" ? RULE.campBoon : 0), 0)
+    const price = (k: CampSkill) => Math.round(k.gold * (1 - off))
+    const camps = q.length >= 2
+    L.push("## The Survivalist {wide}", "")
+    L.push(`The Survivalist teaches the skills a hero uses at the campfire, which only a medium or long road gives them the night for. ${off ? `He knocks ${Math.round(off * 100)}% off his lessons for what the estate has paid him.` : ""} ${camps ? `This week's road camps, so what they carry to the fire matters now.` : `This week's road is short and does not camp: what they learn here waits for a longer road.`}`.replace(/\s+/g, " ").trim(), "")
+    const best: { hero: HeroView; k: CampSkill }[] = []
+    L.push("```board-stickies")
+    for (const s of chosen.seats) {
+      const h = s.hero, known = h.campKnown ?? [], taken = h.campEquipped ?? []
+      const open = [...camp.values()].filter((k) => k.classes.includes(h.cls) && !known.includes(k.id) && k.gold > 0).sort((x, z) => worth(z) - worth(x) || price(x) - price(z))
+      if (open[0]) best.push({ hero: h, k: open[0] })
+      const line = (id: string) => { const k = camp.get(id); return k ? `${k.name} (${tell(k)})` : id }
+      L.push(`- title: ${y(`${h.name}, ${h.clsName}, at the campfire`)}`, "  kind: model",
+        `  body: ${y(`Takes to camp: ${taken.map(line).join(", ") || "nothing yet"}.${known.length > taken.length ? ` Also knows: ${known.filter((x) => !taken.includes(x)).map((id) => camp.get(id)?.name ?? id).join(", ")}.` : ""}${open[0] ? ` Worth learning: ${line(open[0].id)}, ${coin(price(open[0]))}.` : " Knows every camping skill the Survivalist can teach them."}`)}`)
+    }
+    L.push("```", "")
+    if (best.length) {
+      L.push("```board-decisions", `- q: "What do we teach at the Survivalist?"`, `  context: ${y(`The best lesson for each of the four, by my habit of weighing a camping skill (stress relieved by how many it reaches, health healed, a cure or a guard on the camp, a boon for the next fight). ${camps ? "This road camps." : "This road does not camp."}`)}`, "  options:")
+      for (const b of best) L.push(`    - pick: ${y(`${b.hero.name}: ${b.k.name}`)}`, `      effect: ${y(`${coin(price(b.k))} at the Survivalist; ${tell(b.k)}.`)}`)
+      L.push(`    - pick: "Keep the gold"`, `      effect: ${y("Teach nothing at the Survivalist this week.")}`)
+      const pick = camps ? best.map((b, i) => ({ b, i })).filter(({ b }) => price(b.k) <= left).sort((x, z) => worth(z.b.k) - worth(x.b.k))[0] : undefined
+      if (pick) left -= price(pick.b.k)
+      L.push(`  lean: ${pick ? pick.i : best.length}`, `  lean_why: ${y(pick ? `the most worth at the fire for this road, within the gold left.` : camps ? `${firstRoad}.` : "this road does not camp; the gold serves better elsewhere this week.")}`, "```", "")
+    }
+  }
+
   // roster
   L.push("## Who stays, who goes {wide}", "")
   // C29: recruits share the places the roster has, counting the ones my dismissals would free (Soushi, 2026-10-10)
@@ -516,8 +573,51 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   for (const p of a.parties) rows.push([p.quest.rewards.filter((r) => /^\d/.test(r)).join(", "), `${questLabel(p)}, rewards`, "`persist.quest.json` completion_reward"])
   for (const i of roadItems) rows.push([`${i.price}`, `${i.label}, gold each`, `\`inventory/base.supply.inventory.items.darkest\` purchase_gold_value${t.event?.provisions.length ? `, with this week's event (\`${t.event.id}\`)` : ""}`])
   rows.push([`${t.witnessedSkills}`, "enemy attacks witnessed", "`persist.game_knowledge.json` combat_skills"])
-  L.push("## How I keep the accounts {wide}", "")
-  L.push(`My habits, so you can weigh them: rest at ${RULE.restAbove} stress, send only under ${RULE.sendBelow}, let go of level 0 heroes with ${RULE.dismissNegatives} or more bad quirks. Your heroes have suffered ${t.witnessedSkills} kinds of blow so far, in ${t.visited.length ? t.visited.length + " of the places beyond the Hamlet" : "no place yet"}. Everything else on this page is what the estate's ledgers and my own eyes tell me.`, "")
+  // C48: the Caretaker's habits, every rule of his own on one list, grouped, to be reviewed and changed as the game is learnt
+  // (Soushi, 2026-10-11: "it should be a list of the habits of the caretaker so we can review and update them")
+  L.push("## The Caretaker's habits {wide}", "")
+  L.push(`Every rule of my own that bends the advice on this page, so you can weigh it and change it as we learn the dark together. None of these is a law of the dark; each is my own judgement. Pin a comment on any row to change it, and I will. Your heroes have suffered ${t.witnessedSkills} kinds of blow so far, in ${t.visited.length ? `${t.visited.length} of the places beyond the Hamlet` : "no place yet"}.`, "")
+  const H = (group: string, rows: [string, string | number][]) => { L.push(`**${group}**`, "", "| Habit | Now |", "|---|---|"); for (const [w, v] of rows) L.push(`| ${w} | ${v} |`); L.push("") }
+  H("Rest and sending", [
+    ["A hero at this much stress or more rests before going out again", RULE.restAbove],
+    ["I only send heroes under this much stress", RULE.sendBelow],
+    ["A level 0 hero with this many bad quirks is one I would let go", RULE.dismissNegatives],
+    ["A heal restoring this many hit points a cast, at its first level, makes a healer; less is a light heal", RULE.realHeal],
+  ])
+  H("Choosing the road", [
+    ["When this many of the four are level 0, a longer road counts against itself", RULE.greenParty],
+    ["How much it counts, for each step beyond a short road", RULE.greenPerStep],
+    ["Every this much gold the road leaves in the coffers counts one point", coin(RULE.goldPerPoint)],
+    ["Up to this many points for gold left", RULE.goldCap],
+    ["A road the coffers cannot provision counts this much against itself", RULE.brokeRoad],
+  ])
+  H("Seating the four", [
+    ["A true healer in the four", `+${RULE.healerWorth}`], ["Only a light heal", `+${RULE.lightHealWorth}`], ["A stun in the four", `+${RULE.stunWorth}`],
+    ["Two of the same calling in the four", `−${RULE.sameClass}`], ["Each level of a hero", `+${RULE.levelWorth}`], ["Each point of stress a hero carries", `−${RULE.stressWeight}`],
+    ["Each enemy rank the four can strike from their seats", `+${RULE.reachPerRank}`],
+    ["Each neighbouring rank a hero can still strike from, if knocked out of their seat", `+${RULE.shufflePerSide}`],
+    ["A skill that moves its user back into their seat", `+${RULE.moveWorth}`],
+    ["A mark carried with a hand that strikes the marked harder", `+${RULE.markPair}`],
+    ["A bleed or blight, times the share of the road's known foes that fail to resist it", `+${RULE.dotWorth}`],
+    ["Each hit point above the four's average at the front (rank 1 twice, rank 2 once, rank 3 once against, rank 4 twice against)", `${RULE.frontHp}`],
+    ["A true healer's extra weight on a road where healing failed before", `+${RULE.lessonHeal}`],
+  ])
+  H("On the road", [
+    ["Food and torches for a short, medium and long road", RULE_FOOD.slice(1).join(", ")],
+    ["When this many of the four have broken, I bring them home", RULE.turnBackBroken],
+    ["Below this light I count them as walking in the dark", CHRONICLE_RULE.darkTorch],
+    ["This much stress between two pages is a blow worth telling", CHRONICLE_RULE.stressSpike],
+  ])
+  H("Learning from the road", [
+    ["Torches a lesson about the dark adds on its dungeon", `+${CHRONICLE_RULE.lessonTorches}`],
+    ["Food a lesson about hunger adds on its dungeon", `+${CHRONICLE_RULE.lessonFood}`],
+    ["One more torch and food on a road harder than any yet", `+${CHRONICLE_RULE.untriedMargin}`],
+  ])
+  H("At the Survivalist", [
+    ["Each point of stress a camping skill relieves, times how many it reaches", RULE.campStress],
+    ["A camping heal, per whole health bar, times how many it reaches", RULE.campHealth],
+    ["A cure at camp (bleeding, blight, disease)", RULE.campCure], ["A guard on the camp against a night ambush", RULE.campGuard], ["A boon until the next fight", RULE.campBoon],
+  ])
 
   const S: string[] = [`# Where each figure comes from, week ${t.week}`, "", "Every number on the town board beside the save field or game file it was read from (C14). Numbers labelled (my habit) on the board are RULE values and are not here.", ""]
   S.push("| Figure | What | Read from |", "|---|---|---|")
@@ -532,8 +632,8 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
  *  in the order their figures depend on (the gold the leans spend, the party the training trains) and shown in this one. */
 export const ACTING_ORDER = ["The coach is back",
   "This week in the Hamlet", "This week so far", "Did you do what you chose?", "The estate's coffers", "Heirlooms and trinkets",
-  "Who stays, who goes", "Who rests, who prays", "The next expedition", "How ready they are", "The Guild and the Blacksmith",
-  "Provisions for the", "How I keep the accounts",
+  "Who stays, who goes", "Who rests, who prays", "The next expedition", "How ready they are", "The Guild and the Blacksmith", "The Survivalist",
+  "Provisions for the", "The Caretaker's habits",
 ]
 export function inActingOrder(md: string): string {
   const parts = md.split(/\n(?=## )/)
@@ -582,7 +682,7 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
     start = { week: t.week, heroes: t.heroes.map((h) => ({ guid: h.guid, name: h.name })), bought: [...t.bought], gold: t.wallet.gold ?? 0, purchases: t.purchases.map((p) => `${p.guid}|${p.key}`) }
     await Bun.write(wsFile, JSON.stringify(start, null, 1))
   }
-  const { board, sources } = source(t, a, { foresight: !!opts.foresight, answers, own, checks, prices: await supplyPrices(), soFar: weekSoFar(t, start), tale })
+  const { board, sources } = source(t, a, { foresight: !!opts.foresight, answers, own, checks, prices: await supplyPrices(), soFar: weekSoFar(t, start), tale, camp: await campingSkills() })
   // C38: every build is read back for advice that contradicts itself; the live session is told through coherence.json
   const clash = contradictions(board)
   await Bun.write(join(outDir, "coherence.json"), JSON.stringify({ week: t.week, contradictions: clash }, null, 1))

@@ -5,6 +5,7 @@ import { join } from "node:path"
 import { install } from "./paths.ts"
 
 export const P = {
+  camping: "raid/camping/default.camping_skills.json",
   quirks: "shared/quirk/quirk_library.json",
   rosterVars: "campaign/roster/roster.variables.json",
   trinkets: "trinkets/base.entries.trinkets.json",
@@ -51,8 +52,24 @@ export async function nameOf(kind: "quirk" | "class" | "trinket" | "dungeon" | "
   return s.get(key) ?? s.get(`upgrade_tree_name_${cls}.${id}`) ?? titleCase(id)
 }
 export async function describeQuirk(id: string): Promise<string> {
-  return (await strings()).get(`str_quirk_description_${id}`) ?? ""
+  const said = (await strings()).get(`str_quirk_description_${id}`)
+  if (said) return said
+  // a quirk the game describes by its buffs alone: read them, "+20% stress received in the Cove"
+  const q = (await json(P.quirks)).quirks.find((x: any) => x.id === id)
+  if (!q?.buffs?.length) return ""
+  buffLib ??= new Map((await json("shared/buffs/base.buffs.json")).buffs.map((b: any) => [b.id, b]))
+  const out: string[] = []
+  for (const bid of q.buffs) {
+    const b = buffLib.get(bid)
+    if (!b) continue
+    const stat = [String(b.stat_type).replace(/_percent$/, "").replace(/_dmg_/, "_damage_").replace(/^combat_stat_(multiply|add)$/, ""), b.stat_sub_type].filter(Boolean).join(" ").replace(/_/g, " ").trim()
+    const amt = Number(b.amount), pct = Math.abs(amt) < 2 ? `${amt > 0 ? "+" : ""}${Math.round(amt * 100)}%` : `${amt > 0 ? "+" : ""}${amt}`
+    const where = b.rule_type === "in_dungeon" && b.rule_data?.string ? ` in the ${await nameOf("dungeon", b.rule_data.string)}` : b.rule_type && b.rule_type !== "always" ? ` (${String(b.rule_type).replace(/_/g, " ")}${b.rule_data?.string ? ` ${String(b.rule_data.string).replace(/_/g, " ")}` : ""})` : ""
+    out.push(`${pct} ${stat}${where}`)
+  }
+  return out.join(", ")
 }
+let buffLib: Map<string, any> | undefined
 
 // ---------- quirks ----------
 export interface Quirk { id: string; positive: boolean; disease: boolean; classification: string; curioTag: string; keepLoot: boolean; treatable: boolean }
@@ -219,4 +236,20 @@ export async function supplyPrices(): Promise<Map<string, number>> {
   const out = new Map<string, number>()
   for (const m of (await text(P.supplies)).matchAll(/\.type\s+"(\w+)"\s+\.id\s+"(\w*)".*?\.purchase_gold_value\s+(\d+)/g)) out.set(m[2] || m[1]!, Number(m[3]))
   return out
+}
+
+// ---------- camping skills (the Survivalist) ----------
+export interface CampEffect { type: string; selection: string; amount: number; sub: string }
+export interface CampSkill { id: string; name: string; points: number; limit: number; classes: string[]; gold: number; effects: CampEffect[] }
+let campLib: Map<string, CampSkill> | undefined
+/** Every camping skill: its camp points, uses per camp, the classes that can learn it, its price at the Survivalist and its effects. */
+export async function campingSkills(): Promise<Map<string, CampSkill>> {
+  if (campLib) return campLib
+  const s = await strings(), j = await json(P.camping)
+  campLib = new Map((j.skills ?? []).map((k: any) => [k.id, {
+    id: k.id, name: (s.get(`camping_skill_name_${k.id}`) ?? k.id).toLowerCase().replace(/_/g, " ").replace(/(^|\s)\w/g, (c: string) => c.toUpperCase()), points: Number(k.cost ?? 0), limit: Number(k.use_limit ?? 0),
+    classes: k.hero_classes ?? [], gold: Number((k.upgrade_requirements ?? []).find((u: any) => u.code === "0")?.currency_cost?.find((c: any) => c.type === "gold")?.amount ?? 0),
+    effects: (k.effects ?? []).map((e: any) => ({ type: String(e.type), selection: String(e.selection), amount: Number(e.amount ?? 0), sub: String(e.sub_type ?? "") })),
+  }]))
+  return campLib!
 }
