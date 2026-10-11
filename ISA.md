@@ -78,7 +78,7 @@ Soushi comes back from an expedition, saves, and opens the town board. A village
 
 ## Anti-claims
 
-- [x] **A1: The advisor never writes to the game's directories or the Steam cloud folder.** *Evidence: test "A1": profile mtimes identical before and after `bun run town`; all tests write to `.dd-runtime/test-profile`.*
+- [x] **A1: The advisor never writes to the game's directories or the Steam cloud folder.** *Evidence: test "A1": profile mtimes identical before and after `bun run town`; all tests write to `.dd-runtime/test-profile`. Test builds land in `DD_TOWN_OUT` and never under `.local/town`: the output folder is read at call time, since the test file sets it after its imports (an import-time value sent portraits into the live board folder until 2026-10-11); test "A1: a test build lands in DD_TOWN_OUT".*
 - [x] **A2: No figure from memory.** Every game figure is read from a file, or, for a rule of the game no file holds, from the Darkest Dungeon wiki with its page cited in the sources (Soushi, 2026-10-11: "don't hesitate to look at the wiki for reference about game mechanics and lore"; first use: the stress gauge's 100 and 200, `darkestdungeon.wiki.gg/wiki/Stress`); the advisor's own thresholds (rest at 45 stress, send under 45, food and torches by length) are labelled "my habit" on the board and named RULE in the code. *Evidence: `RULE` in `src/advise.ts` and `RULE_FOOD` in `src/board.ts`, each printed with its label.*
 - [x] **A3: No spoiler leaks through a default.** *Evidence: test "C6, A3".*
 - [x] **A4: No game art or wiki text committed.** *Evidence: `git ls-files` lists no image; portraits are copied from the install into `.local/town/img/` at build time.*

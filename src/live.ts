@@ -16,30 +16,30 @@ import { decode } from "./dson.ts"
 import { profileDir } from "./paths.ts"
 import { messagesFile } from "./road.ts"
 
-const log = join(outDir, "answers-log.md")
+const log = join(outDir(), "answers-log.md")
 const game = join(profileDir(), "persist.game.json")
 const mtime = (p: string) => (existsSync(p) ? statSync(p).mtimeMs : 0)
 const now = () => new Date().toLocaleTimeString("en-GB", { hour12: false })
 
-const board = join(outDir, "town.md")
+const board = join(outDir(), "town.md")
 const digest = async () => (existsSync(board) ? Bun.hash(await Bun.file(board).text()).toString() : "")
 const inRaid = async () => { try { const d = decode(new Uint8Array(await Bun.file(game).arrayBuffer())) as any; return !!(d.base_root ?? d).inraid } catch { return false } }
 let sent = mtime(log), saved = mtime(game), seen = await digest(), out = await inRaid()
-const chron = join(outDir, "chronicle")
+const chron = join(outDir(), "chronicle")
 const pages = () => { try { return readdirSync(chron).flatMap((d) => readdirSync(join(chron, d)).filter((f) => /^\d+\.json$/.test(f)).map((f) => join(chron, d, f))) } catch { return [] } }
 // DD_LIVE_REPLAY=n tells the last n pages again on start, to check what a page reports
 const replay = Number(process.env.DD_LIVE_REPLAY ?? 0), all = pages().sort()
 // a restarted stream resumes after the last page it told, so a page saved while it was down is still told
-const mark = join(outDir, "live-last.txt"), lastTold = existsSync(mark) ? (await Bun.file(mark).text()).trim() : ""
+const mark = join(outDir(), "live-last.txt"), lastTold = existsSync(mark) ? (await Bun.file(mark).text()).trim() : ""
 const told = new Set(replay ? all.slice(0, -replay) : lastTold ? all.filter((f) => f <= lastTold) : all)
 const last = new Map<string, any>(), prevFile = new Map<string, string>(), lastBody = new Map<string, string>()
 // the page before the first one told is what the next page is compared with
 for (const f of all.filter((f) => told.has(f))) { try { last.set(f.split("/").slice(-2, -1)[0]!, await Bun.file(f).json()); prevFile.set(f.split("/").slice(-2, -1)[0]!, f.replace(/\.json$/, ".raw.json")) } catch {} }
-const clashes = join(outDir, "coherence.json")
+const clashes = join(outDir(), "coherence.json")
 let clashSeen = mtime(clashes)
 // lines Soushi writes on the road page; the stream starts after the ones already there
 let asked = existsSync(messagesFile()) ? (await Bun.file(messagesFile()).text()).split("\n").filter(Boolean).length : 0
-console.log(`LIVE ${now()} watching ${outDir} and ${game}`)
+console.log(`LIVE ${now()} watching ${outDir()} and ${game}`)
 setInterval(async () => {
   for (const f of pages().filter((f) => !told.has(f)).sort()) {
     told.add(f)
@@ -154,7 +154,7 @@ setInterval(async () => {
   }
   if (mtime(log) !== sent) {
     sent = mtime(log)
-    const picks = (await Bun.file(join(outDir, "answers.md")).text()).split("\n").filter((l) => l.startsWith("- **")).length
+    const picks = (await Bun.file(join(outDir(), "answers.md")).text()).split("\n").filter((l) => l.startsWith("- **")).length
     console.log(`SEND ${now()} ${picks} picks`)
     setTimeout(async () => { seen = await digest() }, 6000) // the send rebuilds the board too; that change is not a save
   }

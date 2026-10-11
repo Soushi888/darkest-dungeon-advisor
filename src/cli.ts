@@ -27,10 +27,10 @@ async function once(): Promise<string | null> {
     const kept = await capture(save)
     if (kept) console.log(`chronicle: ${kept}`)
     // one farewell per expedition, on its first save (C24); after that the board waits for the return (C16)
-    const keyFile = Bun.file(join(outDir, "farewell.key"))
+    const keyFile = Bun.file(join(outDir(), "farewell.key"))
     if (t.raid && (!(await keyFile.exists()) || (await keyFile.text()) !== t.raid.key)) {
       const out = await buildFarewell(t)
-      await Bun.write(join(outDir, "farewell.key"), t.raid.key)
+      await Bun.write(join(outDir(), "farewell.key"), t.raid.key)
       console.log(`farewell, week ${t.week}: ${out}`)
       return out
     }
@@ -87,34 +87,34 @@ if (cmd === "town") {
       }
       if (path === "/answers" && req.method === "POST") {
         const body = await req.text()
-        await Bun.write(join(outDir, "answers.md"), body)
-        const log = Bun.file(join(outDir, "answers-log.md"))
+        await Bun.write(join(outDir(), "answers.md"), body)
+        const log = Bun.file(join(outDir(), "answers-log.md"))
         await Bun.write(log, `${(await log.exists()) ? await log.text() : ""}\n\n<!-- ${new Date().toISOString()} -->\n${body}`)
         // the week's picks, merged, so a card that leaves the board once done keeps its pick (C18)
         // a pick is checked against the board it was made on, so a pick that slid onto another card is dropped
-        const board = Bun.file(join(outDir, "town.md"))
+        const board = Bun.file(join(outDir(), "town.md"))
         const options = (await board.exists()) ? boardOptions(await board.text()) : undefined
-        if (last) await Bun.write(picksFile(outDir), JSON.stringify(mergePicks(await loadPicks(outDir), body, last, options), null, 1))
+        if (last) await Bun.write(picksFile(outDir()), JSON.stringify(mergePicks(await loadPicks(outDir()), body, last, options), null, 1))
         await rebuild()
         return new Response("ok")
       }
       if (path === "/road") return Response.redirect("/#road", 302)
       if (path === "/" || path === "/town.html") {
-        const html = await Bun.file(join(outDir, "town.html")).text()
+        const html = await Bun.file(join(outDir(), "town.html")).text()
         // the last send's stamp: a page whose inputs predate it forgets them on load, even inputs kept from before this fix
-        const log = join(outDir, "answers-log.md")
+        const log = join(outDir(), "answers-log.md")
         const sent = existsSync(log) ? String(statSync(log).mtimeMs) : "none"
         const forget = `<script>(()=>{try{const K=(window.BRAINSTORM_KEY||'brainstorm')+':v1';if(localStorage.getItem('ddSent')!==${JSON.stringify(sent)}){const had=localStorage.getItem(K);localStorage.removeItem(K);localStorage.setItem('ddSent',${JSON.stringify(sent)});if(had)location.reload()}}catch{}})()</script>`
         // C18: the board stores each pick under its card's number, so a card that comes or goes between builds slid picks onto
         // the wrong card (three times on 2026-10-10). Before the board's script reads them, re-key the stored picks by question
         // text against this build's cards, keeping a pick only where it is still one of its card's options.
-        const md = Bun.file(join(outDir, "town.md"))
+        const md = Bun.file(join(outDir(), "town.md"))
         const cards = (await md.exists()) ? [...boardOptions(await md.text())].map(([q, o]) => ({ q, o })) : []
         const key = (html.match(/window\.BRAINSTORM_KEY=("(?:[^"\\]|\\.)*")/)?.[1]) ?? '"brainstorm"'
         const rekey = `<script>(()=>{try{const K=${key}+':v1',C=${JSON.stringify(cards).replaceAll("<", "\\u003c")},st=JSON.parse(localStorage.getItem(K)||'{}'),was=JSON.parse(localStorage.getItem('ddCards')||'null');if(st.dec&&was){const byQ={};for(const[id,v]of Object.entries(st.dec)){const q=was[Number(id)-1];if(q)byQ[q]=v}const dec={};C.forEach((c,i)=>{const v=byQ[c.q];if(!v)return;const keep={};if(v.pick&&c.o.includes(v.pick))keep.pick=v.pick;if(v.note)keep.note=v.note;if(keep.pick||keep.note)dec[String(i+1)]=keep});st.dec=dec;localStorage.setItem(K,JSON.stringify(st))}localStorage.setItem('ddCards',JSON.stringify(C.map(c=>c.q)))}catch{}})()</script>`
         return new Response(html.replace("<head>", `<head>${rekey}`).replace("</body>", `${forget}${reload}${roadPanel}</body>`), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } })
       }
-      const f = Bun.file(join(outDir, path.replace(/^\/+/, "")))
+      const f = Bun.file(join(outDir(), path.replace(/^\/+/, "")))
       return (await f.exists()) ? new Response(f) : new Response("not found", { status: 404 })
     },
   })
