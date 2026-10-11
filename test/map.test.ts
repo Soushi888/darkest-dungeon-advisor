@@ -113,3 +113,22 @@ describe("C51: the map as the party knows it", () => {
     expect(svg).not.toMatch(/roo[A-Z]|co[A-Z]{2}/)
   })
 })
+
+describe("C54: the road zone keys its map and takes the board's pins", () => {
+  test("every colour on the drawing is in the legend, and a tile seen but not walked stands out", async () => {
+    const { mapLegend } = await import("../src/map.ts")
+    const svg = mapSvg(readMap(fixture(), { in_area: id("rooN"), areatile: 0, last_room_id: id("coNO") }))
+    const legend = mapLegend()
+    for (const c of new Set([...svg.matchAll(/fill="(#[0-9a-f]{6})"/g)].map((m) => m[1]!).filter((c) => c !== "#0b0a08"))) expect(legend).toContain(c)
+    // the passage room past the fight corridor is seen, not walked
+    expect(svg).toMatch(/stroke="#e8dcb8"/)
+    expect(legend).toMatch(/^<p class="legend">/)
+  })
+
+  test("the zone is markdown to the comment tool, and its blocks become paragraphs", async () => {
+    const { roadPanel } = await import("../src/road.ts")
+    expect(roadPanel).toContain("z.className='zone wide md'")
+    // the party, the map and the thread each pass through the paragraph step after they are written
+    for (const el of ["put(document.getElementById(\"roadParty\")", "para(M)", "para(T)"]) expect(roadPanel).toContain(el)
+  })
+})
