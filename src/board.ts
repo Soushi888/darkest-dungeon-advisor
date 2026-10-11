@@ -536,6 +536,8 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   if (a.heirlooms.length || a.trinkets.length) {
     L.push("## Heirlooms and trinkets {wide}", "")
     L.push("What the family's heirlooms could build tonight, and the trinkets in the estate's stores with who may wear them.", "")
+    // what the estate holds, as the Hamlet's own bar shows it: the icons are set beside each count when the page is built (U9)
+    L.push(`**What the estate holds.** ${PURSE.map(([k, w]) => `${(k === "gold" ? gold : t.wallet[k] ?? 0).toLocaleString("en-US")} ${w}`).join(", ")}.`, "")
     if (a.heirlooms.length) {
       L.push("```board-decisions")
       L.push(`- q: "Where do the heirlooms go?"`, `  context: ${y(`The estate holds ${t.wallet.crest ?? 0} crests, ${t.wallet.bust ?? 0} busts, ${t.wallet.portrait ?? 0} portraits, ${t.wallet.deed ?? 0} deeds.`)}`, "  options:")
@@ -708,6 +710,30 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
   return compile(board, sources)
 }
 
+// the estate's currencies, in the order the Hamlet's bar shows them, with the word the board says for each
+const PURSE: [string, string][] = [["gold", "gold"], ["crest", "crests"], ["bust", "busts"], ["portrait", "portraits"], ["deed", "deeds"]]
+
+/** The game's own currency icons set beside each count of the estate's holdings: on the heirlooms' line and on the coffers'
+ *  tally (Soushi, 2026-10-11 04:23: "show more clearly what we hold, like in the game, with the respective assets"). The icons
+ *  are copied from the install at build time like the portraits (A4); a count whose icon is missing keeps its word. */
+export function estateIcons(html: string): string {
+  const icon = new Map<string, string>()
+  for (const [k, w] of PURSE) {
+    const src = join(install, "shared", "estate", `currency.${k}.icon.png`), rel = `img/currency.${k}.png`
+    if (!existsSync(src)) continue
+    mkdirSync(join(outDir(), "img"), { recursive: true })
+    copyFileSync(src, join(outDir(), rel))
+    icon.set(w, rel)
+  }
+  if (!icon.size) return html
+  const img = (w: string) => `<img class="coin" src="${icon.get(w)}" alt="${w}" title="${w}">`
+  html = html.replace(/<p><strong>What the estate holds\.<\/strong>([^<]*)<\/p>/, (_m, list: string) =>
+    `<p class="purse"><strong>What the estate holds.</strong> ${[...list.matchAll(/(\d[\d,]*) ([a-z]+)/g)].map(([, n, w]) => icon.has(w!) ? `<span class="coin">${img(w!)}<b>${n}</b></span>` : `<span class="coin"><b>${n}</b> ${w}</span>`).join("")}</p>`)
+  html = html.replace(/<div class="big">([\d,]+)<\/div><div class="of">(gold|crests|busts|portraits|deeds)<\/div>/g, (m, n: string, w: string) => icon.has(w) ? `<div class="big">${img(w)}${n}</div><div class="of">${w}</div>` : m)
+  const css = `<style>.purse{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem 1.3rem}.purse .coin{display:inline-flex;align-items:center;gap:.35rem;font-size:1.15rem}.purse img.coin,.tally img.coin{height:1.8rem;width:auto;vertical-align:middle;image-rendering:auto}.tally img.coin{height:1.5rem;margin-right:.35rem}</style>`
+  return html.replace("</head>", `${css}</head>`)
+}
+
 async function compile(board: string, sources: string): Promise<string> {
   const src = join(outDir(), "town.md")
   await Bun.write(src, board)
@@ -716,6 +742,7 @@ async function compile(board: string, sources: string): Promise<string> {
   const out = join(outDir(), "town.html")
   const proc = Bun.spawnSync(["bun", BOARD, src, "--no-sketch", "--out", out], { stdout: "pipe", stderr: "pipe" })
   if (proc.exitCode !== 0) throw new Error(`board build failed: ${proc.stderr.toString()}`)
+  await Bun.write(out, estateIcons(await Bun.file(out).text()))
   return out
 }
 
