@@ -5,6 +5,7 @@
 //   CHRON <time> #<n> <summary>   a page of the chronicle that changes the story (C39): a battle, a room, an ambush, the light
 //                                 past 50 or 25, a break, a virtue, Death's Door, a fall, a hero under 30% health
 //   PAGE <time> #<n> <summary>    any other new page (kept, but not worth waking the agent)
+//   MORE <rest>                the rest of a page longer than 400 characters, cut at its seams and printed with it in one write (C52)
 //   ASK <time> <text>          Soushi wrote to the Caretaker from the road page (C49); answer with bun run say "<text>"
 //   WARN <time> <n> contradictions: ...   the rebuilt board advises two things that cannot both be done (C38)
 // It only reads the profile (ISA A1). See CLAUDE.md, "Live session".
@@ -16,6 +17,7 @@ import { decode } from "./dson.ts"
 import { profileDir } from "./paths.ts"
 import { messagesFile } from "./road.ts"
 import { newlySeen, whereLine } from "./map.ts"
+import { effectWords, plain, wrap } from "./words.ts"
 
 const log = join(outDir(), "answers-log.md")
 const game = join(profileDir(), "persist.game.json")
@@ -102,14 +104,21 @@ setInterval(async () => {
         const actors = [...(p.heroes ?? []).map((h: any) => [h, (prev.heroes ?? []).find((x: any) => x.guid === h.guid)]), ...nf.map((e) => [e, pf.find((x) => x.guid && x.guid === e.guid)])]
         for (const [a, w] of actors) {
           if (!w || !w.effects) continue // a page from before effects were kept has nothing to compare with
-          for (const x of (a.effects ?? []).filter((x: string) => !(w.effects ?? []).includes(x))) delta.push(`${a.name} gains ${x}`)
-          for (const x of (w.effects ?? []).filter((x: string) => !(a.effects ?? []).includes(x))) delta.push(`${a.name} loses ${x}`)
-          for (const x of (a.dots ?? []).filter((x: string) => !(w.dots ?? []).includes(x))) delta.push(`${a.name} suffers ${x}`)
+          // in words, once each (a damage buff is kept as a low and a high of the same amount), and an effect whose only change
+          // is a round ticking off its count is neither gained nor lost
+          const said = async (xs: string[]) => [...new Set(await Promise.all(xs.map(effectWords)))]
+          const gained = await said((a.effects ?? []).filter((x: string) => !(w.effects ?? []).includes(x)))
+          const lost = await said((w.effects ?? []).filter((x: string) => !(a.effects ?? []).includes(x)))
+          const bare = (x: string) => x.replace(/ for \d+ rounds?/, "")
+          const ticking = new Set(gained.filter((x) => lost.some((y) => bare(y) === bare(x))).map(bare))
+          for (const x of gained) if (!ticking.has(bare(x))) delta.push(`${a.name} gains ${x}`)
+          for (const x of lost) if (!ticking.has(bare(x))) delta.push(`${a.name} loses ${x}`)
+          for (const x of (a.dots ?? []).filter((x: string) => !(w.dots ?? []).includes(x))) delta.push(`${a.name} suffers ${plain(x.split(" ")[0]!)}`)
           if (a.stunned && !w.stunned) delta.push(`${a.name} STUNNED`)
         }
         for (const k of new Set([...Object.keys(prev.supplies ?? {}), ...Object.keys(p.supplies ?? {})])) {
           const d = (p.supplies?.[k] ?? 0) - (prev.supplies?.[k] ?? 0)
-          if (d) delta.push(`${k} ${d > 0 ? "+" : ""}${d}`)
+          if (d) delta.push(`${plain(k)} ${d > 0 ? "+" : ""}${d}`)
         }
         try {
           const raw = await Bun.file(f.replace(/\.json$/, ".raw.json")).json(), sd = raw.raid?.stat_database ?? {}
@@ -118,7 +127,7 @@ setInterval(async () => {
             if (n <= 0 || k === "UNDEFINED") continue
             const ids = Object.values<any>(v.entries ?? {}).slice(-n).map((e) => Object.values<any>(e.parameters ?? {}).map((x) => x.data).filter((x) => typeof x === "string").pop()).filter(Boolean)
             const what: string[] = []
-            for (const id of ids) what.push((/^MONSTER_/.test(k) && (await nameOf("monster", id!))) || id!) // one at a time: parallel lookups race the name cache
+            for (const id of ids) what.push((/^MONSTER_/.test(k) && (await nameOf("monster", id!))) || plain(id!)) // one at a time: parallel lookups race the name cache
             delta.push(`${k.toLowerCase().replace(/_/g, " ")} +${n}${what.length ? ` (${what.join(", ")})` : ""}`)
           }
           // what a curio or a blow left on each hero: quirks and diseases gained or lost, and a heart attack (Soushi: a curio once gave one)
@@ -132,7 +141,7 @@ setInterval(async () => {
             for (const id of wq.filter((x) => !q.includes(x))) delta.push(`${name} lost ${(await nameOf("quirk", id)) || id}`)
             if (r.has_had_heart_attack && !w.has_had_heart_attack) delta.push(`${name} HAD A HEART ATTACK`)
           }
-          const offered = Object.values<any>(raw.raid?.loot?.result?.inventory_system?.items ?? {}).map((i) => `${i.id || i.type} x${i.amount}`)
+          const offered = Object.values<any>(raw.raid?.loot?.result?.inventory_system?.items ?? {}).map((i) => `${plain(i.id || i.type)} x${i.amount}`)
           if (offered.length) delta.push(`loot laid out: ${offered.join(", ")}`)
         } catch {}
         const moved = (p.heroes ?? []).map((h: any) => h.guid).join() !== (prev.heroes ?? []).map((h: any) => h.guid).join()
@@ -145,7 +154,7 @@ setInterval(async () => {
       if (!noted && !delta.length && body === lastBody.get(trip)) continue
       lastBody.set(trip, body)
       const map = `${where ? ` || ${where}` : ""}${seen.length ? ` || newly seen: ${seen.join(", ")}` : ""}`
-      console.log(`${noted ? "CHRON" : "PAGE"} ${now()} #${f.match(/(\d+)\.json$/)![1]} light ${p.torch}, rooms ${tl.ROOM_VISITED ?? 0}, battles ${tl.BATTLE_COMPLETED ?? 0}, food ${p.supplies?.food ?? 0}, torches ${p.supplies?.torch ?? 0} | ${who}${fight}${change}${map}`)
+      console.log(wrap(`${noted ? "CHRON" : "PAGE"} ${now()} #${f.match(/(\d+)\.json$/)![1]} light ${p.torch}, rooms ${tl.ROOM_VISITED ?? 0}, battles ${tl.BATTLE_COMPLETED ?? 0}, food ${p.supplies?.food ?? 0}, torches ${p.supplies?.torch ?? 0} | ${who}${fight}${change}${map}`).join("\n")) // one write, so a notification carries the whole page
     } catch {}
   }
   if (existsSync(messagesFile())) {
