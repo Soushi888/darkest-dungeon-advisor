@@ -25,7 +25,8 @@ export interface Town {
   activities: Activity[]; quests: Quest[]; witnessedSkills: number; dungeonsUnlocked: string[]
   quests_done: number; quests_won: number; lastQuest: string; lastWon: boolean
   skillDiscount: number; gearDiscount: number; visited: string[]; knownVariants: string[]
-  heroUpgrades: Upgrade[]; buildingUpgrades: Upgrade[]; estateTrinkets: { id: string; name: string; classes: string[] }[]
+  heroUpgrades: Upgrade[]; buildingUpgrades: Upgrade[]; estateTrinkets: { id: string; name: string; classes: string[]; rank: number }[]
+  worn: Record<string, { id: string; name: string; rank: number }[]>; trinketSlots: number
   bought: Set<string>
   /** every purchase with the hero it was bought for (0 for a building), from persist.upgrades.json instance_number (C26) */
   purchases: { key: string; guid: number }[]
@@ -283,8 +284,12 @@ export async function town(save: Save): Promise<Town> {
   const lib = await trinkets()
   const estateTrinkets = []
   for (const t of Object.values<any>((save.estate as any)?.trinkets?.items ?? {})) {
-    estateTrinkets.push({ id: t.id, name: await nameOf("trinket", t.id), classes: lib.get(t.id)?.classes ?? [] })
+    estateTrinkets.push({ id: t.id, name: await nameOf("trinket", t.id), classes: lib.get(t.id)?.classes ?? [], rank: lib.get(t.id)?.rank ?? 99 })
   }
+  // what each hero wears, and how many a hero can wear: the most any hero on the roster wears now
+  const worn: Record<string, { id: string; name: string; rank: number }[]> = {}
+  for (const h of heroes) worn[h.guid] = await Promise.all(h.trinkets.map(async (id) => ({ id, name: await nameOf("trinket", id), rank: lib.get(id)?.rank ?? 99 })))
+  const trinketSlots = Math.max(1, ...heroes.map((h) => h.trinkets.length))
 
   const g = g0, prog = save.progression as any
   return {
@@ -294,7 +299,7 @@ export async function town(save: Save): Promise<Town> {
     quests_done: prog?.total_quests_finished ?? 0, quests_won: prog?.total_successful_quests_finished ?? 0,
     lastQuest: typeof prog?.last_quest_played_id === "string" ? prog.last_quest_played_id : "", lastWon: !!prog?.last_raid_success,
     skillDiscount, gearDiscount, visited: [...visited], knownVariants: [...knownVariants],
-    heroUpgrades, buildingUpgrades, estateTrinkets, bought, supply: await supplies(), event, raid,
+    heroUpgrades, buildingUpgrades, estateTrinkets, worn, trinketSlots, bought, supply: await supplies(), event, raid,
     purchases: Object.values<any>((save.upgrades as any)?.purchases ?? {}).filter((p) => p.is_purchased !== false).map((p) => ({ key: `${p.tree_id}:${p.requirement_code}`, guid: Number(p.instance_number) || 0 })),
   }
 }

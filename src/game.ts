@@ -8,6 +8,7 @@ export const P = {
   quirks: "shared/quirk/quirk_library.json",
   rosterVars: "campaign/roster/roster.variables.json",
   trinkets: "trinkets/base.entries.trinkets.json",
+  trinketRarities: "trinkets/base.rarities.trinkets.json",
   heroInfo: (c: string) => `heroes/${c}/${c}.info.darkest`,
   heroUpgrades: (c: string) => `upgrades/heroes/${c}.upgrades.json`,
   buildingUpgrades: (b: string) => `upgrades/building/${b}.upgrades.json`,
@@ -132,12 +133,14 @@ export function applied<T extends { upgrade_requirement_code?: string; upgrade_t
 }
 
 // ---------- trinkets ----------
-export interface Trinket { id: string; buffs: string[]; classes: string[]; rarity: string; origin: string }
+export interface Trinket { id: string; buffs: string[]; classes: string[]; rarity: string; origin: string; rank: number }
 let trinketLib: Map<string, Trinket> | undefined
 export async function trinkets(): Promise<Map<string, Trinket>> {
   if (trinketLib) return trinketLib
   const j = await json(P.trinkets)
-  trinketLib = new Map(j.entries.map((t: any) => [t.id, { id: t.id, buffs: t.buffs, classes: t.hero_class_requirements, rarity: t.rarity, origin: t.origin_dungeon }]))
+  // the game lists its rarities rarest first; a trinket's place in that list is its rank (lower is rarer)
+  const order: string[] = (await json(P.trinketRarities)).rarities.map((r: any) => r.id)
+  trinketLib = new Map(j.entries.map((t: any) => [t.id, { id: t.id, buffs: t.buffs, classes: t.hero_class_requirements, rarity: t.rarity, origin: t.origin_dungeon, rank: order.includes(t.rarity) ? order.indexOf(t.rarity) : order.length }]))
   return trinketLib
 }
 

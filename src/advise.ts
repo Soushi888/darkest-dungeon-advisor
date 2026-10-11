@@ -192,14 +192,19 @@ export async function advise(t: Town): Promise<Advice> {
   const heirlooms = t.buildingUpgrades.filter((u) => u.affordable)
 
   // trinkets in the estate that a party member may wear
-  // class trinkets are placed first, then each open one goes to whoever holds fewest so far; listed by hero, back rank first like the party (Soushi, 2026-10-10)
-  const held = new Map<number | string, number>()
-  const placed = [...t.estateTrinkets].sort((x, z) => z.classes.length - x.classes.length).flatMap((tr) => {
+  // a trinket goes to an open slot, or replaces a worn one only when it is rarer by the game's own list; class trinkets
+  // first, rarest first; listed by hero, back rank first like the party (Soushi, 2026-10-10: "propose only if it is worth the switch")
+  const wear = new Map((best?.seats ?? []).map((s) => [s.hero.guid, [...(t.worn[s.hero.guid] ?? [])]]))
+  const placed = [...t.estateTrinkets].sort((x, z) => z.classes.length - x.classes.length || x.rank - z.rank).flatMap((tr) => {
     const fit = (best?.seats ?? []).filter((s) => !tr.classes.length || tr.classes.includes(s.hero.cls))
-    const who = fit.sort((x, z) => (held.get(x.hero.guid) ?? 0) - (held.get(z.hero.guid) ?? 0))[0]
+    const open = fit.filter((s) => wear.get(s.hero.guid)!.length < t.trinketSlots).sort((x, z) => wear.get(x.hero.guid)!.length - wear.get(z.hero.guid)!.length)[0]
+    const who = open ?? fit.map((s) => ({ s, worst: [...wear.get(s.hero.guid)!].sort((x, z) => z.rank - x.rank)[0] })).filter((c) => c.worst && c.worst.rank > tr.rank).sort((x, z) => z.worst!.rank - x.worst!.rank)[0]?.s
     if (!who) return []
-    held.set(who.hero.guid, (held.get(who.hero.guid) ?? 0) + 1)
-    return [{ rank: who.rank, trinket: tr.name, to: who.hero.name, why: tr.classes.length ? `only a ${who.hero.clsName} may wear it` : "anyone may wear it" }]
+    const mine = wear.get(who.hero.guid)!, out = open ? undefined : [...mine].sort((x, z) => z.rank - x.rank)[0]!
+    if (out) mine.splice(mine.indexOf(out), 1)
+    mine.push({ id: tr.id, name: tr.name, rank: tr.rank })
+    const may = tr.classes.length ? `only a ${who.hero.clsName} may wear it` : "anyone may wear it"
+    return [{ rank: who.rank, trinket: tr.name, to: who.hero.name, why: out ? `in place of their ${out.name}, which is commoner; ${may}` : `a slot is free; ${may}` }]
   })
   const trinkets = placed.sort((x, z) => z.rank - x.rank).map(({ rank: _r, ...tr }) => tr)
 
