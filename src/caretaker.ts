@@ -28,12 +28,17 @@ export const SYSTEM = [
   "THE HEIR'S WAYS are habits he has told you; follow them in what you advise, and never advise against one.",
 ].join(" ")
 
+// what a page in a fight asks of him: short, and the fight alone
+export const FIGHT = "This page is in a fight. Comment the fight alone, in one or two short paragraphs: which foe threatens whom, which foe to strike first and why, and who needs healing. Nothing about the packs, the map or the road ahead."
+
 /** The prompt for one page or one question: the page whole, then the last lines of the thread, then what to answer. */
 export async function promptFor(kind: "page" | "ask", snapshot: string, ask = ""): Promise<string> {
   const thread = (await feed()).lines.slice(-10).map((l) => `${l.from === "soushi" ? "The Heir" : "The Caretaker"}: ${l.text}`).join("\n")
   const ways = await readWays()
   return [ways.length ? `THE HEIR'S WAYS\n${ways.map((w) => `- ${w}`).join("\n")}` : "", `THE PAGE\n${snapshot}`, thread ? `THE THREAD SO FAR\n${thread}` : "",
-    kind === "ask" ? `THE HEIR ASKS\n${ask}\nAnswer him. If he states a standing habit of his own, end with one last line \"WAY: <the habit, in one short line>\"; otherwise do not.` : "Comment this page."].filter(Boolean).join("\n\n")
+    kind === "ask" ? `THE HEIR ASKS\n${ask}\nAnswer him. If he states a standing habit of his own, end with one last line \"WAY: <the habit, in one short line>\"; otherwise do not.`
+      // C71: in a fight he speaks of the fight alone (Soushi, 05:42: "more focused on it and clear")
+      : /\nFOES front to back:/.test(snapshot) ? FIGHT : "Comment this page."].filter(Boolean).join("\n\n")
 }
 
 // the Heir's ways, one habit a line, kept beside the board (pm#35); the PM writes it, and an answer to a stated habit adds to it
