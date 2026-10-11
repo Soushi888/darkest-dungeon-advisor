@@ -34,7 +34,8 @@ const GAUGE = `Each bar is the hero's stress on the gauge of ${STRESS.max}: at $
 
 function portrait(h: HeroView): string {
   const src = join(install, h.portrait)
-  const rel = `img/${h.cls}.png`
+  // one file per look, so two heroes of a class who look different keep their own faces (U30)
+  const rel = `img/${h.portrait.split("/").at(-2) ?? h.cls}.png`
   if (existsSync(src)) { mkdirSync(join(outDir(), "img"), { recursive: true }); copyFileSync(src, join(outDir(), rel)) }
   return rel
 }
@@ -308,6 +309,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     L.push("```board-stickies")
     // as the party stands in the game: rank 4 at the left, rank 1 at the front on the right (Soushi, 2026-10-10). One
     // colour for all four, because the board groups stickies by colour and would break the order otherwise
+    faces = new Map(chosen.seats.map((s) => [s.hero.name, portrait(s.hero)]))
     for (const s of [...chosen.seats].reverse()) {
       L.push(`- title: ${y(`Rank ${s.rank}: ${s.hero.name}${s.notes.some((n) => n.startsWith("−")) ? " (mind the quirk)" : ""}`)}`, "  kind: works")
       L.push(`  body: ${y(`${s.hero.clsName}, level ${s.hero.level}, ${s.hero.stress} stress. Skills that reach from here: ${s.skills.join(", ")}.${s.swaps?.length ? ` Before the coach leaves, equip ${s.swaps.map((w) => `${w.equip}${w.for ? ` in place of ${w.for}` : ""}`).join(", and ")}.` : ""}${s.learn ? ` Worth learning at the Guild for this seat: ${s.learn.skill}, ${coin(Math.round(s.learn.gold * (1 - t.skillDiscount)))}.` : ""}${s.notes.length ? ` Quirks that matter here: ${s.notes.join(", ")}.` : ""}`)}`)
@@ -764,6 +766,18 @@ export function estateIcons(html: string): string {
   return html.replace("</head>", `${css}</head>`)
 }
 
+// the portraits the seat stickies show, by hero name, filled while the board is written (U30)
+let faces = new Map<string, string>()
+
+/** Each seat sticky of the party card ("Rank 4: Patremol") shows that hero's portrait in their own look (U30; Soushi, 06:30:
+ *  "Show heroes portrait for the seatings"). The board's stickies take no picture, so it is set in once the page is built. */
+export function seatFaces(html: string, by: Map<string, string>): string {
+  if (!by.size) return html
+  const out = html.replace(/(<div class="sticky[^"]*"[^>]*>)(<b class="t">Rank \d: ([^<(]+?)(?: \(|<))/g, (m, open: string, rest: string, name: string) =>
+    by.has(name.trim()) ? `${open}<img class="seat-face" src="${by.get(name.trim())}" alt="">${rest}` : m)
+  return out.replace("</head>", `<style>.sticky img.seat-face{float:left;width:4.2rem;height:auto;margin:0 .6rem .3rem 0;border:1px solid var(--line,#444)}</style></head>`)
+}
+
 async function compile(board: string, sources: string): Promise<string> {
   const src = join(outDir(), "town.md")
   await Bun.write(src, board)
@@ -772,7 +786,7 @@ async function compile(board: string, sources: string): Promise<string> {
   const out = join(outDir(), "town.html")
   const proc = Bun.spawnSync(["bun", BOARD, src, "--no-sketch", "--out", out], { stdout: "pipe", stderr: "pipe" })
   if (proc.exitCode !== 0) throw new Error(`board build failed: ${proc.stderr.toString()}`)
-  await Bun.write(out, estateIcons(await Bun.file(out).text()))
+  await Bun.write(out, seatFaces(estateIcons(await Bun.file(out).text()), faces))
   return out
 }
 

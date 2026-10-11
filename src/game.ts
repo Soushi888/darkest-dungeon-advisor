@@ -15,7 +15,8 @@ export const P = {
   buildingUpgrades: (b: string) => `upgrades/building/${b}.upgrades.json`,
   building: (b: string) => `campaign/town/buildings/${b}/${b}.building.json`,
   mash: (d: string, level: number) => `dungeons/${d}/${d}.${level}.mash.darkest`,
-  portrait: (c: string) => `heroes/${c}/${c}_A/${c}_portrait_roster.png`,
+  // a hero's own look (U30): actor.colour_variation 0 to 3 picks the class's art folder _A to _D
+  portrait: (c: string, look = 0) => `heroes/${c}/${c}_${"ABCD"[look] ?? "A"}/${c}_portrait_roster.png`,
   townEvents: "campaign/town_events/base.town_events.events.json",
   supplies: "inventory/base.supply.inventory.items.darkest",
   effects: "effects/base.effects.darkest",
