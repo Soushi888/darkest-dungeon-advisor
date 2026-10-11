@@ -112,6 +112,9 @@ Soushi comes back from an expedition, saves, and opens the town board. A village
 
 ## Not yet specified
 
+- **Campfire council** (Soushi, 2026-10-11, a reward unlocked in the progression): on a medium or long road, when the party camps (the raid record's `camp` block holds the camp's phase and skill points), a companion page opens where the Caretaker takes stock of the day with the four from the chronicle so far and looks at what is ahead, inside the knowledge boundary. It lifts "advises only in the Hamlet" for the camp alone, so its unlock condition and its fiction are to be decided.
+- **The Caretaker's far sight** (Soushi, 2026-10-11, end game): a lore twist (a scrying spell, or a protected presence that cannot die) unlocks a live companion board during the expedition itself, fed by the chronicle page by page, so the heroes have his help in real time. The live `CHRON` stream that SoushAI already comments on is its prototype. Unlock condition, fiction and what he may say mid-battle are to be decided.
+
 - **A knowledge graph of the campaign** (Soushi, 2026-10-11): "all the exhaustive history will help to build a knowledge graph that will help the town advisor in all his advice." The chronicle's raw pages are its first source; the graph's shape (heroes, foes, rooms, curios, trips and lessons as nodes; what struck whom, where, with what preparation as edges) and the claims it must satisfy are still to be written.
 
 - C15's calls are on a board waiting for Soushi: `.local/brainstorms/town-board-layout-brainstorm-2026-10-10.html` (which in-game screen to echo, a roster column, compiler extension or project template), to answer after a few returns with the current board.
