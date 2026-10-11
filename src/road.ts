@@ -53,7 +53,7 @@ export async function feed() {
   try {
     const p = c.file ? await Bun.file(c.file).json() : null
     if (p) state = {
-      page: c.page, dungeon: p.dungeon, torch: p.torch, food: p.supplies?.food ?? 0, torches: p.supplies?.torch ?? 0,
+      page: c.page, pageAt: new Date(statSync(c.file!).mtimeMs).toISOString(), dungeon: p.dungeon, torch: p.torch, food: p.supplies?.food ?? 0, torches: p.supplies?.torch ?? 0,
       rooms: p.tally?.ROOM_VISITED ?? 0, battles: p.tally?.BATTLE_COMPLETED ?? 0,
       heroes: (p.heroes ?? []).map((h: any) => ({ name: h.name, cls: h.cls, hp: Math.round(h.hp), maxHp: h.maxHp, stress: h.stress, affliction: h.affliction, virtue: h.virtue, deathsDoor: h.deathsDoor })),
       foes: p.battle ? p.battle.foes.map((f: any) => ({ name: f.name, hp: f.hp })) : null, round: p.battle?.round,
@@ -64,7 +64,7 @@ export async function feed() {
 
 // C49: the road zone. While the party is out, the farewell board turns into the road: this zone opens it, above the
 // farewell's own zones, in the same page (Soushi, 2026-10-11: "it could be a transformation of the 'The coach has left'
-// page"). The box to write sits on top and the newest line under it (Soushi's pin, 2026-10-11). It shows only while the party is out, and draws from /road/feed every two seconds.
+// page"). The box to write sits on top and the newest line under it (Soushi's pin, 2026-10-11). Under it, while a page or a message from him is newer than my last line (for three minutes at most), it says the Caretaker is reading it (his pin, same night). It shows only while the party is out, and draws from /road/feed every two seconds.
 export const roadPanel = `<style>
 #road .meta{color:var(--dim);font-size:.9rem;margin:.2rem 0 .4rem}
 #road .seat{display:grid;grid-template-columns:7rem 1fr 1fr;gap:.6rem;align-items:center;margin:.2rem 0;font-size:.95rem}
@@ -78,11 +78,12 @@ export const roadPanel = `<style>
 #road .msg.soushi{align-self:flex-end;border-color:var(--blood)}#road .msg.caretaker{align-self:flex-start}
 #road .who{font-size:.75rem;color:var(--dim);margin-bottom:.2rem}
 #roadForm{display:flex;gap:.5rem}#roadForm textarea{flex:1;background:var(--panel);color:var(--ink);border:1px solid var(--line);font:inherit;padding:.5rem;resize:vertical;min-height:3.2rem}
+#roadBusy{margin:.6rem 0 0;font-style:italic;color:var(--gold)}
 #road .empty{color:var(--dim);font-style:italic}
 @media (max-width:520px){#road .seat{grid-template-columns:5rem 1fr 1fr}}
 </style><script>(()=>{const nav=document.querySelector('nav.bar');
 const z=document.createElement('section');z.className='zone wide';z.id='road';z.hidden=true;
-z.innerHTML='<h2>On the road, with the Caretaker</h2><div id="roadParty"></div><form id="roadForm"><textarea id="roadText" placeholder="Write to the Caretaker (Enter sends, Shift+Enter breaks the line)"></textarea><button class="btn primary">Send</button></form><div id="roadThread"></div>';
+z.innerHTML='<h2>On the road, with the Caretaker</h2><div id="roadParty"></div><form id="roadForm"><textarea id="roadText" placeholder="Write to the Caretaker (Enter sends, Shift+Enter breaks the line)"></textarea><button class="btn primary">Send</button></form><div id="roadBusy" class="who" hidden></div><div id="roadThread"></div>';
 const first=document.querySelector('section.zone');if(first)first.before(z);else document.body.append(z);
 let link=null;
 const esc=s=>String(s??"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"})[c]);
@@ -94,6 +95,10 @@ if(s)document.getElementById("roadParty").innerHTML='<div class="meta">Page '+es
 s.heroes.map(h=>'<div class="seat"><div>'+esc(h.name)+(h.affliction?' <span class="tag">'+esc(h.affliction)+'</span>':'')+(h.virtue?' <span class="tag">'+esc(h.virtue)+'</span>':'')+(h.deathsDoor?' <span class="tag">Death\\'s Door</span>':'')+'</div>'+
 '<div class="bar hp" title="health"><i style="width:'+Math.max(0,Math.min(100,100*h.hp/h.maxHp))+'%"></i><span>'+h.hp+'/'+h.maxHp+'</span></div>'+
 '<div class="bar st" title="stress, of 200; the line is 100"><i style="width:'+Math.min(100,h.stress/2)+'%"></i><span>'+h.stress+'</span></div></div>').join("");
+const mine=d.lines.filter(l=>l.from==="caretaker").at(-1),asked=d.lines.filter(l=>l.from==="soushi").at(-1),B=document.getElementById("roadBusy");
+const fresh=at=>at&&Date.now()-new Date(at)<180000&&(!mine||at>mine.at);
+const busy=asked&&fresh(asked.at)?"The Caretaker is reading your message…":s&&fresh(s.pageAt)?"The Caretaker is reading page "+esc(s.page)+"…":"";
+B.hidden=!busy;B.textContent=busy;
 const key=JSON.stringify(d.lines);if(key===shown)return;shown=key;const T=document.getElementById("roadThread");
 T.innerHTML=d.lines.length?[...d.lines].reverse().map(l=>'<div class="msg '+l.from+'"><div class="who">'+(l.from==="soushi"?"You":"The Caretaker")+' · '+time(l.at)+(l.page?' · page '+esc(l.page):'')+'</div>'+esc(l.text)+'</div>').join(""):'<div class="empty">Nothing said yet on this road.</div>';
 }catch{}}
