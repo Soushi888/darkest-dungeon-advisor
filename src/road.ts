@@ -3,7 +3,7 @@
 //   bun run say "<text>"        the agent's comment on the current page, appended to the expedition's thread
 //   (served by bun run watch)   the farewell board's first zone while the party is out; /road/feed its data, POST /road/message a line from Soushi
 // It only reads the chronicle and writes under .local/town/road/ (ISA A1).
-import { mapSvg, whereLine } from "./map.ts"
+import { mapLegend, mapSvg, whereLine } from "./map.ts"
 import { appendFileSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs"
 import { join } from "node:path"
 import { outDir } from "./board.ts"
@@ -65,7 +65,7 @@ export async function feed() {
         return { name: f.name, hp: f.hp, maxHp: Math.max(f.hp, max), stunned: !!f.stunned, dots: f.dots ?? [], dead: /^corpse/.test(f.cls ?? "") }
       })) : null, round: p.battle?.round,
       // C51: the map as the party knows it, drawn without letters, and where they stand in words
-      map: mapSvg(p.map), where: whereLine(p.map),
+      map: mapSvg(p.map), where: whereLine(p.map), legend: mapLegend(),
     }
   } catch {}
   return { trip: c.trip, state, lines }
@@ -87,27 +87,31 @@ export const roadPanel = `<style>
 #roadThread{max-height:28rem;overflow-y:auto;margin:.8rem 0;display:flex;flex-direction:column;gap:.5rem}
 #road .msg{max-width:85%;padding:.5rem .7rem;border-radius:4px;border:1px solid var(--line);white-space:pre-wrap;line-height:1.35;background:var(--panel)}
 #road .msg.soushi{align-self:flex-end;border-color:var(--blood)}#road .msg.caretaker{align-self:flex-start}
-#road .who{font-size:.75rem;color:var(--dim);margin-bottom:.2rem}
+#road .who{display:block;font-size:.75rem;color:var(--dim);margin-bottom:.2rem}
+#road p{margin:0}#road p.meta{margin:.2rem 0 .4rem}#road p.seat{margin:.2rem 0}
+#road .legend{display:flex;flex-wrap:wrap;gap:.3rem .9rem;font-size:.8rem;color:var(--dim);margin:.3rem 0 0}#road .legend i{display:inline-block;width:.75rem;height:.75rem;border-radius:2px;vertical-align:-.1rem;margin-right:.3rem}#road .legend i.dot{border-radius:50%}#road .legend i.ring{border-radius:50%;border:2px solid #f5f5f4;background:none}
 #roadForm{display:flex;gap:.5rem}#roadForm textarea{flex:1;background:var(--panel);color:var(--ink);border:1px solid var(--line);font:inherit;padding:.5rem;resize:vertical;min-height:3.2rem}
 #roadBusy{margin:.6rem 0 0;font-style:italic;color:var(--gold)}
 #road .empty{color:var(--dim);font-style:italic}
 #roadMap{margin:.6rem 0}#roadMap svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:3px}#roadMap .meta{margin:.3rem 0 0}
 @media (max-width:520px){#road .seat{grid-template-columns:5rem 1fr 1fr}}
 </style><script>(()=>{const nav=document.querySelector('nav.bar');
-const z=document.createElement('section');z.className='zone wide';z.id='road';z.hidden=true;
+const z=document.createElement('section');z.className='zone wide md';z.id='road';z.hidden=true;
 z.innerHTML='<h2>On the road, with the Caretaker</h2><div id="roadParty"></div><div id="roadMap"></div><form id="roadForm"><textarea id="roadText" placeholder="Write to the Caretaker (Enter sends, Shift+Enter breaks the line)"></textarea><button class="btn primary">Send</button></form><div id="roadBusy" class="who" hidden></div><div id="roadThread"></div>';
 const first=document.querySelector('section.zone');if(first)first.before(z);else document.body.append(z);
 let link=null;
 const esc=s=>String(s??"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"})[c]);
 const time=iso=>new Date(iso).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});
 let shown="";
+const para=r=>{r.querySelectorAll(':scope > div, :scope > .msg').forEach(d=>{if(d.tagName==='P')return;const p=document.createElement('p');p.className=d.className;d.querySelectorAll('div').forEach(x=>{const n=document.createElement('span');n.className=x.className;if(x.title)n.title=x.title;n.style.cssText=x.style.cssText;n.append(...x.childNodes);x.replaceWith(n)});p.append(...d.childNodes);d.replaceWith(p)})};
+const put=(el,h)=>{if(el.dataset.h===h)return;el.dataset.h=h;el.innerHTML=h;para(el)};
 async function tick(){try{const d=await (await fetch("/road/feed",{cache:"no-store"})).json();z.hidden=!d.out;if(!d.out)return;const s=d.state;
 if(!link&&nav){link=document.createElement('a');link.href='#road';link.textContent='On the road';const l=nav.querySelector('a[href^="#"]');l?l.before(link):nav.prepend(link)}
-if(s)document.getElementById("roadParty").innerHTML='<div class="meta">Page '+esc(s.page)+' in the '+esc(s.dungeon)+' · light '+s.torch+' · '+s.rooms+' rooms, '+s.battles+' battles · '+s.food+' food, '+s.torches+' torches'+(s.foes?' · round '+s.round:'')+'</div>'+(s.foes?'<div class="seat meta"><div>The foes</div><div>Health</div><div></div></div>'+s.foes.map(f=>'<div class="seat foe'+(f.dead?' dead':'')+'"><div>'+(f.dead?'<s>'+esc(f.name)+'</s> <span class="tag">dead, only its body blocks the rank</span>':esc(f.name))+(f.stunned?' <span class="tag">stunned</span>':'')+(f.dots.length?' <span class="tag">'+esc(f.dots.join(', '))+'</span>':'')+'</div><div class="bar hp" title="health"><i style="width:'+Math.max(0,Math.min(100,100*f.hp/f.maxHp))+'%"></i><span>'+f.hp+'/'+f.maxHp+'</span></div><div></div></div>').join(''):'')+'<div class="seat meta"><div>The four</div><div>Health</div><div>Stress (the line is 100, the end 200)</div></div>'+
+if(s)put(document.getElementById("roadParty"),'<div class="meta">Page '+esc(s.page)+' in the '+esc(s.dungeon)+' · light '+s.torch+' · '+s.rooms+' rooms, '+s.battles+' battles · '+s.food+' food, '+s.torches+' torches'+(s.foes?' · round '+s.round:'')+'</div>'+(s.foes?'<div class="seat meta"><div>The foes</div><div>Health</div><div></div></div>'+s.foes.map(f=>'<div class="seat foe'+(f.dead?' dead':'')+'"><div>'+(f.dead?'<s>'+esc(f.name)+'</s> <span class="tag">dead, only its body blocks the rank</span>':esc(f.name))+(f.stunned?' <span class="tag">stunned</span>':'')+(f.dots.length?' <span class="tag">'+esc(f.dots.join(', '))+'</span>':'')+'</div><div class="bar hp" title="health"><i style="width:'+Math.max(0,Math.min(100,100*f.hp/f.maxHp))+'%"></i><span>'+f.hp+'/'+f.maxHp+'</span></div><div></div></div>').join(''):'')+'<div class="seat meta"><div>The four</div><div>Health</div><div>Stress (the line is 100, the end 200)</div></div>'+
 s.heroes.map(h=>'<div class="seat"><div>'+esc(h.name)+(h.affliction?' <span class="tag">'+esc(h.affliction)+'</span>':'')+(h.virtue?' <span class="tag">'+esc(h.virtue)+'</span>':'')+(h.deathsDoor?' <span class="tag">Death\\'s Door</span>':'')+'</div>'+
 '<div class="bar hp" title="health"><i style="width:'+Math.max(0,Math.min(100,100*h.hp/h.maxHp))+'%"></i><span>'+h.hp+'/'+h.maxHp+'</span></div>'+
-'<div class="bar st" title="stress, of 200; the line is 100"><i style="width:'+Math.min(100,h.stress/2)+'%"></i><span>'+h.stress+'</span></div></div>').join("");
-const M=document.getElementById("roadMap"),mk=s?(s.map||'')+(s.where||''):'';if(M.dataset.k!==mk){M.dataset.k=mk;M.innerHTML=s&&s.map?s.map+'<div class="meta">'+esc(s.where)+' · the ring is the party; gold a curio, red a fight, orange a trap, grey what is done</div>':''}
+'<div class="bar st" title="stress, of 200; the line is 100"><i style="width:'+Math.min(100,h.stress/2)+'%"></i><span>'+h.stress+'</span></div></div>').join(""));
+const M=document.getElementById("roadMap"),mk=s?(s.map||'')+(s.where||''):'';if(M.dataset.k!==mk){M.dataset.k=mk;M.innerHTML=s&&s.map?s.map+'<div class="meta">'+esc(s.where)+'</div>'+(s.legend||''):'';para(M)}
 const mine=d.lines.filter(l=>l.from==="caretaker").at(-1),asked=d.lines.filter(l=>l.from==="soushi").at(-1),B=document.getElementById("roadBusy");
 const fresh=at=>at&&Date.now()-new Date(at)<180000&&(!mine||at>mine.at);
 const say=(a)=>"The Caretaker is "+a[Math.floor(Date.now()/4000)%a.length]+"…";
@@ -115,7 +119,7 @@ const busy=asked&&fresh(asked.at)?say(["reading your message","thinking over wha
 :s&&fresh(s.pageAt)?say(s.foes?["watching the fight on page "+esc(s.page),"counting who struck whom","looking up the foes' blows","weighing the next turn"]:["reading page "+esc(s.page),"checking the packs","watching the light","tracing the map","noting it for the report"]):"";
 B.hidden=!busy;B.textContent=busy;
 const key=JSON.stringify(d.lines);if(key===shown)return;shown=key;const T=document.getElementById("roadThread");
-T.innerHTML=d.lines.length?[...d.lines].reverse().map(l=>'<div class="msg '+l.from+'"><div class="who">'+(l.from==="soushi"?"You":"The Caretaker")+' · '+time(l.at)+(l.page?' · page '+esc(l.page):'')+'</div>'+esc(l.text)+'</div>').join(""):'<div class="empty">Nothing said yet on this road.</div>';
+T.innerHTML=d.lines.length?[...d.lines].reverse().map(l=>'<div class="msg '+l.from+'"><div class="who">'+(l.from==="soushi"?"You":"The Caretaker")+' · '+time(l.at)+(l.page?' · page '+esc(l.page):'')+'</div>'+esc(l.text)+'</div>').join(""):'<div class="empty">Nothing said yet on this road.</div>';para(T);
 }catch{}}
 tick();setInterval(tick,2000);
 const t=document.getElementById("roadText");document.getElementById("roadForm").onsubmit=async e=>{e.preventDefault();const v=t.value.trim();if(!v)return;t.value="";await fetch("/road/message",{method:"POST",body:v});tick()};

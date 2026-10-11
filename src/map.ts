@@ -135,18 +135,28 @@ export function newlySeen(prev: MapView | undefined, now: MapView | undefined): 
   return now.areas.flatMap((a) => a.tiles.filter((t, i) => t.what && t.known === 2 && (was.get(a.id)?.tiles[i]?.known ?? 0) < 2).map((t) => `${t.what} in ${a.name}`))
 }
 
+// the drawing's colours, one list for the map and its legend
+const INK = { walked: "#c9b88a", seen: "#7d7258", layout: "#3a362d", edge: "#e8dcb8", fight: "#b3261e", trap: "#d97706", curio: "#e3b341", obstacle: "#5b7a99", done: "#6b6b6b" }
+const mark = (t: MapTile) => !t.what ? "" : /fight/.test(t.what) ? INK.fight : /trap/.test(t.what) ? INK.trap : /, searched$/.test(t.what) ? INK.done : /cleared$/.test(t.what) ? INK.done : /in the way/.test(t.what) ? INK.obstacle : INK.curio
+
+/** The legend under the drawing, in words, each beside its colour. */
+export function mapLegend(): string {
+  const sw = (c: string, w: string, dot = false) => `<span><i${dot ? ' class="dot"' : ""} style="background:${c}"></i>${w}</span>`
+  return `<p class="legend"><span><i class="ring"></i>the party</span>${sw(INK.walked, "walked")}${sw(INK.seen, "seen or scouted, not walked")}${sw(INK.layout, "only its shape on the map")}${sw(INK.fight, "a fight", true)}${sw(INK.curio, "a curio to search", true)}${sw(INK.trap, "a trap", true)}${sw(INK.obstacle, "an obstacle in the way", true)}${sw(INK.done, "searched or cleared", true)}</p>`
+}
+
 /** A small drawing of the known map with the party marked: no letters, the layout dim, what is known shown by its colour. */
 export function mapSvg(v: MapView | undefined): string {
   if (!v) return ""
   const [x0, x1, y0, y1] = v.bounds, c = 14, pad = 1
   const W = (x1 - x0 + 1 + 2 * pad) * c, H = (y1 - y0 + 1 + 2 * pad) * c
   const px = (x: number) => (x - x0 + pad) * c, py = (y: number) => (y - y0 + pad) * c
-  const shade = (k: number) => (k >= 3 ? "#c9b88a" : k === 2 ? "#7d7258" : "#3a362d")
-  const mark = (t: MapTile) => !t.what ? "" : /fight/.test(t.what) ? "#b3261e" : /trap/.test(t.what) ? "#d97706" : /searched$/.test(t.what) ? "#6b6b6b" : /cleared|in the way/.test(t.what) ? "#4b5563" : "#e3b341"
+  const shade = (k: number) => (k >= 3 ? INK.walked : k === 2 ? INK.seen : INK.layout)
   const out: string[] = []
   for (const a of v.areas) for (const t of a.tiles) {
     const s = a.room ? c * 1.4 : c * 0.7, x = px(t.x) + (c - s) / 2, y = py(t.y) + (c - s) / 2
-    out.push(`<rect x="${x}" y="${y}" width="${s}" height="${s}" rx="2" fill="${shade(t.known)}"/>`)
+    // a tile seen ahead or scouted but not yet walked carries a light edge, so what the scouting showed stands out
+    out.push(`<rect x="${x}" y="${y}" width="${s}" height="${s}" rx="2" fill="${shade(t.known)}"${t.known === 2 ? ` stroke="${INK.edge}" stroke-width="1.5"` : ""}/>`)
     const m = mark(t)
     if (m) out.push(`<circle cx="${px(t.x) + c / 2}" cy="${py(t.y) + c / 2}" r="${c * 0.22}" fill="${m}"/>`)
   }
