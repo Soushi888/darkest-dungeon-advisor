@@ -169,7 +169,9 @@ export function beats(snaps: Snap[], fell: string[] = []): Beat[] {
       run ??= { from: i - 1 }
       const from = snaps[run.from]!, last = out.findIndex((x) => x.kind === "shuffle" && x.from === run!.from)
       if (last >= 0) out.splice(last, 1)
-      const shifts = b.heroes.map((h, r) => ({ h, r: r + 1, was: from.heroes.findIndex((o) => o.guid === h.guid) + 1 })).filter((x) => x.was && x.was !== x.r)
+      // ranks are counted among those still there, so a fallen hero's gap does not read as the others moving up
+      const stayed = from.heroes.filter((o) => b.heroes.some((h) => h.guid === o.guid))
+      const shifts = b.heroes.map((h, r) => ({ h, r: r + 1, was: stayed.findIndex((o) => o.guid === h.guid) + 1 })).filter((x) => x.was && x.was !== x.r)
       if (shifts.length) out.push({ i, kind: "shuffle", from: run.from, text: shifts.map((x, k) => `${x.h.name} ${k ? "" : "took "}rank ${x.r}`).join(", ").replace(/, ([^,]+)$/, " and $1"), bad: false })
     }
     if (!b.inBattle || d("BATTLE_COMPLETED") > 0) run = undefined

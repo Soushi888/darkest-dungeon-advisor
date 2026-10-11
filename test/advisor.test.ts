@@ -664,6 +664,8 @@ describe.skipIf(!has)("on the local save", () => {
     // a shuffle undone within the battle is not told; a hero who fell leaves a gap, not a shuffle
     expect(beats([at(s0, true, ["Al", "Bea", "Cato"]), at(s0, true, ["Bea", "Al", "Cato"]), at(s0, true, ["Al", "Bea", "Cato"])]).some((b) => b.kind === "shuffle")).toBe(false)
     expect(beats([at(s0, true, ["Al", "Bea", "Cato"]), at(s0, true, ["Bea", "Cato"])], ["Al"]).some((b) => b.kind === "shuffle")).toBe(false)
+    // and when a fall and a swap come on the same page, only the swap is told, its ranks counted among those still standing
+    expect(beats([at(s0, true, ["Al", "Bea", "Cato", "Edwin"]), at(s0, true, ["Cato", "Bea", "Edwin"])], ["Al"]).filter((b) => b.kind === "shuffle").map((b) => b.text)).toEqual(["Cato took rank 1 and Bea rank 2"])
     // the trip of C40 never changes order, so its tale gains nothing
     expect(beats(trip, ["Cy"]).some((b) => b.kind === "shuffle")).toBe(false)
   })
