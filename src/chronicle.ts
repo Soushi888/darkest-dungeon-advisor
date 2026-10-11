@@ -23,7 +23,7 @@ export interface Snap {
   tally: Record<string, number> // the game's own counts: ROOM_VISITED, BATTLE_COMPLETED, AMBUSHED, CURIO_INVESTIGATED, ...
   heroes: SnapHero[]
   // the fight under way, as the game keeps it (raid.battle): the round, and the foes in rank order with their health and who last struck them
-  battle?: { round: number; foes: { name: string; hp: number; hitBy: string }[] }
+  battle?: { round: number; foes: { name: string; hp: number; hitBy: string }[]; acted?: string[] }
 }
 
 // DSON keeps some floats as their raw bits
@@ -71,6 +71,8 @@ export async function snapshot(save: Save): Promise<Snap | undefined> {
       hp: Math.max(0, Math.round(f32(e.data?.actor?.current_hp))),
       hitBy: heroes.find((h) => h.guid === Number(e.data?.actor?.damage_source_data))?.name ?? "",
     }))),
+    // a hero whose initiative is spent has taken (or is taking) this round's turn
+    acted: Object.values<any>(b.initiative?.heroes ?? {}).filter((i) => Number(i.initiative) === 0).map((i) => heroes.find((h) => h.guid === Number(i.roster_guid))?.name ?? "").filter(Boolean),
   } : undefined
   return {
     battle,

@@ -21,13 +21,14 @@ const now = () => new Date().toLocaleTimeString("en-GB", { hour12: false })
 
 const board = join(outDir, "town.md")
 const digest = async () => (existsSync(board) ? Bun.hash(await Bun.file(board).text()).toString() : "")
-let sent = mtime(log), saved = mtime(game), seen = await digest(), out = false
+const inRaid = async () => { try { const d = decode(new Uint8Array(await Bun.file(game).arrayBuffer())) as any; return !!(d.base_root ?? d).inraid } catch { return false } }
+let sent = mtime(log), saved = mtime(game), seen = await digest(), out = await inRaid()
 const chron = join(outDir, "chronicle")
 const pages = () => { try { return readdirSync(chron).flatMap((d) => readdirSync(join(chron, d)).filter((f) => /^\d+\.json$/.test(f)).map((f) => join(chron, d, f))) } catch { return [] } }
 // DD_LIVE_REPLAY=n tells the last n pages again on start, to check what a page reports
 const replay = Number(process.env.DD_LIVE_REPLAY ?? 0), all = pages().sort()
 const told = new Set(replay ? all.slice(0, -replay) : all)
-const last = new Map<string, any>(), prevFile = new Map<string, string>()
+const last = new Map<string, any>(), prevFile = new Map<string, string>(), lastBody = new Map<string, string>()
 // the page before the first one told is what the next page is compared with
 for (const f of all.filter((f) => told.has(f))) { try { last.set(f.split("/").slice(-2, -1)[0]!, await Bun.file(f).json()); prevFile.set(f.split("/").slice(-2, -1)[0]!, f.replace(/\.json$/, ".raw.json")) } catch {} }
 const clashes = join(outDir, "coherence.json")
@@ -51,6 +52,13 @@ setInterval(async () => {
       // names (the curio searched, the foe met or slain), and the loot a battle laid out (Soushi, 2026-10-11: "ensure you see all details")
       const delta: string[] = []
       if (prev) {
+        if (p.torch !== prev.torch) delta.push(`light ${p.torch > prev.torch ? "+" : ""}${p.torch - prev.torch}`)
+        for (const h of p.heroes ?? []) {
+          const w = (prev.heroes ?? []).find((x: any) => x.guid === h.guid)
+          if (!w) continue
+          const dh = Math.round(h.hp) - Math.round(w.hp), ds = h.stress - w.stress
+          if (dh || ds) delta.push(`${h.name}${dh ? ` ${dh > 0 ? "+" : ""}${dh}hp` : ""}${ds ? ` ${ds > 0 ? "+" : ""}${ds}st` : ""}`)
+        }
         for (const k of new Set([...Object.keys(prev.supplies ?? {}), ...Object.keys(p.supplies ?? {})])) {
           const d = (p.supplies?.[k] ?? 0) - (prev.supplies?.[k] ?? 0)
           if (d) delta.push(`${k} ${d > 0 ? "+" : ""}${d}`)
@@ -60,7 +68,9 @@ setInterval(async () => {
           for (const [k, v] of Object.entries<any>(sd)) {
             const n = (tl[k] ?? 0) - (pt[k] ?? 0)
             if (n <= 0 || k === "UNDEFINED") continue
-            const what = Object.values<any>(v.entries ?? {}).slice(-n).map((e) => Object.values<any>(e.parameters ?? {}).map((x) => x.data).filter((x) => typeof x === "string").pop()).filter(Boolean)
+            const ids = Object.values<any>(v.entries ?? {}).slice(-n).map((e) => Object.values<any>(e.parameters ?? {}).map((x) => x.data).filter((x) => typeof x === "string").pop()).filter(Boolean)
+            const what: string[] = []
+            for (const id of ids) what.push((/^MONSTER_/.test(k) && (await nameOf("monster", id!))) || id!) // one at a time: parallel lookups race the name cache
             delta.push(`${k.toLowerCase().replace(/_/g, " ")} +${n}${what.length ? ` (${what.join(", ")})` : ""}`)
           }
           // what a curio or a blow left on each hero: quirks and diseases gained or lost, and a heart attack (Soushi: a curio once gave one)
@@ -81,7 +91,11 @@ setInterval(async () => {
         if (moved) delta.push(`ranks now ${(p.heroes ?? []).map((h: any, i: number) => `${i + 1}.${h.name}`).join(" ")}`)
       }
       const change = delta.length ? ` || changed: ${delta.join("; ")}` : ""
-      const fight = p.battle ? ` || round ${p.battle.round}: ${p.battle.foes.map((x: any) => `${x.name} ${x.hp}hp${x.hitBy ? ` (hit by ${x.hitBy})` : ""}`).join(", ")}` : ""
+      const fight = p.battle ? ` || round ${p.battle.round}: ${p.battle.foes.map((x: any) => `${x.name} ${x.hp}hp${x.hitBy ? ` (hit by ${x.hitBy})` : ""}`).join(", ")}${p.battle.acted?.length ? `; acted: ${p.battle.acted.join(", ")}` : ""}` : ""
+      // a page whose only difference is the save itself (a new round opening, a turn starting) is folded into the next one
+      const body = `${who}${fight.replace(/round \d+/, "")}`
+      if (!notable && !delta.length && body === lastBody.get(trip)) continue
+      lastBody.set(trip, body)
       console.log(`${notable ? "CHRON" : "PAGE"} ${now()} #${f.match(/(\d+)\.json$/)![1]} light ${p.torch}, rooms ${tl.ROOM_VISITED ?? 0}, battles ${tl.BATTLE_COMPLETED ?? 0}, food ${p.supplies?.food ?? 0}, torches ${p.supplies?.torch ?? 0} | ${who}${fight}${change}`)
     } catch {}
   }
@@ -98,8 +112,7 @@ setInterval(async () => {
   if (mtime(game) !== saved) {
     saved = mtime(game)
     await Bun.sleep(2000) // the game writes its persist files in a burst
-    let raid = false
-    try { const d = decode(new Uint8Array(await Bun.file(game).arrayBuffer())) as any; raid = !!(d.base_root ?? d).inraid } catch {}
+    const raid = await inRaid()
     if (raid) { if (!out) console.log(`SAVE ${now()} dungeon`); out = true; return }
     out = false
     await Bun.sleep(4000) // the watcher rebuilds 1.5 s after the burst, and the build takes a few seconds
