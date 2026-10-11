@@ -3,7 +3,7 @@
 //   bun run say "<text>"        the agent's comment on the current page, appended to the expedition's thread
 //   (served by bun run watch)   the farewell board's first zone while the party is out; /road/feed its data, POST /road/message a line from Soushi
 // It only reads the chronicle and writes under .local/town/road/ (ISA A1).
-import { mapLegend, mapSvg, whereLine } from "./map.ts"
+import { mapIcons, mapLegend, mapSvg, whereLine } from "./map.ts"
 import { isNotable } from "./notable.ts"
 import { buildRecap, type Recap } from "./recap.ts"
 import { questLine, questStatus } from "./quest.ts"
@@ -111,7 +111,8 @@ export async function feed() {
       // C80: the foes this fight has already slain, which the game no longer keeps (Soushi, 06:55: "I still want to see the killed foes")
       slain: p.battle ? await slainAt(c.file!) : [],
       // C51: the map as the party knows it, drawn without letters, and where they stand in words
-      map: mapSvg(p.map), where: whereLine(p.map), legend: mapLegend(),
+      // C83: the game's own map art, copied beside the page once
+      ...(() => { const ic = mapIcons(town()); return { map: mapSvg(p.map, ic), legend: mapLegend(ic) } })(), where: whereLine(p.map),
     }
   } catch {}
   // camp is the Caretaker's default (C74), so a page with no word from him reads as camp
@@ -151,6 +152,10 @@ export const roadPanel = `<style>
 #roadBusy{margin:.6rem 0 0;font-style:italic;color:var(--gold)}
 #road .empty{color:var(--dim);font-style:italic}
 #roadMap{margin:.6rem 0}#roadMap svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:3px}
+#roadMap .mapview{position:relative}#roadMap .mapview svg{display:block;width:100%;height:auto;max-height:70vh;cursor:grab;touch-action:none;background:#0b0a08}#roadMap .mapview svg:active{cursor:grabbing}
+#roadMap .maptools{position:absolute;top:.4rem;right:.4rem;display:flex;gap:.3rem;z-index:2}#roadMap .maptools button{background:var(--panel);color:var(--gold);border:1px solid var(--line);border-radius:3px;font:inherit;font-size:.85rem;padding:.1rem .5rem;cursor:pointer;min-width:2rem}
+#roadMap .mapview:fullscreen{background:#0b0a08;display:flex;align-items:center;justify-content:center}#roadMap .mapview:fullscreen svg{max-height:100vh;height:100vh;border:0}
+#road .legend img.mi{height:1.1rem;width:auto;vertical-align:-.25rem;margin-right:.3rem}
 @media (max-width:520px){#road .seat{grid-template-columns:5rem minmax(0,1fr) minmax(0,1fr)}}
 </style><script>(()=>{const nav=document.querySelector('nav.bar');
 // C66: the road zone in two, the report (the latest recap, the foes in a fight, the map) beside the conversation
@@ -176,6 +181,26 @@ const battle=(s,latest)=>'<p class="rc-head">Page '+Number(s.page)+' · the figh
 const packs=r=>'<p class="packs"><span class="it"><span class="ic"><b>'+r.packs.light+'</b></span><small>light</small></span>'+(r.packs.slots?'<span class="it" title="the pack: slots used of all"><span class="ic"><b>'+r.packs.slots.used+'/'+r.packs.slots.of+'</b></span><small>slots</small></span>':'')+r.packs.items.filter(x=>x.kind==='provision').map(item).join('')+'</p>';
 const who=l=>'<span class="who">'+(l.from==="soushi"?"You":"The Caretaker")+' · '+time(l.at)+(l.page?(l.gameAt?' · about page '+esc(l.page)+', the game was at '+esc(l.gameAt):' · page '+esc(l.page)):'')+'</span>';
 let shown="";
+// C83: the map as a figure to read closely: wheel or pinch to zoom, drag to pan, buttons to zoom, fit and fill the screen; the
+// view is kept across the feed's refreshes while the map keeps its size
+let mv=null;
+const zoomable=()=>{const box=document.getElementById('roadMap'),svg=box&&box.querySelector('svg');if(!svg||svg.dataset.z)return;svg.dataset.z='1';
+let wrap=svg.parentElement;if(!wrap.classList.contains('mapview')){wrap=document.createElement('div');wrap.className='mapview';svg.before(wrap);wrap.append(svg)}
+const vb=svg.viewBox.baseVal,base={x:vb.x,y:vb.y,w:vb.width,h:vb.height};if(!mv||mv.bw!==base.w||mv.bh!==base.h)mv={x:base.x,y:base.y,w:base.w,h:base.h,bw:base.w,bh:base.h};
+svg.removeAttribute('width');svg.removeAttribute('height');const set=()=>svg.setAttribute('viewBox',mv.x+' '+mv.y+' '+mv.w+' '+mv.h);set();
+const at=(cx,cy)=>{const r=svg.getBoundingClientRect();return[mv.x+(cx-r.left)/r.width*mv.w,mv.y+(cy-r.top)/r.height*mv.h]};
+const zoom=(f,cx,cy)=>{const w=Math.min(base.w*1.5,Math.max(base.w/14,mv.w*f)),k=w/mv.w,[px,py]=cx===undefined?[mv.x+mv.w/2,mv.y+mv.h/2]:at(cx,cy);mv.x=px-(px-mv.x)*k;mv.y=py-(py-mv.y)*k;mv.w=w;mv.h*=k;set()};
+svg.addEventListener('wheel',e=>{e.preventDefault();zoom(e.deltaY<0?0.85:1/0.85,e.clientX,e.clientY)},{passive:false});
+const pts=new Map();let pinch=0;
+svg.addEventListener('pointerdown',e=>{svg.setPointerCapture(e.pointerId);pts.set(e.pointerId,[e.clientX,e.clientY])});
+svg.addEventListener('pointermove',e=>{if(!pts.has(e.pointerId))return;const was=pts.get(e.pointerId);pts.set(e.pointerId,[e.clientX,e.clientY]);const r=svg.getBoundingClientRect();
+if(pts.size===1){mv.x-=(e.clientX-was[0])/r.width*mv.w;mv.y-=(e.clientY-was[1])/r.height*mv.h;set();return}
+const [a,b]=[...pts.values()],d=Math.hypot(a[0]-b[0],a[1]-b[1]);if(pinch)zoom(pinch/d,(a[0]+b[0])/2,(a[1]+b[1])/2);pinch=d});
+const up=e=>{pts.delete(e.pointerId);if(pts.size<2)pinch=0};svg.addEventListener('pointerup',up);svg.addEventListener('pointercancel',up);
+if(!wrap.querySelector('.maptools')){const t=document.createElement('div');t.className='maptools';
+const b=(label,title,f)=>{const x=document.createElement('button');x.type='button';x.textContent=label;x.title=title;x.onclick=f;t.append(x)};
+b('+','zoom in',()=>zoom(0.75));b('−','zoom out',()=>zoom(1/0.75));b('fit','the whole map',()=>{mv.x=base.x;mv.y=base.y;mv.w=base.w;mv.h=base.h;set()});
+b('⤢','full screen',()=>{document.fullscreenElement?document.exitFullscreen():wrap.requestFullscreen&&wrap.requestFullscreen()});wrap.append(t)}};
 async function tick(){try{const d=await (await fetch("/road/feed",{cache:"no-store"})).json();z.hidden=!d.out;if(!d.out)return;const s=d.state;
 if(!link&&nav){link=document.createElement('a');link.href='#road';link.textContent='On the road';const l=nav.querySelector('a[href^="#"]');l?l.before(link):nav.prepend(link)}
 const recaps=d.lines.filter(l=>l.recap),latest=recaps.at(-1);
@@ -183,6 +208,7 @@ const fight=!!(s&&s.foes);z.classList.toggle('infight',fight);
 put(document.getElementById("roadCard"),fight?battle(s,latest):(s&&s.quest?'<p class="quest'+(s.quest.complete?' done':'')+'">The work: '+esc(s.quest.line)+'</p>':'')+(latest?card(latest.recap)+(s&&s.page!==latest.recap.page?'<p class="meta">The game has gone on to page '+Number(s.page)+' since.</p>':''):s?live(s):''));
 put(document.getElementById("roadFoes"),fight?'':foes(s));
 put(document.getElementById("roadMap"),s&&s.map?(fight?'<details class="fold"><summary>The packs and the map, until the fight ends</summary>'+(latest?packs(latest.recap):'')+s.map+'<p class="meta">'+esc(s.where)+'</p></details>':s.map+'<p class="meta">'+esc(s.where)+'</p>'+(s.legend||'')):'');
+zoomable();
 const mine=d.lines.filter(l=>l.from==="caretaker").at(-1),asked=d.lines.filter(l=>l.from==="soushi").at(-1),B=document.getElementById("roadBusy");
 const fresh=at=>at&&Date.now()-new Date(at)<180000&&(!mine||at>mine.at);
 const say=(a)=>"The Caretaker is "+a[Math.floor(Date.now()/4000)%a.length]+"…";
