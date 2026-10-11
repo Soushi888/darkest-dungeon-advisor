@@ -7,6 +7,7 @@ import { mapLegend, mapSvg, whereLine } from "./map.ts"
 import { isNotable } from "./notable.ts"
 import { buildRecap, type Recap } from "./recap.ts"
 import { questLine, questStatus } from "./quest.ts"
+import { effectWords } from "./words.ts"
 import { appendFileSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs"
 import { join } from "node:path"
 import { outDir } from "./board.ts"
@@ -85,17 +86,22 @@ export async function feed() {
   let state: any = null
   try {
     const p = c.file ? await Bun.file(c.file).json() : null
+    // in a fight, who has taken this round's turn: the game spends an actor's initiative to 0 once it has acted (C71)
+    const raw = c.file ? await Bun.file(c.file.replace(/\.json$/, ".raw.json")).json().catch(() => undefined) : undefined
+    const spent = (list: any) => new Set(Object.values<any>(list ?? {}).filter((x) => Number(x.initiative) === 0).map((x) => Number(x.roster_guid ?? x.battle_guid)))
+    const heroDone = spent(raw?.raid?.battle?.initiative?.heroes), foeDone = spent(raw?.raid?.battle?.initiative?.monsters)
+    const fx = async (xs: string[] = []) => [...new Set(await Promise.all(xs.map(effectWords)))]
     if (p) state = {
       page: c.page, pageAt: new Date(statSync(c.file!).mtimeMs).toISOString(), ...(await notableOf(c.trip!)),
       // the quest as the page stands (C68)
       quest: await questStatus(await Bun.file(c.file!.replace(/\.json$/, ".raw.json")).json().catch(() => undefined)).then((q) => q && { ...q, line: questLine(q) }), dungeon: p.dungeon, torch: p.torch, food: p.supplies?.food ?? 0, torches: p.supplies?.torch ?? 0,
       rooms: p.tally?.ROOM_VISITED ?? 0, battles: p.tally?.BATTLE_COMPLETED ?? 0,
-      heroes: (p.heroes ?? []).map((h: any) => ({ name: h.name, cls: h.cls, hp: Math.round(h.hp), maxHp: h.maxHp, stress: h.stress, affliction: h.affliction, virtue: h.virtue, deathsDoor: h.deathsDoor })),
+      heroes: await Promise.all((p.heroes ?? []).map(async (h: any) => ({ name: h.name, cls: h.cls, hp: Math.round(h.hp), maxHp: h.maxHp, stress: h.stress, affliction: h.affliction, virtue: h.virtue, deathsDoor: h.deathsDoor, stunned: !!h.stunned, acted: heroDone.has(h.guid), effects: p.battle ? await fx(h.effects) : [] }))),
       // a foe's full health is the .hp of its own monster file; pages keep no maximum, and a foe's id is reused across fights
       foes: p.battle ? await Promise.all(p.battle.foes.map(async (f: any) => {
         const max = f.cls ? (await monster(f.cls))?.hp ?? 0 : 0
         // a corpse is a foe already killed, left lying in its rank: it blocks the line but cannot act
-        return { name: f.name, hp: f.hp, maxHp: Math.max(f.hp, max), stunned: !!f.stunned, dots: f.dots ?? [], dead: /^corpse/.test(f.cls ?? "") }
+        return { name: f.name, hp: f.hp, maxHp: Math.max(f.hp, max), stunned: !!f.stunned, dots: f.dots ?? [], dead: /^corpse/.test(f.cls ?? ""), acted: foeDone.has(Number(f.guid)), effects: await fx(f.effects) }
       })) : null, round: p.battle?.round,
       // C51: the map as the party knows it, drawn without letters, and where they stand in words
       map: mapSvg(p.map), where: whereLine(p.map), legend: mapLegend(),
@@ -113,6 +119,8 @@ export const roadPanel = `<style>
 #road .rc-head{font-size:.9rem;color:var(--dim);margin:0 0 .5rem}
 #road .packs{margin:.8rem 0}#road .words{margin:1rem 0 .4rem;line-height:1.5;font-size:1.05rem}#road .words .said{margin:0 0 .7rem}
 #road .meta{color:var(--dim);font-size:.9rem;margin:.2rem 0 .4rem}
+#road .fx{font-size:.8rem;color:var(--dim);margin:-.1rem 0 .35rem 7.6rem}#road .dimtag{color:var(--dim)}#road details.fold{margin-top:1rem}#road details.fold summary{cursor:pointer;color:var(--dim)}
+@media (max-width:520px){#road .fx{margin-left:0}}
 #road .quest{margin:0 0 .6rem;padding:.35rem .6rem;border:1px solid var(--line);border-radius:3px;background:var(--panel)}#road .quest.done{border-color:var(--gold);color:var(--gold)}
 #road .seat{display:grid;grid-template-columns:7rem minmax(0,1fr) minmax(0,1fr);gap:.6rem;align-items:center;margin:.25rem 0;font-size:.95rem}
 #road .bar{position:relative;display:block;height:1.1rem;padding:0;background:#000;border:1px solid var(--line);border-radius:2px;overflow:hidden;box-shadow:none}
@@ -153,14 +161,19 @@ const words=t=>String(t||'').split(/\\n\\s*\\n/).map(x=>x.trim()).filter(Boolean
 const card=r=>'<p class="rc-head">Page '+Number(r.page)+' · '+r.tally.rooms+' rooms · '+r.tally.battles+' battles · '+lost(r.tally.lost)+'</p>'+four(r.four)+'<p class="packs"><span class="it"><span class="ic"><b>'+r.packs.light+'</b></span><small>light</small></span>'+r.packs.items.filter(x=>x.kind!=='loot').map(item).join('')+'</p>'+(r.packs.items.some(x=>x.kind==='loot')?'<p class="packs loot"><span class="lab">Loot</span>'+r.packs.items.filter(x=>x.kind==='loot').map(item).join('')+'</p>':'')+'<div class="words">'+words(r.since)+words(r.advice)+'</div>';
 const live=s=>'<p class="rc-head">Page '+Number(s.page)+' in the '+esc(s.dungeon)+' · '+s.rooms+' rooms · '+s.battles+' battles</p>'+four(s.heroes.map(h=>({...h,tags:[h.affliction,h.virtue,h.deathsDoor?"Death's Door":""].filter(Boolean)})))+'<p class="packs"><span class="it">light <b>'+s.torch+'</b></span><span class="it">food <b>'+s.food+'</b></span><span class="it">torches <b>'+s.torches+'</b></span></p>';
 const foes=s=>s&&s.foes?'<p class="meta">The foes, round '+s.round+'</p>'+s.foes.map(f=>'<p class="seat foe'+(f.dead?' dead':'')+'"><span>'+(f.dead?'<s>'+esc(f.name)+'</s> <span class="tag">dead, only its body blocks the rank</span>':esc(f.name))+(f.stunned?' <span class="tag">stunned</span>':'')+(f.dots&&f.dots.length?' <span class="tag">'+esc(f.dots.join(', '))+'</span>':'')+'</span><span class="bar hp" title="health"><i style="width:'+pct(f.hp,f.maxHp)+'%"></i><span>'+f.hp+'/'+f.maxHp+'</span></span><span class="num">'+f.hp+' of '+f.maxHp+'</span></p>').join(''):'';
+// C71: in a fight the report is the fight: the foes by slot first, then the four as they stand, then his words on it
+const acted=a=>a.acted?' <span class="tag">has acted</span>':' <span class="tag dimtag">to act</span>';
+const battle=(s,latest)=>'<p class="rc-head">Page '+Number(s.page)+' · the fight, round '+s.round+'</p><p class="meta">The foes, front to back</p>'+s.foes.map(f=>'<p class="seat foe'+(f.dead?' dead':'')+'"><span>'+(f.dead?'<s>'+esc(f.name)+'</s> <span class="tag">a corpse</span>':esc(f.name)+acted(f))+(f.stunned?' <span class="tag">stunned</span>':'')+'</span><span class="bar hp" title="health"><i style="width:'+pct(f.hp,f.maxHp)+'%"></i><span>'+f.hp+'/'+f.maxHp+'</span></span><span class="num">'+f.hp+' of '+f.maxHp+'</span></p>'+((f.effects||[]).length&&!f.dead?'<p class="fx">'+esc(f.effects.join('; '))+'</p>':'')).join('')+'<p class="meta">Your four, front to back</p>'+s.heroes.map(h=>'<p class="seat"><span>'+esc(h.name)+acted(h)+(h.stunned?' <span class="tag">stunned</span>':'')+(h.deathsDoor?' <span class="tag">Death\\'s Door</span>':'')+(h.affliction?' <span class="tag">'+esc(h.affliction)+'</span>':'')+'</span><span class="bar hp" title="health"><i style="width:'+pct(h.hp,h.maxHp)+'%"></i><span>'+h.hp+'/'+h.maxHp+'</span></span><span class="bar st" title="stress, of 200; the line is 100"><i style="width:'+Math.min(100,h.stress/2)+'%"></i><span>'+h.stress+'</span></span></p>'+((h.effects||[]).length?'<p class="fx">'+esc(h.effects.join('; '))+'</p>':'')).join('')+(latest?'<div class="words">'+words(latest.recap.advice)+'</div>':'');
+const packs=r=>'<p class="packs"><span class="it"><span class="ic"><b>'+r.packs.light+'</b></span><small>light</small></span>'+r.packs.items.filter(x=>x.kind!=='loot').map(item).join('')+'</p>';
 const who=l=>'<span class="who">'+(l.from==="soushi"?"You":"The Caretaker")+' · '+time(l.at)+(l.page?(l.gameAt?' · about page '+esc(l.page)+', the game was at '+esc(l.gameAt):' · page '+esc(l.page)):'')+'</span>';
 let shown="";
 async function tick(){try{const d=await (await fetch("/road/feed",{cache:"no-store"})).json();z.hidden=!d.out;if(!d.out)return;const s=d.state;
 if(!link&&nav){link=document.createElement('a');link.href='#road';link.textContent='On the road';const l=nav.querySelector('a[href^="#"]');l?l.before(link):nav.prepend(link)}
 const recaps=d.lines.filter(l=>l.recap),latest=recaps.at(-1);
-put(document.getElementById("roadCard"),(s&&s.quest?'<p class="quest'+(s.quest.complete?' done':'')+'">The work: '+esc(s.quest.line)+'</p>':'')+(latest?card(latest.recap)+(s&&s.page!==latest.recap.page?'<p class="meta">The game has gone on to page '+Number(s.page)+' since.</p>':''):s?live(s):''));
-put(document.getElementById("roadFoes"),foes(s));
-put(document.getElementById("roadMap"),s&&s.map?s.map+'<p class="meta">'+esc(s.where)+'</p>'+(s.legend||''):'');
+const fight=!!(s&&s.foes);z.classList.toggle('infight',fight);
+put(document.getElementById("roadCard"),fight?battle(s,latest):(s&&s.quest?'<p class="quest'+(s.quest.complete?' done':'')+'">The work: '+esc(s.quest.line)+'</p>':'')+(latest?card(latest.recap)+(s&&s.page!==latest.recap.page?'<p class="meta">The game has gone on to page '+Number(s.page)+' since.</p>':''):s?live(s):''));
+put(document.getElementById("roadFoes"),fight?'':foes(s));
+put(document.getElementById("roadMap"),s&&s.map?(fight?'<details class="fold"><summary>The packs and the map, until the fight ends</summary>'+(latest?packs(latest.recap):'')+s.map+'<p class="meta">'+esc(s.where)+'</p></details>':s.map+'<p class="meta">'+esc(s.where)+'</p>'+(s.legend||'')):'');
 const mine=d.lines.filter(l=>l.from==="caretaker").at(-1),asked=d.lines.filter(l=>l.from==="soushi").at(-1),B=document.getElementById("roadBusy");
 const fresh=at=>at&&Date.now()-new Date(at)<180000&&(!mine||at>mine.at);
 const say=(a)=>"The Caretaker is "+a[Math.floor(Date.now()/4000)%a.length]+"…";
