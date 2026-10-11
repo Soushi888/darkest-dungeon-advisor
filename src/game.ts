@@ -168,7 +168,7 @@ export async function trinkets(): Promise<Map<string, Trinket>> {
 }
 
 // ---------- monsters ----------
-export interface Monster { id: string; base: string; type: string; skills: string[]; effects: Map<string, string[]>; bleedResist: number; blightResist: number }
+export interface Monster { id: string; base: string; type: string; skills: string[]; effects: Map<string, string[]>; dmg: Map<string, [number, number]>; bleedResist: number; blightResist: number }
 const monsterCache = new Map<string, Monster>()
 export async function monster(variant: string): Promise<Monster | undefined> {
   if (monsterCache.has(variant)) return monsterCache.get(variant)
@@ -183,6 +183,8 @@ export async function monster(variant: string): Promise<Monster | undefined> {
     skills: [...info.matchAll(/^skill: \.id "([^"]+)"/gm)].map((x) => x[1]!),
     // each skill's named effects ("Minor Bleed 1", "Blight 2"), for what a supply counters
     effects: new Map([...info.matchAll(/^skill: \.id "([^"]+)"([^\n]*)/gm)].map((x) => [x[1]!, [...(x[2]!.match(/\.effect((?: "[^"]+")+)/)?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((e) => e[1]!)])),
+    // each skill's damage range, for telling which attack dealt a blow
+    dmg: new Map([...info.matchAll(/^skill: \.id "([^"]+)"[^\n]*?\.dmg (\d+) (\d+)/gm)].map((x) => [x[1]!, [Number(x[2]), Number(x[3])] as [number, number]])),
   }
   monsterCache.set(variant, m)
   return m

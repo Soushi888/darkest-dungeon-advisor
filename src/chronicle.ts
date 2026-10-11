@@ -16,14 +16,28 @@ export const CHRONICLE_RULE = {
   untriedMargin: 1, // RULE: one more torch and food on a road harder than any in the ledger
 }
 
-export interface SnapHero { guid: number; name: string; cls: string; hp: number; maxHp: number; stress: number; affliction: string; virtue: string; deathsDoor: boolean; lastBlow: string }
+export interface SnapHero { guid: number; name: string; cls: string; hp: number; maxHp: number; stress: number; affliction: string; virtue: string; deathsDoor: boolean; lastBlow: string
+  // what the fight left on the hero: the foe class that last struck, turns taken, stun, effects (buffs, marks, damage over time) as the game keeps them
+  blowCls?: string; turns?: number; stunned?: boolean; effects?: string[]; dots?: string[] }
 export interface Snap {
   at: string; dungeon: string; difficulty: number; length: number; quest: string; key: string
   torch: number; inBattle: boolean; supplies: Record<string, number>; narrated?: string[]
   tally: Record<string, number> // the game's own counts: ROOM_VISITED, BATTLE_COMPLETED, AMBUSHED, CURIO_INVESTIGATED, ...
   heroes: SnapHero[]
   // the fight under way, as the game keeps it (raid.battle): the round, and the foes in rank order with their health and who last struck them
-  battle?: { round: number; foes: { name: string; hp: number; hitBy: string }[]; acted?: string[] }
+  battle?: { round: number; foes: { name: string; hp: number; hitBy: string; guid?: number; cls?: string; turns?: number; stunned?: boolean; effects?: string[]; dots?: string[] }[]; acted?: string[] }
+  known?: string[] // every attack the party has witnessed, the boundary for naming one (C5)
+}
+
+// an actor's state in a fight: turns taken, stun, each buff or mark with who laid it, each damage over time
+function fx(a: any) {
+  const effects = Object.values<any>(a?.buff_group ?? {}).map((b) => {
+    const what = b.id || [b.stat_sub_type, b.ruledata_string].filter(Boolean).join(" vs ") || `stat ${b.stat_type}`
+    const src = typeof b.source_class_id === "string" ? ` from ${b.source_class_id}` : ""
+    return `${what} ${Math.round(Number(b.amount) * 100) / 100}${b.duration > 0 ? ` (${b.duration})` : ""}${src}`
+  })
+  const dots = Object.entries<any>(a?.actor_dot ?? {}).map(([k, v]) => `${k} ${JSON.stringify(v)}`)
+  return { turns: Number(a?.performing_turn ?? 0), stunned: !!a?.stunned, effects, dots }
 }
 
 // DSON keeps some floats as their raw bits
@@ -61,6 +75,7 @@ export async function snapshot(save: Save): Promise<Snap | undefined> {
       guid, name: h.actor?.name ?? `#${guid}`, cls: h.heroClass, hp: Math.max(0, f32(h.actor?.current_hp)), maxHp: await maxHp(h.heroClass, h.armour_rank ?? 0),
       stress: Math.round(f32(h.m_Stress)), affliction: h.affliction_type_id ? await nameOf("affliction", h.affliction_type_id) : "", virtue: h.virtue_type_id ? await nameOf("affliction", h.virtue_type_id) : "",
       deathsDoor: !!h.visited_deaths_door, lastBlow: blow && /_[A-Z]$/.test(blow) ? await nameOf("monster", blow) : "",
+      blowCls: blow && /_[A-Z]$/.test(blow) ? blow : "", ...fx(h.actor),
     })
   }
   const b = r.inbattle ? r.battle : undefined
@@ -70,6 +85,7 @@ export async function snapshot(save: Save): Promise<Snap | undefined> {
       name: typeof e.data?.monster_class === "string" ? await nameOf("monster", e.data.monster_class) : "?",
       hp: Math.max(0, Math.round(f32(e.data?.actor?.current_hp))),
       hitBy: heroes.find((h) => h.guid === Number(e.data?.actor?.damage_source_data))?.name ?? "",
+      guid: Number(e.data?.battle_guid ?? 0), cls: String(e.data?.monster_class ?? ""), ...fx(e.data?.actor),
     }))),
     // a hero whose initiative is spent has taken (or is taking) this round's turn
     acted: Object.values<any>(b.initiative?.heroes ?? {}).filter((i) => Number(i.initiative) === 0).map((i) => heroes.find((h) => h.guid === Number(i.roster_guid))?.name ?? "").filter(Boolean),
@@ -78,6 +94,7 @@ export async function snapshot(save: Save): Promise<Snap | undefined> {
     battle,
     at: new Date().toISOString(), dungeon: ri.dungeon, difficulty: Number(ri.difficulty ?? 0), length: Number(ri.length ?? 0), quest: String(ri.type ?? ""),
     key: `${ri.id}:${r.start_elapsed_time ?? ""}`, torch: Math.round(f32(r.torchlight)), inBattle: !!r.inbattle, supplies, tally, heroes,
+    known: Object.keys((save.game_knowledge as any)?.combat_skills ?? {}),
     // the narrator's log of this trip, one entry per event it spoke over: the only record of a trap sprung or an obstacle cleared by hand
     narrated: Object.values<any>((save.narration as any)?.raid_entry_log ?? {}).map((e) => String(e.entry_type ?? "")),
   }

@@ -10,7 +10,7 @@
 import { existsSync, readdirSync, statSync } from "node:fs"
 import { join } from "node:path"
 import { outDir } from "./board.ts"
-import { nameOf } from "./game.ts"
+import { monster, nameOf } from "./game.ts"
 import { decode } from "./dson.ts"
 import { profileDir } from "./paths.ts"
 
@@ -62,9 +62,36 @@ setInterval(async () => {
           const w = (prev.heroes ?? []).find((x: any) => x.guid === h.guid)
           if (!w) continue
           const dh = Math.round(h.hp) - Math.round(w.hp), ds = h.stress - w.stress
-          // the game keeps the last foe that struck each hero; named on the page where the hero lost health
-          const by = dh < 0 && h.lastBlow ? ` (hit by ${h.lastBlow})` : ""
+          // the game keeps the last foe that struck each hero; named on the page where the hero lost health, with the attacks
+          // of that foe (witnessed ones only, C5) whose damage fits the blow: in range, or up to half again as a critical
+          let by = ""
+          if (dh < 0 && h.lastBlow) {
+            const m = h.blowCls ? await monster(h.blowCls) : undefined, loss = -dh, known = new Set<string>(p.known ?? [])
+            const fits = [...(m?.dmg ?? [])].filter(([id]) => !p.known || known.has(id)).flatMap(([id, [lo, hi]]) =>
+              loss >= lo && loss <= hi ? [`${id.replace(/_/g, " ")} ${lo}-${hi}`] : loss > hi && loss <= Math.ceil(hi * 1.5) ? [`${id.replace(/_/g, " ")} ${lo}-${hi}, a critical`] : [])
+            by = ` (hit by ${h.lastBlow}${fits.length ? `: ${fits.join(" or ")}` : m ? ": no witnessed attack of it deals that much, so more than one blow" : ""})`
+          }
           if (dh || ds) delta.push(`${h.name}${dh ? ` ${dh > 0 ? "+" : ""}${dh}hp` : ""}${ds ? ` ${ds > 0 ? "+" : ""}${ds}st` : ""}${by}`)
+        }
+        // who took a turn since the last page (the game counts each actor's turns), and what changed on each actor
+        const acted: string[] = []
+        for (const h of p.heroes ?? []) { const w = (prev.heroes ?? []).find((x: any) => x.guid === h.guid); if (w && (h.turns ?? 0) > (w.turns ?? 0)) acted.push(h.name) }
+        const pf: any[] = prev.battle?.foes ?? [], nf: any[] = p.battle?.foes ?? []
+        for (const e of nf) { const w = pf.find((x) => x.guid && x.guid === e.guid); if (w && (e.turns ?? 0) > (w.turns ?? 0)) acted.push(e.name) }
+        if (acted.length) delta.push(`acted: ${acted.join(", ")}`)
+        for (const e of nf) {
+          const w = pf.find((x) => x.guid && x.guid === e.guid)
+          if (!w) continue
+          const d = e.hp - w.hp
+          if (d) delta.push(`${e.name} ${d > 0 ? "+" : ""}${d}hp${d < 0 && !acted.some((a) => (p.heroes ?? []).some((h: any) => h.name === a)) ? " (no hero acted: damage over time)" : ""}`)
+        }
+        const actors = [...(p.heroes ?? []).map((h: any) => [h, (prev.heroes ?? []).find((x: any) => x.guid === h.guid)]), ...nf.map((e) => [e, pf.find((x) => x.guid && x.guid === e.guid)])]
+        for (const [a, w] of actors) {
+          if (!w || !w.effects) continue // a page from before effects were kept has nothing to compare with
+          for (const x of (a.effects ?? []).filter((x: string) => !(w.effects ?? []).includes(x))) delta.push(`${a.name} gains ${x}`)
+          for (const x of (w.effects ?? []).filter((x: string) => !(a.effects ?? []).includes(x))) delta.push(`${a.name} loses ${x}`)
+          for (const x of (a.dots ?? []).filter((x: string) => !(w.dots ?? []).includes(x))) delta.push(`${a.name} suffers ${x}`)
+          if (a.stunned && !w.stunned) delta.push(`${a.name} STUNNED`)
         }
         for (const k of new Set([...Object.keys(prev.supplies ?? {}), ...Object.keys(p.supplies ?? {})])) {
           const d = (p.supplies?.[k] ?? 0) - (prev.supplies?.[k] ?? 0)
@@ -98,7 +125,7 @@ setInterval(async () => {
         if (moved) delta.push(`ranks now ${(p.heroes ?? []).map((h: any, i: number) => `${i + 1}.${h.name}`).join(" ")}`)
       }
       const change = delta.length ? ` || changed: ${delta.join("; ")}` : ""
-      const fight = p.battle ? ` || round ${p.battle.round}: ${p.battle.foes.map((x: any) => `${x.name} ${x.hp}hp${x.hitBy ? ` (hit by ${x.hitBy})` : ""}`).join(", ")}${p.battle.acted?.length ? `; acted: ${p.battle.acted.join(", ")}` : ""}` : ""
+      const fight = p.battle ? ` || round ${p.battle.round}: ${p.battle.foes.map((x: any) => `${x.name} ${x.hp}hp${x.hitBy ? ` (hit by ${x.hitBy})` : ""}`).join(", ")}` : ""
       // a page whose only difference is the save itself (a new round opening, a turn starting) is folded into the next one
       const body = `${who}${fight.replace(/round \d+/, "")}`
       if (!notable && !delta.length && body === lastBody.get(trip)) continue
