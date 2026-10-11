@@ -49,7 +49,7 @@ function partyLine(p: Party): string {
   return p.seats.map((s) => `${s.rank}. **${s.hero.name}**, ${s.hero.clsName}`).join(" · ")
 }
 
-export interface Answers { expedition?: string; partyOwn?: boolean; partyNames?: string[] }
+export interface Answers { expedition?: string; partyOwn?: boolean; partyNames?: string[]; preferred?: string[] }
 export async function readAnswers(): Promise<Answers> {
   const f = Bun.file(join(outDir(), "answers.md"))
   if (!(await f.exists())) return {}
@@ -64,6 +64,17 @@ export async function readAnswers(): Promise<Answers> {
     const names = note[1]!.split(/[,;]|\band\b/).map((x) => x.trim()).filter(Boolean)
     if (names.length === 4) a.partyNames = names
   }
+  // #4: a note on the Guild card names the skills Soushi prefers ("Prefer: Pistol Shot, Grapeshot Blast"); they are kept
+  // across weeks in preferences.json, the latest named first, since the week's answers are replaced at every send
+  const guild = text.match(/\*\*\d+\. What do we train first\?\*\*[^\n]*\n\s*- Note[^:]*:\s*(.+)/)
+  const prefFile = join(outDir(), "preferences.json")
+  const kept = ((await Bun.file(prefFile).json().catch(() => ({}))) as { skills?: string[] }).skills ?? []
+  if (guild) {
+    const named = guild[1]!.replace(/^\s*(i\s+)?prefer(red)?\s*:?\s*/i, "").replace(/\bover\b.*$/i, "").split(/[,;]|\band\b/).map((x) => x.trim().replace(/\.$/, "")).filter(Boolean)
+    const skills = [...named, ...kept.filter((k) => !named.some((n) => n.toLowerCase() === k.toLowerCase()))]
+    await Bun.write(prefFile, JSON.stringify({ skills }, null, 1))
+    a.preferred = skills
+  } else if (kept.length) a.preferred = kept
   return a
 }
 
@@ -422,17 +433,22 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   L.push(`What the trainers and the smith can teach the party next, and at what price: the Guild knocks ${Math.round(t.skillDiscount * 100)}% off its lessons and the Blacksmith ${Math.round(t.gearDiscount * 100)}% off his work, for what the estate has already paid them.`, "")
   if (a.buys.length) {
     L.push("```board-decisions")
-    L.push(`- q: "What do we train first?"`, `  context: ${y(`You have ${coin(gold)}. These are the party's upgrades you can afford now, cheapest first.`)}`, "  options:")
+    const preferred = opts.answers.preferred ?? []
+    L.push(`- q: "What do we train first?"`, `  context: ${y(`You have ${coin(gold)}. These are the party's upgrades you can afford now, cheapest first.${preferred.length ? ` The skills you prefer: ${preferred.join(", ")}.` : " Name the skills you prefer in a note here and I will train them first."}`)}`, "  options:")
     // the five cheapest lessons, and every piece of the smith's work the coffers can pay for, so an upgrade just opened is never hidden (Soushi, 2026-10-10)
-    const shown = [...a.buys.filter((u) => u.where !== "Blacksmith").slice(0, 5), ...a.buys.filter((u) => u.where === "Blacksmith")]
+    // and every lesson you named that the coffers can pay for, so a preferred skill is never left off the card (#4)
+    const named = (u: (typeof a.buys)[number]) => u.where === "Guild" && (opts.answers.preferred ?? []).some((n) => n.toLowerCase() === u.label.toLowerCase())
+    const shown = [...a.buys.filter(named), ...a.buys.filter((u) => u.where !== "Blacksmith" && !named(u)).slice(0, 5), ...a.buys.filter((u) => u.where === "Blacksmith")]
     for (const u of shown) L.push(`    - pick: ${y(`${u.hero}: ${u.label} to level ${u.toLevel}`)}`, `      effect: ${y(`${coin(u.cost.find((c) => c.type === "gold")?.amount ?? 0)} at the ${u.where}.`)}`)
     L.push(`    - pick: "Keep the gold"`, `      effect: ${y("Spend nothing at the Guild or the Blacksmith this week.")}`)
     const price = (u: (typeof shown)[number]) => u.cost.find((c) => c.type === "gold")?.amount ?? 0
+    // a skill you named comes first, then healing, then the cheapest step (#4)
+    const liked = shown.findIndex((u) => u.where === "Guild" && price(u) <= left && preferred.some((n) => n.toLowerCase() === u.label.toLowerCase()))
     const heal = shown.findIndex((u) => /medicine|reconstruction|grace|comfort|heal/i.test(u.label) && price(u) <= left)
     const cheap = shown.findIndex((u) => price(u) <= left)
-    const pick = heal >= 0 ? heal : cheap
+    const pick = liked >= 0 ? liked : heal >= 0 ? heal : cheap
     if (pick >= 0) left -= price(shown[pick]!)
-    L.push(`  lean: ${pick >= 0 ? pick : shown.length}`, `  lean_why: ${y(heal >= 0 ? "the party's healing is what brings everyone home." : cheap >= 0 ? "the cheapest step for the hero who fights most." : `${firstRoad}.`)}`)
+    L.push(`  lean: ${pick >= 0 ? pick : shown.length}`, `  lean_why: ${y(liked >= 0 ? `you prefer ${shown[liked]!.label}, so it comes first (your choice, not my habit).` : heal >= 0 ? "the party's healing is what brings everyone home." : cheap >= 0 ? "the cheapest step for the hero who fights most." : `${firstRoad}.`)}`)
     L.push("```", "")
   }
   if (a.blocked.length) {
