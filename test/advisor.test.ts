@@ -254,7 +254,9 @@ describe.skipIf(!has)("on the local save", () => {
     expect(three).toEqual(t.fallen.map((h) => h.guid).sort())
     const proc = Bun.spawnSync(["bun", "src/cli.ts", "town"], { cwd: root, env: { ...process.env, DD_PROFILE: dir } })
     expect(proc.exitCode).toBe(0)
-    const md = await Bun.file(join(townOut, "town.md")).text()
+    // the return section mourns who fell on the last road (C37); nothing after it may advise them
+    const full = await Bun.file(join(townOut, "town.md")).text(), at = full.indexOf("## The coach is back")
+    const md = at < 0 ? full : full.slice(0, at) + full.slice(full.indexOf("\n## ", at + 5))
     for (const h of t.fallen) expect(t.heroes.some((x) => x.name === h.name) || !md.includes(h.name)).toBe(true)
   })
 
@@ -524,5 +526,17 @@ describe.skipIf(!has)("on the local save", () => {
     const t = await town(await readSave(copyProfile()))
     for (const q of t.quests) if (!q.known.length) expect(q.foeResist!.foes).toBe(0)
     expect(plain.bleed).toBe(false)
+  })
+
+  test("C37: when the coach is back, the board opens on what the road did and bridges to the week ahead", async () => {
+    const t = await town(await readSave(copyProfile()))
+    if (!t.back) return
+    const md = source(t, await advise(t), { foresight: false, answers: {}, prices: await supplyPrices() }).board
+    const heads = [...md.matchAll(/^## (.+?)(?: \{wide\})?$/gm)].map((m) => m[1]!)
+    expect(heads[0]).toBe("The coach is back")
+    const zone = md.slice(md.indexOf("## The coach is back"), md.indexOf("\n## ", md.indexOf("## The coach is back") + 5))
+    for (const h of t.back.heroes) expect(zone).toContain(h.died ? `${h.name} fell in the` : `${h.name} is home`)
+    expect(zone).toContain(t.back.success ? "with the work done" : "without the work done")
+    expect(zone).toMatch(/So this week (I would send|nobody is fit)/)
   })
 })

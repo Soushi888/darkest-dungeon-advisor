@@ -2,7 +2,7 @@
 name: darkest-dungeon-advisor
 principal_stated_goal: "J'aimerais qu'on étudie l'idée de faire un projet darkest-dungeon-advisor, comme on a fait pour factorio. C'est un jeu asser complexe et de l'aide stratégique entre deux quêtes serait utile!"
 phase: climbing
-progress: 33/36 claims, 4/4 anti-claims (counted by checkbox grep, never typed)
+progress: 34/37 claims, 4/4 anti-claims (counted by checkbox grep, never typed)
 frozen: false
 ---
 
@@ -64,6 +64,7 @@ Soushi comes back from an expedition, saves, and opens the town board. A village
 - [x] **C34: The Caretaker names the four skills each hero should carry from their seat.** From the skills the hero has learned (the save's purchases), not only the four equipped, he picks the four that serve the seat, and the party note names every swap ("equip X in place of Y"). A skill not yet learned that would serve the seat better than one carried is named with its price at the Guild (the tree's first code, 1000 gold before the Guild's discount). *Falsifier: a hero whose learned but unequipped skill launches from their seat while an equipped one does not gets no swap named, or a better unlearned skill for the seat goes unnamed.* *Evidence: test "C34".*
 - [x] **C35: A mark and a hand that strikes the marked count together.** A skill that marks a foe, carried alongside one that hits marked foes harder (from the game's effect lines), adds to the party's score and is named on the card. *Falsifier: a party with Mark for Death and Pistol Shot scores no more than the same party without the mark.* *Evidence: test "C35".*
 - [x] **C36: Bleed and blight are weighed against the foes you know.** A skill's bleed or blight is worth what the known foes of the road fail to resist, from their own resistances in the game's monster files; a road with no known foe weighs it at nothing. *Falsifier: a bleed skill weighs the same on a road whose known foes resist bleed at 60% as on one where they resist at 20%, or a resistance of a foe never met reaches the score.* *Evidence: test "C36".*
+- [x] **C37: When the coach is back, the board opens on what the road did.** The first section after an expedition says where the four went and whether the work was done, names who fell and how each one who came home stands (affliction, illness, stress), and bridges to the week: who must sit out, which healers are left when a healer fell and why each one is or is not going, and the four the Caretaker would send next. Read from the campaign log's latest chapter and the roster, never from memory of the farewell. Asked by Soushi on 2026-10-10, after Herbard fell in the Cove ("the same way there is a farewell page, I would like a welcome page"). *Falsifier: a board built after an expedition whose first section is not the return, or that omits a hero of the four.* *Evidence: test "C37".*
 
 ## Anti-claims
 
@@ -84,6 +85,8 @@ Soushi comes back from an expedition, saves, and opens the town board. A village
 - 2026-10-10, Soushi: the save folder is **watched** (card 6). His note, clarified: the board stays live through every town save and does not reload during an expedition (C16).
 - 2026-10-10, Soushi: the repository is **public** on GitHub (card 7).
 - 2026-10-10, Soushi: the board's sections follow the order decisions are made, since each changes the next (C31).
+- 2026-10-10, Soushi, after Herbard fell in the Cove: the party is judged by its fighting shape (reach, shuffle, carried skills, marks, what known foes resist), each weighed by a habit in `RULE` (C32 to C36). Learned skills are read from the save's purchases, and a skill not yet learned is named with its Guild price.
+- 2026-10-10, Soushi: a welcome section opens the first board after an expedition (C37). It names the fallen of that road, which C21 still allows because it mourns them and advises nothing.
 - 2026-10-10, Soushi: healing is central to the party's strategy; a light heal is not a healer (C30).
 - 2026-10-10, Soushi: recruits are weighed against the places the roster has (C29).
 - 2026-10-10, Soushi: a confidence status on the board that rises with preparation (C28), shown as readiness against the Caretaker's conditions, since the save holds no odds.

@@ -113,6 +113,31 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   L.push(`detail: ${y(a.afflicted.length ? `${a.afflicted.map((h) => h.name).join(" and ")} cannot be trusted in the dark until the Abbey or the Tavern has had them.` : "Nobody is afflicted. Spend on the party first, the estate second.")}`)
   L.push("```", "")
 
+  // C37: the coach is back. What the road did to the four, then the bridge to this week's plan
+  if (t.back) {
+    const b = t.back, here = (g: number) => t.heroes.find((h) => h.guid === g)
+    const fell = b.heroes.filter((h) => h.died), home = b.heroes.filter((h) => !h.died).map((h) => here(h.guid)).filter((h): h is HeroView => !!h)
+    const road = `the ${b.dungeonName}, ${(LENGTH[b.length] ?? "").toLowerCase()} ${b.quest}`.replace(/\s+/g, " ")
+    L.push("## The coach is back {wide}", "")
+    L.push(`${b.success ? `They came back from ${road}, with the work done.` : `They came back from ${road}, without the work done.`} ${fell.length ? `${fell.map((h) => h.name).join(" and ")} did not come back.` : "All four came back."} Here is what the road did to them, and what it changes for the week ahead.`, "")
+    L.push("```board-stickies")
+    for (const h of fell) L.push(`- title: ${y(`${h.name} fell in the ${b.dungeonName}`)}`, "  kind: gotcha", `  body: ${y(`${t.fallen.find((x) => x.guid === h.guid)?.clsName ?? "One of yours"}. The roster is one name shorter.`)}`)
+    for (const h of home) {
+      const marks = [h.affliction ? `afflicted (${h.affliction})` : "", h.quirks.filter((q) => q.disease).map((q) => `ill (${q.name})`).join(", "), `${h.stress} stress`].filter(Boolean)
+      L.push(`- title: ${y(`${h.name} is home`)}`, `  kind: ${h.affliction || h.stress >= RULE.restAbove ? "gotcha" : "works"}`, `  body: ${y(`${h.clsName}, level ${h.level}: ${marks.join(", ")}.`)}`)
+    }
+    L.push("```", "")
+    // the bridge: who the road has taken out of this week's plan, what was lost, and where that leaves the next coach
+    const resting = home.filter((h) => h.affliction || h.stress >= RULE.restAbove || h.quirks.some((q) => q.disease)).map((h) => h.name)
+    const lostHeal = fell.filter((h) => a.lostHealers.includes(h.name))
+    const bridge = [
+      resting.length ? `${resting.join(", ")} ${resting.length === 1 ? "needs" : "need"} the Abbey, the Tavern or the Sanitarium before the dark again, so they stay out of this week's four.` : "Nobody who went needs to sit out this week.",
+      lostHeal.length ? `With ${lostHeal.map((h) => h.name).join(" and ")} gone, ${a.healers.length ? `the healers left on the roster are ${a.healers.map((x) => { const h = t.heroes.find((z) => z.name === x.name), going = chosen?.seats.some((s) => s.hero.name === x.name), why = !h || going ? "" : h.busy ? `in the ${h.busy} this week` : h.affliction ? `afflicted` : h.quirks.some((q) => q.disease) ? "ill" : h.stress >= RULE.sendBelow ? `${h.stress} stress, too worn to send` : ""; return `${x.name} (${x.skill}, about ${x.avg} a cast${going ? ", and going" : why ? `; ${why}` : ""})` }).join(", ")}.` : "nobody left on the roster has a true heal: I would look to the coach for one."}` : "",
+      chosen ? `So this week I would send ${chosen.seats.map((s) => s.hero.name).join(", ")} to the ${chosen.quest.dungeonName}${chosen.healer ? `, with ${chosen.heal!.by} to heal` : chosen.heal ? `, with only ${chosen.heal.by}'s light heal` : ", without a healer"}; the reasons are below, in the order the week is played.` : "So this week nobody is fit for the road: rest them first.",
+    ].filter(Boolean)
+    L.push(bridge.join(" "), "")
+  }
+
   // C20: this week's town event, in the game's own words, and what it changes for my advice
   if (t.event) {
     const ev = t.event, bonus = t.recruits.filter((r) => r.from)
@@ -434,7 +459,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
  *  the coffers, the estate's upgrades, who stays (the pool), who rests (who is free), the road and the party, how ready they
  *  are, the party's training, and the road's provisions last, out of what is left (Soushi, 2026-10-10). Sections are built
  *  in the order their figures depend on (the gold the leans spend, the party the training trains) and shown in this one. */
-export const ACTING_ORDER = [
+export const ACTING_ORDER = ["The coach is back",
   "This week in the Hamlet", "This week so far", "Did you do what you chose?", "The estate's coffers", "Heirlooms and trinkets",
   "Who stays, who goes", "Who rests, who prays", "The next expedition", "How ready they are", "The Guild and the Blacksmith",
   "Provisions for the road", "How I keep the accounts",

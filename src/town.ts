@@ -26,6 +26,8 @@ export interface Town {
   wallet: Record<string, number>; heroes: HeroView[]; fallen: HeroView[]; recruits: HeroView[]; rosterSize: number; rosterCap: number
   activities: Activity[]; quests: Quest[]; witnessedSkills: number; dungeonsUnlocked: string[]
   quests_done: number; quests_won: number; lastQuest: string; lastWon: boolean
+  // the expedition the coach just brought back, as the campaign log's latest chapter records it (C37)
+  back?: { dungeon: string; dungeonName: string; quest: string; length: number; success: boolean; heroes: { guid: number; name: string; cls: string; died: boolean }[] }
   skillDiscount: number; gearDiscount: number; visited: string[]; knownVariants: string[]
   heroUpgrades: Upgrade[]; buildingUpgrades: Upgrade[]; estateTrinkets: { id: string; name: string; classes: string[]; rank: number }[]
   worn: Record<string, { id: string; name: string; rank: number }[]>; trinketSlots: number
@@ -120,6 +122,11 @@ export async function town(save: Save): Promise<Town> {
   const te = save.town_event as any
   const chapters = Object.values<any>((save.campaign_log as any)?.chapters ?? {})
   const thisWeek = chapters.length ? Object.values<any>(chapters[chapters.length - 1]).find((x) => x && typeof x === "object" && "town_event_result_id" in x)?.town_event_result_id : undefined
+  const trip = chapters.length ? Object.values<any>(chapters[chapters.length - 1]).find((x) => x && typeof x === "object" && x.heroes && typeof x.dungeon_type === "string") : undefined
+  const back = trip ? {
+    dungeon: trip.dungeon_type, dungeonName: await nameOf("dungeon", trip.dungeon_type), quest: String(trip.quest ?? ""), length: Number(trip.length ?? 0), success: !!trip.success,
+    heroes: Object.values<any>(trip.heroes).map((h) => ({ guid: Number(h.guid), name: String(h.name), cls: String(h.class), died: !!h.died })),
+  } : undefined
   let event: TownEvent | undefined
   if (te?.current_result_event_id && te.current_result_event_id === thisWeek) {
     const id: string = te.current_result_event_id
@@ -307,7 +314,7 @@ export async function town(save: Save): Promise<Town> {
     estate: g?.estatename ?? "", wallet, heroes, fallen, recruits, rosterSize: heroes.length, rosterCap,
     activities, quests, witnessedSkills: known.size, dungeonsUnlocked,
     quests_done: prog?.total_quests_finished ?? 0, quests_won: prog?.total_successful_quests_finished ?? 0,
-    lastQuest: typeof prog?.last_quest_played_id === "string" ? prog.last_quest_played_id : "", lastWon: !!prog?.last_raid_success,
+    lastQuest: typeof prog?.last_quest_played_id === "string" ? prog.last_quest_played_id : "", lastWon: !!prog?.last_raid_success, back,
     skillDiscount, gearDiscount, visited: [...visited], knownVariants: [...knownVariants],
     heroUpgrades, buildingUpgrades, estateTrinkets, worn, trinketSlots, bought, supply: await supplies(), event, raid,
     purchases: Object.values<any>((save.upgrades as any)?.purchases ?? {}).filter((p) => p.is_purchased !== false).map((p) => ({ key: `${p.tree_id}:${p.requirement_code}`, guid: Number(p.instance_number) || 0 })),

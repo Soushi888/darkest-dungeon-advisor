@@ -71,6 +71,8 @@ export interface Advice {
   ready: HeroView[]; parties: Party[]; best?: Party
   dismiss: { hero: HeroView; why: string }[]; recruits: { hero: HeroView; why: string }[]
   buys: Upgrade[]; blocked: Upgrade[]; heirlooms: Upgrade[]
+  // every living hero who has learned a true heal, by what it restores (C37: what a fallen healer leaves behind)
+  healers: { name: string; skill: string; avg: number }[]; lostHealers: string[]
   trinkets: { trinket: string; to: string; why: string }[]
   treat: Treat[]
   spend: number
@@ -296,7 +298,18 @@ export async function advise(t: Town): Promise<Advice> {
     if (!dismiss.some((d) => d.hero.guid === h.guid)) dismiss.push({ hero: h, why: `level 0, and ${h.quirks.find((q) => q.thief)!.name}: they keep for themselves what the party finds` })
   }
 
-  return { relief, disease, afflicted, ready, parties, best, dismiss, recruits, buys, blocked, heirlooms, trinkets, treat, spend: t.wallet.gold ?? 0 }
+  const healers: Advice["healers"] = [], lostHealers: string[] = []
+  const fellNow = new Set((t.back?.heroes ?? []).filter((h) => h.died).map((h) => h.guid))
+  for (const h of t.fallen.filter((h) => fellNow.has(h.guid))) {
+    const sk = (await heroClass(h.cls)).skills
+    if ((h.learned ?? h.skills).some((s) => sk.get(s.id)?.targetsAllies && sk.get(s.id)!.healAvg >= RULE.realHeal)) lostHealers.push(h.name)
+  }
+  for (const h of t.heroes) {
+    const sk = (await heroClass(h.cls)).skills
+    const top = (h.learned ?? h.skills).map((s) => ({ name: h.name, skill: s.name, avg: sk.get(s.id)?.targetsAllies ? sk.get(s.id)!.healAvg : 0 })).sort((x, y) => y.avg - x.avg)[0]
+    if (top && top.avg >= RULE.realHeal) healers.push(top)
+  }
+  return { relief, disease, afflicted, ready, parties, best, dismiss, recruits, buys, blocked, heirlooms, trinkets, treat, healers, lostHealers, spend: t.wallet.gold ?? 0 }
 }
 
 /** Seats a party Soushi named, front to back, and says what is wrong with it rather than refusing it. */
