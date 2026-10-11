@@ -139,7 +139,7 @@ export async function chronicleFor(back: { dungeon: string; heroes: { guid: numb
   return []
 }
 
-export interface Beat { i: number; kind: "battle" | "ambush" | "curio" | "dark" | "hunger" | "spike" | "affliction" | "virtue" | "deathsdoor" | "fell" | "trap" | "obstacle" | "crit" | "quirk"; who?: string; text: string; bad: boolean }
+export interface Beat { i: number; kind: "battle" | "ambush" | "curio" | "dark" | "hunger" | "spike" | "affliction" | "virtue" | "deathsdoor" | "fell" | "trap" | "obstacle" | "crit" | "quirk" | "shuffle"; who?: string; text: string; bad: boolean; from?: number }
 
 /** The trip in order, from one snapshot to the next (C40). */
 export function beats(snaps: Snap[], fell: string[] = []): Beat[] {
@@ -147,6 +147,7 @@ export function beats(snaps: Snap[], fell: string[] = []): Beat[] {
   // the roster keeps the last blow of an earlier trip until a new one lands; a blow already there on the first page is not this road's
   const stale = new Map((snaps[0]?.heroes ?? []).map((h) => [h.guid, h.lastBlow]))
   snaps = snaps.map((s) => ({ ...s, heroes: s.heroes.map((h) => (h.lastBlow && stale.get(h.guid) === h.lastBlow ? { ...h, lastBlow: "" } : h)) }))
+  let run: { from: number } | undefined
   for (let i = 1; i < snaps.length; i++) {
     const a = snaps[i - 1]!, b = snaps[i]!, d = (k: string) => (b.tally[k] ?? 0) - (a.tally[k] ?? 0)
     if (d("BATTLE_COMPLETED") > 0) out.push({ i, kind: "battle", text: `${d("BATTLE_COMPLETED") > 1 ? `${d("BATTLE_COMPLETED")} battles` : "a battle"} won`, bad: false })
@@ -161,6 +162,17 @@ export function beats(snaps: Snap[], fell: string[] = []): Beat[] {
       if (!was.deathsDoor && h.deathsDoor) out.push({ i, kind: "deathsdoor", who: h.name, text: `${h.name} stood at Death's Door${h.lastBlow ? `, struck by a ${h.lastBlow}` : ""}`, bad: true })
       else if (h.stress - was.stress >= CHRONICLE_RULE.stressSpike && !h.affliction) out.push({ i, kind: "spike", who: h.name, text: `${h.name}'s stress leapt to ${h.stress}`, bad: true })
     }
+    // C44: the four are kept front to back, so a change of order among those on both pages is a shuffle; a run of shuffled
+    // pages within one battle (its knockbacks and moves) is told once, as the net change from before it, and not at all if it undid itself
+    const moved = (x: Snap, y: Snap) => { const both = y.heroes.filter((h) => x.heroes.some((o) => o.guid === h.guid)).map((h) => h.guid); return x.heroes.filter((h) => both.includes(h.guid)).map((h) => h.guid).join() !== both.join() }
+    if (moved(a, b)) {
+      run ??= { from: i - 1 }
+      const from = snaps[run.from]!, last = out.findIndex((x) => x.kind === "shuffle" && x.from === run!.from)
+      if (last >= 0) out.splice(last, 1)
+      const shifts = b.heroes.map((h, r) => ({ h, r: r + 1, was: from.heroes.findIndex((o) => o.guid === h.guid) + 1 })).filter((x) => x.was && x.was !== x.r)
+      if (shifts.length) out.push({ i, kind: "shuffle", from: run.from, text: shifts.map((x, k) => `${x.h.name} ${k ? "" : "took "}rank ${x.r}`).join(", ").replace(/, ([^,]+)$/, " and $1"), bad: false })
+    }
+    if (!b.inBattle || d("BATTLE_COMPLETED") > 0) run = undefined
     for (const h of a.heroes) if (!b.heroes.some((x) => x.guid === h.guid) && fell.includes(h.name)) out.push({ i, kind: "fell", who: h.name, text: `${h.name} fell${h.lastBlow ? ` to a ${h.lastBlow}` : ""}`, bad: true })
   }
   // a fall the chronicle missed between saves is still told, from the last blow the roster kept

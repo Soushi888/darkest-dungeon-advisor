@@ -654,6 +654,20 @@ describe.skipIf(!has)("on the local save", () => {
     expect(j.lessons.map((l) => l.kind).sort()).toEqual(["healing", "light", "retreat"])
   })
 
+  test("C44: the tale tells a shuffle once per battle, naming who moved to which rank", () => {
+    const at = (s: Snap, inBattle: boolean, order: string[], battles = 0) => ({ ...s, inBattle, tally: { BATTLE_COMPLETED: battles }, heroes: order.map((n) => s.heroes.find((h) => h.name === n) ?? hero(n)) })
+    const s0 = snap(100, 0, [hero("Al"), hero("Bea"), hero("Cato")])
+    // heroes of distinct name lengths, since the helper keys guids on it. A battle: Al is knocked back two ranks, then Bea steps back once; out of it, Cato and Al trade places by hand
+    const shuffled = [at(s0, false, ["Al", "Bea", "Cato"]), at(s0, true, ["Al", "Bea", "Cato"]), at(s0, true, ["Bea", "Cato", "Al"]), at(s0, true, ["Bea", "Cato", "Al"]), at(s0, true, ["Bea", "Al", "Cato"]), at(s0, false, ["Bea", "Al", "Cato"], 1), at(s0, false, ["Bea", "Cato", "Al"], 1)]
+    const sh = beats(shuffled).filter((b) => b.kind === "shuffle")
+    expect(sh.map((b) => b.text)).toEqual(["Bea took rank 1 and Al rank 2", "Cato took rank 2 and Al rank 3"])
+    // a shuffle undone within the battle is not told; a hero who fell leaves a gap, not a shuffle
+    expect(beats([at(s0, true, ["Al", "Bea", "Cato"]), at(s0, true, ["Bea", "Al", "Cato"]), at(s0, true, ["Al", "Bea", "Cato"])]).some((b) => b.kind === "shuffle")).toBe(false)
+    expect(beats([at(s0, true, ["Al", "Bea", "Cato"]), at(s0, true, ["Bea", "Cato"])], ["Al"]).some((b) => b.kind === "shuffle")).toBe(false)
+    // the trip of C40 never changes order, so its tale gains nothing
+    expect(beats(trip, ["Cy"]).some((b) => b.kind === "shuffle")).toBe(false)
+  })
+
   test("C42: lessons are kept once, bear only on their dungeon at their level or worse, and change the board with their trip named", async () => {
     rmSync(join(townOut, "lessons.json"), { force: true })
     const j = judge(trip, beats(trip, ["Cy"]), { dungeon: "cove", dungeonName: "Cove", difficulty: 1, length: 1, week: 13, success: false, healer: false })
