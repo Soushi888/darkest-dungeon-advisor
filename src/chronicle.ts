@@ -78,11 +78,15 @@ export async function capture(save: Save): Promise<string | undefined> {
   if (!s) return undefined
   const dir = chronicleDir(s.key)
   mkdirSync(dir, { recursive: true })
-  const files = readdirSync(dir).filter((f) => f.endsWith(".json")).sort()
+  const files = readdirSync(dir).filter((f) => f.endsWith(".json") && !f.includes(".raw.")).sort()
   const last = files.length ? ((await Bun.file(join(dir, files[files.length - 1]!)).json()) as Snap) : undefined
   if (last && sig(last) === sig(s)) return undefined
-  const f = join(dir, `${String(files.length).padStart(4, "0")}.json`)
+  const n = String(files.filter((x) => !x.includes(".raw.")).length).padStart(4, "0"), f = join(dir, `${n}.json`)
   await Bun.write(f, JSON.stringify(s))
+  // the whole record beside the summary, decoded: every entry of the game's tally with its parameters, and the four's full
+  // hero records, for what later readings (a knowledge graph of the campaign) will need that the summary does not keep
+  const roster = (save.roster as any)?.heroes ?? {}
+  await Bun.write(join(dir, `${n}.raw.json`), JSON.stringify({ raid: save.raid, heroes: Object.fromEntries(s.heroes.map((h) => [h.guid, roster[h.guid]])) }))
   return f
 }
 
@@ -93,7 +97,7 @@ export async function chronicleFor(back: { dungeon: string; heroes: { guid: numb
   const want = back.heroes.map((h) => h.guid).sort().join(",")
   const dirs = readdirSync(root).map((d) => join(root, d)).filter((d) => statSync(d).isDirectory()).sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)
   for (const d of dirs) {
-    const files = readdirSync(d).filter((f) => f.endsWith(".json")).sort()
+    const files = readdirSync(d).filter((f) => f.endsWith(".json") && !f.includes(".raw.")).sort()
     if (!files.length) continue
     const first = (await Bun.file(join(d, files[0]!)).json()) as Snap
     if (first.dungeon === back.dungeon && first.heroes.map((h) => h.guid).sort().join(",") === want) return Promise.all(files.map(async (f) => (await Bun.file(join(d, f)).json()) as Snap))
