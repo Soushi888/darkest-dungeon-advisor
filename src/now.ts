@@ -2,6 +2,7 @@
 // every comment, so a claim about who acted, the ranks or anyone's health comes from the page and never from memory of the
 // stream (Soushi, 2026-10-11 04:17: "ensure you are always well synced with the pages and game state"). Only what the page
 // holds is said, nothing inferred. It only reads the chronicle (ISA A1).
+import { slainAt, slainLine } from "./slain.ts"
 import { dropFirst, packRules, slotsOf } from "./pack.ts"
 import { statSync } from "node:fs"
 import type { Snap } from "./chronicle.ts"
@@ -14,7 +15,7 @@ import { effectWords, plain, wrap, journalPage, pageTitle } from "./words.ts"
 const time = (ms: number) => new Date(ms).toLocaleTimeString("en-GB", { hour12: false })
 
 /** The page as a snapshot: its number and save time, the four front to back, the foes front to back, who has acted, where they stand. */
-export async function nowText(p: Snap, raw: any, page: string, savedAt: number): Promise<string> {
+export async function nowText(p: Snap, raw: any, page: string, savedAt: number, file?: string): Promise<string> {
   const out: string[] = []
   const b = raw?.raid?.battle, inFight = !!p.inBattle && !!b
   out.push(`PAGE ${page}, saved ${time(savedAt)}${inFight ? `, round ${b.round ?? p.battle?.round ?? "?"}` : ", out of a fight"}`)
@@ -44,6 +45,9 @@ export async function nowText(p: Snap, raw: any, page: string, savedAt: number):
       const tags = [/^corpse/.test(cls) ? "a corpse" : hp <= 0 ? "dead" : "", f?.stunned || a.stunned ? "stunned" : "", (f?.effects ?? []).some((x) => /guard/i.test(x)) ? "guarded" : "", foeDone.has(Number(d.battle_guid)) ? "has acted" : "has not acted"].filter(Boolean)
       out.push(`  slot ${Number(k) + 1}. ${name} ${hp}${max ? `/${max}` : ""} health, ${tags.join(", ")}${fx.length ? `; ${fx.join("; ")}` : ""}`)
     }
+    // C80: the foes this fight has already slain, which the game no longer keeps
+    const gone = file ? slainLine(await slainAt(file)) : ""
+    if (gone) out.push(gone)
   }
   const where = whereLine(p.map)
   if (where) out.push(`WHERE ${where}`)
@@ -62,8 +66,8 @@ export async function nowText(p: Snap, raw: any, page: string, savedAt: number):
 
 /** A CHRON line and the page it tells, whole, in one block (C63): the agent comments from the line alone, so the line carries
  *  everything bun run now would print for that page, each line of it as a MORE line under 400 characters. */
-export async function chronBlock(head: string[], p: Snap, raw: any, page: string, savedAt: number): Promise<string[]> {
-  const snap = (await nowText(p, raw, page, savedAt)).split("\n")
+export async function chronBlock(head: string[], p: Snap, raw: any, page: string, savedAt: number, file?: string): Promise<string[]> {
+  const snap = (await nowText(p, raw, page, savedAt, file)).split("\n")
   return [...head, ...snap.flatMap((l) => wrap(`MORE ${l.trim()}`))]
 }
 
@@ -72,5 +76,5 @@ if (import.meta.main) {
   if (!c.file) { console.log("No page yet: the party has not left the Hamlet since the chronicle began."); process.exit(0) }
   const p = (await Bun.file(c.file).json()) as Snap
   const raw = await Bun.file(c.file.replace(/\.json$/, ".raw.json")).json().catch(() => undefined)
-  console.log(await nowText(p, raw, c.page!, statSync(c.file).mtimeMs))
+  console.log(await nowText(p, raw, c.page!, statSync(c.file).mtimeMs, c.file))
 }
