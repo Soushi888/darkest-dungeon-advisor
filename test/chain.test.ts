@@ -33,3 +33,38 @@ describe("C75: the whole road to what we save for", () => {
     expect(savingPlan({ wallet: { crest: 1 }, quests: [] } as any, { heirlooms: [] } as any, target as any, {}).join("\n")).toContain("the game asks for no other upgrade first")
   })
 })
+
+// U40: a step on the road to what we save for, buyable tonight, is leaned to rather than "Save them" (week 19, 2026-10-11 07:09:
+// the board leaned "Save them" while the Blacksmith's armour, first tier, was buyable and on the road to the seasoned recruits)
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { join } from "node:path"
+import { advise } from "../src/advise.ts"
+import { source } from "../src/board.ts"
+import { contradictions } from "../src/coherence.ts"
+import { profileDir, root } from "../src/paths.ts"
+import { readSave } from "../src/read.ts"
+import { town } from "../src/town.ts"
+
+let profile = ""
+try { profile = profileDir() } catch {}
+describe.skipIf(!profile || !existsSync(profile))("U40: the road starts tonight", () => {
+  test("with a step of the road buyable, the heirlooms lean to it; and the board does not contradict itself", async () => {
+    const dir = join(root, ".dd-runtime", "test-road-lean")
+    rmSync(dir, { recursive: true, force: true }); mkdirSync(dir, { recursive: true })
+    for (const f of readdirSync(profile)) if (f.startsWith("persist.") && f !== "persist.raid.json") cpSync(join(profile, f), join(dir, f))
+    const g = join(dir, "persist.game.json"), buf = readFileSync(g), at = buf.indexOf("inraid\0")
+    if (at >= 0 && buf[at + 7]) { buf[at + 7] = 0; writeFileSync(g, buf) }
+    const t = await town(await readSave(dir))
+    rmSync(dir, { recursive: true, force: true })
+    const a = await advise(t)
+    const seasoned = a.coach.find((u) => u.tree === "stage_coach.upgraded_recruits")
+    const md = source(t, a, { foresight: false, answers: {} }).board
+    expect(contradictions(md)).toEqual([])
+    const ready = (seasoned?.chain ?? []).filter((x) => x.ready && a.heirlooms.some((u) => u.tree === x.tree && u.code === x.code))
+    if (!a.young || !seasoned || a.heirlooms.includes(seasoned) || !ready.length) return
+    const card = md.split(/\n- q: /).find((c) => c.startsWith('"Where do the heirlooms go?"'))!
+    const picks = [...card.matchAll(/- pick: "([^"]+)"/g)].map((m) => m[1]!), lean = Number(card.match(/\n {2}lean: (\d+)/)![1])
+    expect(picks[lean]).not.toBe("Save them")
+    expect(ready.map((x) => x.label.replace(/, \w+ tier$/, ""))).toContain(picks[lean]!)
+  })
+})

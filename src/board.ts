@@ -593,8 +593,12 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
       // my habit: a roster mostly at level 1 or lower wants seasoned recruits before anything else the heirlooms can buy
       const seasoned = a.coach.find((u) => u.tree === "stage_coach.upgraded_recruits"), si = seasoned ? a.heirlooms.indexOf(seasoned) : -1
       const youngWhy = a.young && seasoned ? `my habit: ${a.young.low} of your ${a.young.of} heroes are level 1 or lower, so the Stage Coach's seasoned recruits come first` : ""
-      const lean = youngWhy ? (si >= 0 ? si : a.heirlooms.length) : most >= 0 ? most : san >= 0 ? san : a.heirlooms.length
-      const why = youngWhy ? (si >= 0 ? `${youngWhy}.` : seasoned!.blockedBy ? `${youngWhy}; I keep the heirlooms for them, and the road to them comes first: it waits on ${waitsWords(seasoned!)}.` : `${youngWhy}; I keep the heirlooms for them, ${cost(seasoned!)}, ${short(seasoned!)} short.`) : most >= 0 ? `it opens what the party is waiting for: ${opens[most]!.map((b) => `${b.hero} ${b.label}`).join(", ")}.` : san >= 0 ? `${a.disease.length} of your heroes are ill; cheaper treatment pays back quickly.` : "nothing affordable opens anything the party is waiting for."
+      // U40: on the road to the seasoned recruits, a step the estate can buy tonight is bought, not saved for: the one the four
+      // wait on first, else the first in the plan's order (C75); "Save them" only when no step is buyable
+      const onRoad = (seasoned?.chain ?? []).filter((x) => x.ready).map((x) => a.heirlooms.findIndex((u) => u.tree === x.tree && u.code === x.code)).filter((i) => i >= 0)
+      const step = onRoad.find((i) => (opens[i]?.length ?? 0) > 0) ?? onRoad[0] ?? -1
+      const lean = youngWhy ? (si >= 0 ? si : step >= 0 ? step : a.heirlooms.length) : most >= 0 ? most : san >= 0 ? san : a.heirlooms.length
+      const why = youngWhy ? (si >= 0 ? `${youngWhy}.` : step >= 0 ? `${youngWhy}, and the road to them can start tonight: ${a.heirlooms[step]!.label} is one of its steps${opens[step]?.length ? `, and it opens what the party is waiting for: ${opens[step]!.map((b) => `${b.hero} ${b.label}`).join(", ")}` : ""}.` : seasoned!.blockedBy ? `${youngWhy}; I keep the heirlooms for them, and the road to them comes first: it waits on ${waitsWords(seasoned!)}.` : `${youngWhy}; I keep the heirlooms for them, ${cost(seasoned!)}, ${short(seasoned!)} short.`) : most >= 0 ? `it opens what the party is waiting for: ${opens[most]!.map((b) => `${b.hero} ${b.label}`).join(", ")}.` : san >= 0 ? `${a.disease.length} of your heroes are ill; cheaper treatment pays back quickly.` : "nothing affordable opens anything the party is waiting for."
       L.push(`  lean: ${lean}`, `  lean_why: ${y(why)}`)
       L.push("```", "")
       // U22: saving is a plan, not a wait (Soushi, 05:22: "when you propose to save for later, at least give a vision")
