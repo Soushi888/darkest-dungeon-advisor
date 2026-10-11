@@ -80,6 +80,8 @@ Soushi comes back from an expedition, saves, and opens the town board. A village
 
 ## Decisions
 
+- 2026-10-11, Soushi: open work leaves the ISA for GitHub issues #1 to #9 on the public repo (recruits that fill the party's gap, shuffles in the tale, the party check on return, training preferences, browser check of pick re-keying, an in-game layout, the knowledge graph, the campfire council, the far sight). PRs are worked by a second session on this project; the session that plays alongside Soushi stays his advisor and owns the watcher and the live monitor, so implementation never disturbs the live board.
+- 2026-10-11, Soushi: the chosen road is named in the headline, the readiness title and the provisions title; Send is also Ctrl+Shift+Enter; an open page reloads across a watcher restart (`/version` carries the watcher's start time, pages served `no-store`).
 - 2026-10-10, Soushi: name `darkest-dungeon-advisor`; it is the town advisor, active only in the Hamlet.
 - 2026-10-10, Soushi: spoilers are handled inside the lore. Default is what the player knows; foresight from the advisor's own network is optional and experimental.
 - 2026-10-10, Soushi: the advisor is a village character: **the Caretaker** (kickoff board, card 1).
