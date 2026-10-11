@@ -9,7 +9,7 @@ import { buildRecap, type Recap } from "./recap.ts"
 import { questLine, questStatus } from "./quest.ts"
 import { effectWords } from "./words.ts"
 import { slainAt } from "./slain.ts"
-import { appendFileSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs"
+import { appendFileSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { outDir } from "./board.ts"
 import { monster } from "./game.ts"
@@ -20,6 +20,10 @@ export const roadDir = () => join(town(), "road")
 const chron = () => join(town(), "chronicle")
 export const messagesFile = () => join(roadDir(), "messages.jsonl")
 export const commentsFile = () => join(roadDir(), "comments.jsonl")
+// C81: what the Caretaker is doing, for the road page's "The Caretaker is..." line: his mode, and a council being written
+export const caretakerFile = () => join(roadDir(), "caretaker.json")
+export interface CaretakerState { mode: "live" | "camp"; council?: { page: string; at: string } }
+export function setCaretaker(st: CaretakerState) { mkdirSync(roadDir(), { recursive: true }); writeFileSync(caretakerFile(), JSON.stringify(st)) }
 
 export type Line = { at: string; from: "caretaker" | "soushi"; text: string; page?: string; trip?: string; gameAt?: string; recap?: Recap }
 
@@ -110,7 +114,9 @@ export async function feed() {
       map: mapSvg(p.map), where: whereLine(p.map), legend: mapLegend(),
     }
   } catch {}
-  return { trip: c.trip, state, lines }
+  // camp is the Caretaker's default (C74), so a page with no word from him reads as camp
+  const caretaker: CaretakerState = await Bun.file(caretakerFile()).json().catch(() => ({ mode: "camp" }))
+  return { trip: c.trip, state, lines, caretaker }
 }
 
 // C49: the road zone. While the party is out, the farewell board turns into the road: this zone opens it, above the
@@ -180,7 +186,9 @@ put(document.getElementById("roadMap"),s&&s.map?(fight?'<details class="fold"><s
 const mine=d.lines.filter(l=>l.from==="caretaker").at(-1),asked=d.lines.filter(l=>l.from==="soushi").at(-1),B=document.getElementById("roadBusy");
 const fresh=at=>at&&Date.now()-new Date(at)<180000&&(!mine||at>mine.at);
 const say=(a)=>"The Caretaker is "+a[Math.floor(Date.now()/4000)%a.length]+"…";
-const busy=asked&&fresh(asked.at)?say(["reading your message","thinking over what you wrote","looking through the ledgers for an answer","weighing his words"]):s&&s.notableAt&&fresh(s.notableAt)?say(s.foes?["watching the fight on page "+esc(s.notablePage),"counting who struck whom","looking up the foes' blows","weighing the next turn"]:["reading page "+esc(s.notablePage),"checking the packs","watching the light","tracing the map","noting it for the report"]):"";
+const ct=d.caretaker||{mode:"camp"},fire=ct.council&&fresh(ct.council.at);
+// C81: in camp mode he speaks only to the Heir's message and at the fire; the notable page only stirs him in live mode
+const busy=asked&&fresh(asked.at)?say(["reading your message","thinking over what you wrote","looking through the ledgers for an answer","weighing his words"]):fire?say(["walking out to the fire","going over the road so far","counting what the packs still hold","weighing who needs the fire most"]):ct.mode==="live"&&s&&s.notableAt&&fresh(s.notableAt)?say(s.foes?["watching the fight on page "+esc(s.notablePage),"counting who struck whom","looking up the foes' blows","weighing the next turn"]:["reading page "+esc(s.notablePage),"checking the packs","watching the light","tracing the map","noting it for the report"]):"";
 B.hidden=!busy;B.textContent=busy;
 const key=JSON.stringify(d.lines);if(key===shown)return;shown=key;const T=document.getElementById("roadThread");
 const talk=[...d.lines].reverse().filter(l=>l!==latest);

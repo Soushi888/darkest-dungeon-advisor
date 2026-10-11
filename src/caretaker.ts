@@ -9,7 +9,7 @@ import { dirname, join } from "node:path"
 import { appendFileSync, statSync } from "node:fs"
 import { nowText } from "./now.ts"
 import { campBrief, camping } from "./camp.ts"
-import { current, feed, say, sayRecap } from "./road.ts"
+import { current, feed, say, sayRecap, setCaretaker } from "./road.ts"
 import type { Snap } from "./chronicle.ts"
 import { outDir } from "./board.ts"
 
@@ -69,7 +69,10 @@ export async function ask(system: string, user: string): Promise<{ text?: string
 
 /** Comment one page or answer one question, posting through say(); a failure posts nothing and prints a WARN. */
 export async function comment(kind: "page" | "ask" | "camp", snapshot: string, page: string, question = "", since: string[] = []): Promise<boolean> {
-  const r = await ask(SYSTEM, await promptFor(kind, snapshot, question, since))
+  // C81: the road page shows him at the fire while a council is being written, and only then
+  const mode = process.env.DD_CARETAKER_MODE === "live" ? "live" : "camp"
+  if (kind === "camp") setCaretaker({ mode, council: { page, at: new Date().toISOString() } })
+  const r = await ask(SYSTEM, await promptFor(kind, snapshot, question, since)).finally(() => { if (kind === "camp") setCaretaker({ mode }) })
   if (!r.text) { console.log(`WARN ${clock()} caretaker: no comment on page ${page} (${r.error})`); return false }
   // a page's comment is his recap, the report beside the conversation (C66); an answer to the Heir is a plain line
   // a tally opener is the card's job, not his (pm#34); a stated habit goes to his ways (pm#35)
@@ -152,6 +155,7 @@ if (import.meta.main) {
   for (const sig of ["SIGTERM", "SIGINT"] as const) process.on(sig, () => { live.kill(); process.exit(0) })
   // camp is the default for now (Soushi, 06:09); DD_CARETAKER_MODE=live brings back a word on every CHRON page
   const mode = process.env.DD_CARETAKER_MODE === "live" ? "live" : "camp"
+  setCaretaker({ mode })
   const flow = streamFlow(comment, snapshotNow, { mode, atCamp })
   let buf = ""
   const decoder = new TextDecoder()
