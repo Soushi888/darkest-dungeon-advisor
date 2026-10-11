@@ -23,8 +23,12 @@ const digest = async () => (existsSync(board) ? Bun.hash(await Bun.file(board).t
 let sent = mtime(log), saved = mtime(game), seen = await digest(), out = false
 const chron = join(outDir, "chronicle")
 const pages = () => { try { return readdirSync(chron).flatMap((d) => readdirSync(join(chron, d)).filter((f) => /^\d+\.json$/.test(f)).map((f) => join(chron, d, f))) } catch { return [] } }
-const told = new Set(pages())
+// DD_LIVE_REPLAY=n tells the last n pages again on start, to check what a page reports
+const replay = Number(process.env.DD_LIVE_REPLAY ?? 0), all = pages().sort()
+const told = new Set(replay ? all.slice(0, -replay) : all)
 const last = new Map<string, any>()
+// the page before the first one told is what the next page is compared with
+for (const f of all.filter((f) => told.has(f))) { try { last.set(f.split("/").slice(-2, -1)[0]!, await Bun.file(f).json()) } catch {} }
 const clashes = join(outDir, "coherence.json")
 let clashSeen = mtime(clashes)
 console.log(`LIVE ${now()} watching ${outDir} and ${game}`)
@@ -41,8 +45,31 @@ setInterval(async () => {
         || (p.heroes ?? []).some((h: any) => { const w = prev.heroes?.find((x: any) => x.guid === h.guid); return !w || (h.affliction && !w.affliction) || (h.virtue && !w.virtue) || (h.deathsDoor && !w.deathsDoor) || (h.hp < h.maxHp * 0.3 && w.hp >= w.maxHp * 0.3) })
         || (prev.heroes ?? []).length !== (p.heroes ?? []).length
       last.set(f.split("/").slice(-2, -1)[0]!, p)
+      // every change since the last page, so no page reads as empty: the packs item by item, the game's tallies with their
+      // names (the curio searched, the foe met or slain), and the loot a battle laid out (Soushi, 2026-10-11: "ensure you see all details")
+      const delta: string[] = []
+      if (prev) {
+        for (const k of new Set([...Object.keys(prev.supplies ?? {}), ...Object.keys(p.supplies ?? {})])) {
+          const d = (p.supplies?.[k] ?? 0) - (prev.supplies?.[k] ?? 0)
+          if (d) delta.push(`${k} ${d > 0 ? "+" : ""}${d}`)
+        }
+        try {
+          const raw = await Bun.file(f.replace(/\.json$/, ".raw.json")).json(), sd = raw.raid?.stat_database ?? {}
+          for (const [k, v] of Object.entries<any>(sd)) {
+            const n = (tl[k] ?? 0) - (pt[k] ?? 0)
+            if (n <= 0 || k === "UNDEFINED") continue
+            const what = Object.values<any>(v.entries ?? {}).slice(-n).map((e) => Object.values<any>(e.parameters ?? {}).map((x) => x.data).filter((x) => typeof x === "string").pop()).filter(Boolean)
+            delta.push(`${k.toLowerCase().replace(/_/g, " ")} +${n}${what.length ? ` (${what.join(", ")})` : ""}`)
+          }
+          const offered = Object.values<any>(raw.raid?.loot?.result?.inventory_system?.items ?? {}).map((i) => `${i.id || i.type} x${i.amount}`)
+          if (offered.length) delta.push(`loot laid out: ${offered.join(", ")}`)
+        } catch {}
+        const moved = (p.heroes ?? []).map((h: any) => h.guid).join() !== (prev.heroes ?? []).map((h: any) => h.guid).join()
+        if (moved) delta.push(`ranks now ${(p.heroes ?? []).map((h: any, i: number) => `${i + 1}.${h.name}`).join(" ")}`)
+      }
+      const change = delta.length ? ` || changed: ${delta.join("; ")}` : ""
       const fight = p.battle ? ` || round ${p.battle.round}: ${p.battle.foes.map((x: any) => `${x.name} ${x.hp}hp${x.hitBy ? ` (hit by ${x.hitBy})` : ""}`).join(", ")}` : ""
-      console.log(`${notable ? "CHRON" : "PAGE"} ${now()} #${f.match(/(\d+)\.json$/)![1]} light ${p.torch}, rooms ${tl.ROOM_VISITED ?? 0}, battles ${tl.BATTLE_COMPLETED ?? 0}, food ${p.supplies?.food ?? 0}, torches ${p.supplies?.torch ?? 0} | ${who}${fight}`)
+      console.log(`${notable ? "CHRON" : "PAGE"} ${now()} #${f.match(/(\d+)\.json$/)![1]} light ${p.torch}, rooms ${tl.ROOM_VISITED ?? 0}, battles ${tl.BATTLE_COMPLETED ?? 0}, food ${p.supplies?.food ?? 0}, torches ${p.supplies?.torch ?? 0} | ${who}${fight}${change}`)
     } catch {}
   }
   if (mtime(clashes) !== clashSeen) {
