@@ -40,7 +40,11 @@ const bySave = (fs: string[]) => inOrder(fs.flatMap((f) => { try { return [{ pat
 const replay = Number(process.env.DD_LIVE_REPLAY ?? 0), all = bySave(pages())
 // a restarted stream resumes after the last page it told, so a page saved while it was down is still told
 const mark = join(outDir(), process.env.DD_LIVE_MARK ?? "live-last.txt"), lastTold = existsSync(mark) ? (await Bun.file(mark).text()).trim() : ""
-const told = alreadyTold(all.map((f) => ({ path: f, mtime: statSync(f).mtimeMs })), lastTold, replay)
+// DD_LIVE_RETELL=<a page's path> tells that page's trip again from its first page up to it, then exits, moving no mark: the
+// Caretaker's camp mode rebuilds the road it had kept when it is restarted mid-trip (C82)
+const retell = process.env.DD_LIVE_RETELL ?? "", sameTrip = (f: string) => f.split("/").slice(-2, -1)[0] === retell.split("/").slice(-2, -1)[0]
+const pnum = (f: string) => Number(f.match(/(\d+)\.json$/)?.[1] ?? 0)
+const told = retell ? new Set(all.filter((f) => !(sameTrip(f) && pnum(f) <= pnum(retell)))) : alreadyTold(all.map((f) => ({ path: f, mtime: statSync(f).mtimeMs })), lastTold, replay)
 const last = new Map<string, any>(), prevFile = new Map<string, string>(), lastBody = new Map<string, string>()
 // the page before the first one told is what the next page is compared with
 for (const f of all.filter((f) => told.has(f))) { try { last.set(f.split("/").slice(-2, -1)[0]!, await Bun.file(f).json()); prevFile.set(f.split("/").slice(-2, -1)[0]!, f.replace(/\.json$/, ".raw.json")) } catch {} }
@@ -50,9 +54,11 @@ let clashSeen = mtime(clashes)
 let asked = existsSync(messagesFile()) ? (await Bun.file(messagesFile()).text()).split("\n").filter(Boolean).length : 0
 console.log(`LIVE ${now()} watching ${outDir()} and ${game}`)
 setInterval(async () => {
+  // a retelling ends once every page of it has been told
+  if (retell && all.every((f) => told.has(f))) { console.log(`RETOLD ${now()}`); process.exit(0) }
   for (const f of bySave(pages().filter((f) => !told.has(f)))) {
     told.add(f)
-    if (!replay) await Bun.write(mark, f)
+    if (!replay && !retell) await Bun.write(mark, f)
     try {
       const p = await Bun.file(f).json(), tl = p.tally ?? {}
       const who = (p.heroes ?? []).map((h: any) => `${h.name} ${Math.round(h.hp)}/${h.maxHp}hp ${h.stress}st${h.affliction ? ` ${h.affliction}` : ""}${h.virtue ? ` ${h.virtue}` : ""}${h.deathsDoor ? " DD" : ""}`).join(", ")
