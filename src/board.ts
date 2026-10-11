@@ -107,7 +107,7 @@ export function weekSoFar(t: Town, start: WeekStart | undefined): string[] {
 }
 
 export interface Tale { snaps: number; beats: Beat[]; well: string[]; wrong: string[]; lessons: Lesson[]; debrief?: Debrief; issues?: string[] }
-export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: Answers; own?: Party; checks?: Check[]; prices?: Map<string, number>; soFar?: string[]; tale?: Tale; camp?: Map<string, CampSkill> }): { board: string; sources: string } {
+export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: Answers; own?: Party; checks?: Check[]; prices?: Map<string, number>; soFar?: string[]; tale?: Tale; camp?: Map<string, CampSkill>; sent?: Proposal }): { board: string; sources: string } {
   const L: string[] = []
   const picked = (opts.answers.expedition && a.parties.find((p) => questLabel(p) === opts.answers.expedition)) || a.best
   const chosen = opts.own ?? picked
@@ -131,9 +131,12 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   if (t.back) {
     const b = t.back, here = (g: number) => t.heroes.find((h) => h.guid === g)
     const fell = b.heroes.filter((h) => h.died), home = b.heroes.filter((h) => !h.died).map((h) => here(h.guid)).filter((h): h is HeroView => !!h)
-    const road = `the ${b.dungeonName}, ${(LENGTH[b.length] ?? "").toLowerCase()} ${b.quest}`.replace(/\s+/g, " ")
+    const road = `the ${b.dungeonName}, ${(LENGTH[b.length] ?? "").toLowerCase()}${b.goal ? ` (${b.goal})` : ""}`.replace(/\s+/g, " ")
     L.push("## The coach is back {wide}", "")
     L.push(`${b.success ? `They came back from ${road}, with the work done.` : `They came back from ${road}, without the work done.`} ${fell.length ? `${fell.map((h) => h.name).join(" and ")} did not come back.` : "All four came back."} Here is what the road did to them, and what it changes for the week ahead.`, "")
+    // #3: the road and the four that left, against what I proposed and what was picked
+    const went = sentAgainst(b, opts.sent, (g) => [...t.heroes, ...t.fallen].find((h) => h.guid === g)?.name ?? "")
+    if (went) L.push(went, "")
     // C40: the survivors' tale, from the chronicle kept on the road; C41: what went well, what went wrong
     const tale = opts.tale
     if (tale && tale.snaps > 1) {
@@ -715,14 +718,26 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
     start = { week: t.week, heroes: t.heroes.map((h) => ({ guid: h.guid, name: h.name })), bought: [...t.bought], gold: t.wallet.gold ?? 0, purchases: t.purchases.map((p) => `${p.guid}|${p.key}`) }
     await Bun.write(wsFile, JSON.stringify(start, null, 1))
   }
-  const { board, sources } = source(t, a, { foresight: !!opts.foresight, answers, own, checks, prices: await supplyPrices(), soFar: weekSoFar(t, start), tale, camp: await campingSkills() })
+  // what was proposed the week they left: kept per week, else the last proposal when it is that week's (#3)
+  let sent: Proposal | undefined
+  if (t.back) for (const f of [join(outDir(), "proposals", `week-${t.week - 1}.json`), join(outDir(), "proposal.json")]) {
+    const p = await Bun.file(f).json().catch(() => undefined) as Proposal | undefined
+    if (p && p.week === t.week - 1) { sent = p; break }
+  }
+  const { board, sources } = source(t, a, { foresight: !!opts.foresight, answers, own, checks, prices: await supplyPrices(), soFar: weekSoFar(t, start), tale, camp: await campingSkills(), sent })
   // C38: every build is read back for advice that contradicts itself; the live session is told through coherence.json
   const clash = [...contradictions(board), ...(tale?.issues ?? [])]
   await Bun.write(join(outDir(), "coherence.json"), JSON.stringify({ week: t.week, contradictions: clash }, null, 1))
   if (clash.length) console.log(`INCOHERENT week ${t.week}: ${clash.join(" | ")}`)
   // what the Caretaker proposed this week, for the farewell to judge the departure against (C24)
   const chosen = own ?? ((answers.expedition && a.parties.find((p) => questLabel(p) === answers.expedition)) || a.best)
-  if (chosen) await Bun.write(join(outDir(), "proposal.json"), JSON.stringify({ week: t.week, dungeon: chosen.quest.dungeon, length: chosen.quest.length, type: chosen.quest.type, label: questLabel(chosen), party: chosen.seats.map((x) => x.hero.guid), own: !!own }, null, 1))
+  if (chosen) {
+    // kept per week too, so the return a week later still knows what was proposed and picked when they left (#3)
+    const prop: Proposal = { week: t.week, dungeon: chosen.quest.dungeon, length: chosen.quest.length, type: chosen.quest.type, label: questLabel(chosen), party: chosen.seats.map((x) => x.hero.guid), own: !!own, picked: !!(answers.expedition && a.parties.some((p) => questLabel(p) === answers.expedition)) }
+    await Bun.write(join(outDir(), "proposal.json"), JSON.stringify(prop, null, 1))
+    mkdirSync(join(outDir(), "proposals"), { recursive: true })
+    await Bun.write(join(outDir(), "proposals", `week-${t.week}.json`), JSON.stringify(prop, null, 1))
+  }
   return compile(board, sources)
 }
 
@@ -762,7 +777,25 @@ async function compile(board: string, sources: string): Promise<string> {
   return out
 }
 
-export interface Proposal { week: number; dungeon: string; length: number; type: string; label: string; party: number[]; own: boolean }
+/** The road and four that left, against the proposal of the week they left (#3): named, each difference marked, and whose
+ *  choice it was. Empty when nothing was proposed that week. */
+export function sentAgainst(b: NonNullable<Town["back"]>, p: Proposal | undefined, name: (g: number) => string): string {
+  if (!p) return ""
+  const len = (n: number) => (LENGTH[n] ?? String(n)).toLowerCase()
+  const roadSame = p.dungeon === b.dungeon && p.length === b.length
+  const proposedRoad = p.label.split(":")[0]!, four = b.heroes.map((h) => h.guid), names = (gs: number[]) => gs.map(name).filter(Boolean)
+  const gone = p.party.filter((g) => !four.includes(g)), came = four.filter((g) => !p.party.includes(g))
+  const whose = p.picked || p.own ? "the road and four you picked" : "my own lean"
+  const diffs: string[] = []
+  if (!roadSame) diffs.push(`they went to the ${b.dungeonName}, ${len(b.length)}, not ${proposedRoad.startsWith("the ") ? "" : "the "}${proposedRoad}`)
+  if (came.length) diffs.push(`${names(came).join(" and ")} went in place of ${names(gone).join(" and ")}`)
+  const head = `**Who went, against what was proposed.** ${names(four).join(", ")} went to the ${b.dungeonName}, ${len(b.length)}.`
+  return diffs.length
+    ? `${head} The proposal, ${whose}, was ${proposedRoad} with ${names(p.party).join(", ")}; ${diffs.join("; ")}.`
+    : `${head} As proposed, ${whose}.`
+}
+
+export interface Proposal { week: number; dungeon: string; length: number; type: string; label: string; party: number[]; own: boolean; picked?: boolean }
 
 /** The farewell (C24): once the party has left, the board turns into the Caretaker's last word before the dark: how they were
  *  sent against what he proposed and what was picked, what they carry against his habit, the foes known there, when he would
