@@ -134,14 +134,14 @@ async function atCamp(page: string): Promise<{ text: string } | undefined> {
   const why = camping(prev, p, raw)
   if (!why) return undefined
   console.log(`CAMP ${clock()} page ${page}: ${why}`)
-  return { text: `${await nowText(p, raw, page, statSync(file).mtimeMs)}\n${await campBrief(p, raw)}` }
+  return { text: `${await nowText(p, raw, page, statSync(file).mtimeMs, file)}\n${await campBrief(p, raw)}` }
 }
 
 async function snapshotNow(): Promise<{ text: string; page: string } | undefined> {
   const c = current()
   if (!c.file) return undefined
   const p = (await Bun.file(c.file).json()) as Snap, raw = await Bun.file(c.file.replace(/\.json$/, ".raw.json")).json().catch(() => undefined)
-  return { text: await nowText(p, raw, c.page!, statSync(c.file).mtimeMs), page: c.page! }
+  return { text: await nowText(p, raw, c.page!, statSync(c.file).mtimeMs, c.file), page: c.page! }
 }
 
 if (import.meta.main) {
