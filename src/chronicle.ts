@@ -49,7 +49,7 @@ export async function snapshot(save: Save): Promise<Snap | undefined> {
   const ri = r.raid_instance, party: number[] = (r.party?.heroes ?? []).filter((x: unknown) => typeof x === "number")
   const roster = (save.roster as any)?.heroes ?? {}
   const supplies: Record<string, number> = {}
-  for (const it of Object.values<any>(r.party?.inventory?.items ?? {})) { const k = it.type === "provision" ? "food" : it.id || it.type; supplies[k] = (supplies[k] ?? 0) + (it.amount ?? 0) }
+  for (const it of Object.values<any>(r.party?.inventory?.items ?? {})) { const k = it.type === "provision" ? "food" : it.type === "journal_page" ? `journal page ${it.id}` : it.id || it.type; supplies[k] = (supplies[k] ?? 0) + (it.amount ?? 0) }
   const tally: Record<string, number> = {}
   for (const [k, v] of Object.entries<any>(r.stat_database ?? {})) if (k !== "UNDEFINED") tally[k] = Number(v?.count ?? 0)
   const heroes: SnapHero[] = []
