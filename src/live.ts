@@ -10,6 +10,7 @@
 import { existsSync, readdirSync, statSync } from "node:fs"
 import { join } from "node:path"
 import { outDir } from "./board.ts"
+import { nameOf } from "./game.ts"
 import { decode } from "./dson.ts"
 import { profileDir } from "./paths.ts"
 
@@ -26,9 +27,9 @@ const pages = () => { try { return readdirSync(chron).flatMap((d) => readdirSync
 // DD_LIVE_REPLAY=n tells the last n pages again on start, to check what a page reports
 const replay = Number(process.env.DD_LIVE_REPLAY ?? 0), all = pages().sort()
 const told = new Set(replay ? all.slice(0, -replay) : all)
-const last = new Map<string, any>()
+const last = new Map<string, any>(), prevFile = new Map<string, string>()
 // the page before the first one told is what the next page is compared with
-for (const f of all.filter((f) => told.has(f))) { try { last.set(f.split("/").slice(-2, -1)[0]!, await Bun.file(f).json()) } catch {} }
+for (const f of all.filter((f) => told.has(f))) { try { last.set(f.split("/").slice(-2, -1)[0]!, await Bun.file(f).json()); prevFile.set(f.split("/").slice(-2, -1)[0]!, f.replace(/\.json$/, ".raw.json")) } catch {} }
 const clashes = join(outDir, "coherence.json")
 let clashSeen = mtime(clashes)
 console.log(`LIVE ${now()} watching ${outDir} and ${game}`)
@@ -39,12 +40,13 @@ setInterval(async () => {
       const p = await Bun.file(f).json(), tl = p.tally ?? {}
       const who = (p.heroes ?? []).map((h: any) => `${h.name} ${Math.round(h.hp)}/${h.maxHp}hp ${h.stress}st${h.affliction ? ` ${h.affliction}` : ""}${h.virtue ? ` ${h.virtue}` : ""}${h.deathsDoor ? " DD" : ""}`).join(", ")
       // only a page that changes the story wakes the agent (Soushi, 2026-10-11: every turn ends in a spoken line); the rest print as PAGE
-      const prev = last.get(f.split("/").slice(-2, -1)[0]!), pt = prev?.tally ?? {}
+      const trip = f.split("/").slice(-2, -1)[0]!, prev = last.get(trip), pt = prev?.tally ?? {}, prevRaw = prevFile.get(trip)
       const crossed = (a: number, b: number) => [50, 25].some((x) => a >= x && b < x)
       const notable = !prev || ["BATTLE_COMPLETED", "ROOM_VISITED", "AMBUSHED"].some((k) => (tl[k] ?? 0) !== (pt[k] ?? 0)) || crossed(prev.torch, p.torch)
         || (p.heroes ?? []).some((h: any) => { const w = prev.heroes?.find((x: any) => x.guid === h.guid); return !w || (h.affliction && !w.affliction) || (h.virtue && !w.virtue) || (h.deathsDoor && !w.deathsDoor) || (h.hp < h.maxHp * 0.3 && w.hp >= w.maxHp * 0.3) })
         || (prev.heroes ?? []).length !== (p.heroes ?? []).length
       last.set(f.split("/").slice(-2, -1)[0]!, p)
+      prevFile.set(f.split("/").slice(-2, -1)[0]!, f.replace(/\.json$/, ".raw.json"))
       // every change since the last page, so no page reads as empty: the packs item by item, the game's tallies with their
       // names (the curio searched, the foe met or slain), and the loot a battle laid out (Soushi, 2026-10-11: "ensure you see all details")
       const delta: string[] = []
@@ -60,6 +62,17 @@ setInterval(async () => {
             if (n <= 0 || k === "UNDEFINED") continue
             const what = Object.values<any>(v.entries ?? {}).slice(-n).map((e) => Object.values<any>(e.parameters ?? {}).map((x) => x.data).filter((x) => typeof x === "string").pop()).filter(Boolean)
             delta.push(`${k.toLowerCase().replace(/_/g, " ")} +${n}${what.length ? ` (${what.join(", ")})` : ""}`)
+          }
+          // what a curio or a blow left on each hero: quirks and diseases gained or lost, and a heart attack (Soushi: a curio once gave one)
+          const before = prevRaw ? await Bun.file(prevRaw).json().catch(() => undefined) : undefined
+          for (const [g, h] of Object.entries<any>(raw.heroes ?? {})) {
+            const r = h?.hero_file_data?.raw_data ?? h, w = before?.heroes?.[g]?.hero_file_data?.raw_data ?? before?.heroes?.[g]
+            if (!r || !w) continue
+            const q = Object.keys(r.quirks ?? {}), wq = Object.keys(w.quirks ?? {})
+            const name = r.actor?.name ?? g
+            for (const id of q.filter((x) => !wq.includes(x))) delta.push(`${name} gained ${(await nameOf("quirk", id)) || id}`)
+            for (const id of wq.filter((x) => !q.includes(x))) delta.push(`${name} lost ${(await nameOf("quirk", id)) || id}`)
+            if (r.has_had_heart_attack && !w.has_had_heart_attack) delta.push(`${name} HAD A HEART ATTACK`)
           }
           const offered = Object.values<any>(raw.raid?.loot?.result?.inventory_system?.items ?? {}).map((i) => `${i.id || i.type} x${i.amount}`)
           if (offered.length) delta.push(`loot laid out: ${offered.join(", ")}`)
