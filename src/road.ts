@@ -3,6 +3,7 @@
 //   bun run say "<text>"        the agent's comment on the current page, appended to the expedition's thread
 //   (served by bun run watch)   the farewell board's first zone while the party is out; /road/feed its data, POST /road/message a line from Soushi
 // It only reads the chronicle and writes under .local/town/road/ (ISA A1).
+import { mapSvg, whereLine } from "./map.ts"
 import { appendFileSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs"
 import { join } from "node:path"
 import { outDir } from "./board.ts"
@@ -62,6 +63,8 @@ export async function feed() {
         const max = f.cls ? (await monster(f.cls))?.hp ?? 0 : 0
         return { name: f.name, hp: f.hp, maxHp: Math.max(f.hp, max), stunned: !!f.stunned, dots: f.dots ?? [] }
       })) : null, round: p.battle?.round,
+      // C51: the map as the party knows it, drawn without letters, and where they stand in words
+      map: mapSvg(p.map), where: whereLine(p.map),
     }
   } catch {}
   return { trip: c.trip, state, lines }
@@ -86,10 +89,11 @@ export const roadPanel = `<style>
 #roadForm{display:flex;gap:.5rem}#roadForm textarea{flex:1;background:var(--panel);color:var(--ink);border:1px solid var(--line);font:inherit;padding:.5rem;resize:vertical;min-height:3.2rem}
 #roadBusy{margin:.6rem 0 0;font-style:italic;color:var(--gold)}
 #road .empty{color:var(--dim);font-style:italic}
+#roadMap{margin:.6rem 0}#roadMap svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:3px}#roadMap .meta{margin:.3rem 0 0}
 @media (max-width:520px){#road .seat{grid-template-columns:5rem 1fr 1fr}}
 </style><script>(()=>{const nav=document.querySelector('nav.bar');
 const z=document.createElement('section');z.className='zone wide';z.id='road';z.hidden=true;
-z.innerHTML='<h2>On the road, with the Caretaker</h2><div id="roadParty"></div><form id="roadForm"><textarea id="roadText" placeholder="Write to the Caretaker (Enter sends, Shift+Enter breaks the line)"></textarea><button class="btn primary">Send</button></form><div id="roadBusy" class="who" hidden></div><div id="roadThread"></div>';
+z.innerHTML='<h2>On the road, with the Caretaker</h2><div id="roadParty"></div><div id="roadMap"></div><form id="roadForm"><textarea id="roadText" placeholder="Write to the Caretaker (Enter sends, Shift+Enter breaks the line)"></textarea><button class="btn primary">Send</button></form><div id="roadBusy" class="who" hidden></div><div id="roadThread"></div>';
 const first=document.querySelector('section.zone');if(first)first.before(z);else document.body.append(z);
 let link=null;
 const esc=s=>String(s??"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"})[c]);
@@ -101,6 +105,7 @@ if(s)document.getElementById("roadParty").innerHTML='<div class="meta">Page '+es
 s.heroes.map(h=>'<div class="seat"><div>'+esc(h.name)+(h.affliction?' <span class="tag">'+esc(h.affliction)+'</span>':'')+(h.virtue?' <span class="tag">'+esc(h.virtue)+'</span>':'')+(h.deathsDoor?' <span class="tag">Death\\'s Door</span>':'')+'</div>'+
 '<div class="bar hp" title="health"><i style="width:'+Math.max(0,Math.min(100,100*h.hp/h.maxHp))+'%"></i><span>'+h.hp+'/'+h.maxHp+'</span></div>'+
 '<div class="bar st" title="stress, of 200; the line is 100"><i style="width:'+Math.min(100,h.stress/2)+'%"></i><span>'+h.stress+'</span></div></div>').join("");
+const M=document.getElementById("roadMap"),mk=s?(s.map||'')+(s.where||''):'';if(M.dataset.k!==mk){M.dataset.k=mk;M.innerHTML=s&&s.map?s.map+'<div class="meta">'+esc(s.where)+' · the ring is the party; gold a curio, red a fight, orange a trap, grey what is done</div>':''}
 const mine=d.lines.filter(l=>l.from==="caretaker").at(-1),asked=d.lines.filter(l=>l.from==="soushi").at(-1),B=document.getElementById("roadBusy");
 const fresh=at=>at&&Date.now()-new Date(at)<180000&&(!mine||at>mine.at);
 const say=(a)=>"The Caretaker is "+a[Math.floor(Date.now()/4000)%a.length]+"…";

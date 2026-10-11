@@ -6,6 +6,7 @@ import { join } from "node:path"
 import { outDir } from "./board.ts"
 import { monster, nameOf, strings, text } from "./game.ts"
 import type { Save } from "./read.ts"
+import { mapOf, type MapView } from "./map.ts"
 
 // RULE: my own reading of a trip, not the game's numbers (ISA A2)
 export const CHRONICLE_RULE = {
@@ -27,6 +28,7 @@ export interface Snap {
   // the fight under way, as the game keeps it (raid.battle): the round, and the foes in rank order with their health and who last struck them
   battle?: { round: number; foes: { name: string; hp: number; hitBy: string; guid?: number; cls?: string; turns?: number; stunned?: boolean; effects?: string[]; dots?: string[] }[]; acted?: string[] }
   known?: string[] // every attack the party has witnessed, the boundary for naming one (C5)
+  map?: MapView // where the party stands and what it knows of each room and corridor (C51)
 }
 
 // an actor's state in a fight: turns taken, stun, each buff or mark with who laid it, each damage over time
@@ -97,6 +99,7 @@ export async function snapshot(save: Save): Promise<Snap | undefined> {
     at: new Date().toISOString(), dungeon: ri.dungeon, difficulty: Number(ri.difficulty ?? 0), length: Number(ri.length ?? 0), quest: String(ri.type ?? ""),
     key: `${ri.id}:${r.start_elapsed_time ?? ""}`, torch: Math.round(f32(r.torchlight)), inBattle: !!r.inbattle, supplies, tally, heroes,
     known: Object.keys((save.game_knowledge as any)?.combat_skills ?? {}),
+    map: mapOf(save),
     // the narrator's log of this trip, one entry per event it spoke over: the only record of a trap sprung or an obstacle cleared by hand
     narrated: Object.values<any>((save.narration as any)?.raid_entry_log ?? {}).map((e) => String(e.entry_type ?? "")),
   }
