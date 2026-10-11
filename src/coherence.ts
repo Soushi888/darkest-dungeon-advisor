@@ -20,8 +20,15 @@ const leaned = (c: Card) => c.picks[c.lean]?.pick
 const gold = (s: string) => Number(s.match(/([\d,]+) gold/)?.[1]?.replace(/,/g, "") ?? 0)
 const list = (s: string) => s.split(/, | and /).map((x) => x.trim()).filter(Boolean)
 
+/** Words a reader sees that are a raw name from the game's files (snake case), off the board's own keys and image paths (C55). */
+export function rawNames(md: string): string[] {
+  const seen = md.replace(/^\s*-?\s*[a-z_]+:\s?/gm, "").replace(/img\/[\w.-]+/g, "")
+  return [...new Set(seen.match(/\b[a-z]+_[a-z0-9_]+\b/g) ?? [])]
+}
+
 export function contradictions(md: string): string[] {
   const all = cards(md), found: string[] = []
+  for (const w of rawNames(md)) found.push(`a raw name is on the board: ${w}`)
   const party = all.find((c) => c.q.startsWith("Take this party"))
   const four = party ? [...party.context.matchAll(/\d\. ([^(;]+?) \(/g)].map((m) => m[1]!.trim()) : []
   const going = (n: string) => four.includes(n)

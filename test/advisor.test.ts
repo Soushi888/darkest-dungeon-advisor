@@ -10,7 +10,7 @@ import { readSave } from "../src/read.ts"
 import { town } from "../src/town.ts"
 import { profileDir, root } from "../src/paths.ts"
 import { boardOptions, mergePicks, parseAnswers, reconcile } from "../src/reconcile.ts"
-import { contradictions } from "../src/coherence.ts"
+import { contradictions, rawNames } from "../src/coherence.ts"
 import { beats, bearing, capture, chronicleDir, debrief, judge, remember, loadLedger, untried, CHRONICLE_RULE, type Snap } from "../src/chronicle.ts"
 import { ACTING_ORDER, outDir, road, source, weekSoFar } from "../src/board.ts"
 import { supplyPrices } from "../src/game.ts"
@@ -282,6 +282,8 @@ describe.skipIf(!has)("on the local save", () => {
     const md = (await Bun.file(join(townOut, "town.md")).text()).replace(/^```.*$/gm, "").replace(/^\s*image: .*$/gm, "")
     const meta = [/persist/i, /\.json/, /`/, /\bRULE\b/, /\bfiles?\b/i, /\bsav(e|ed|es)\b(?! them)/i, /\bboard\b/i, /\bgame\b/i, /\bsteam\b/i, /\bcode\b/i, /\b[a-z_]+\.[a-z_]+\b/]
     expect(meta.flatMap((re) => md.match(new RegExp(`.{0,30}${re.source}.{0,10}`, re.flags)) ?? [])).toEqual([])
+    // no raw name from the game's files either, such as a road's goal printed as inventory_activate (C55)
+    expect(rawNames(await Bun.file(join(townOut, "town.md")).text())).toEqual([])
     // the sources still exist, off the board (C14)
     expect(await Bun.file(join(townOut, "sources.md")).text()).toContain("`persist.estate.json` wallet")
   })

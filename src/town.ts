@@ -6,8 +6,7 @@ import type { Lesson } from "./chronicle.ts"
 import {
   P, applied, buildingData, buildingTrees, describeQuirk, dungeonMonsters, heroClass, heroTrees, levelOf, levelThresholds,
   monster, nameOf, quirks, strings, townEvents, trinkets, type Cost, type Monster,
-  campingSkills,
-} from "./game.ts"
+  campingSkills, questGoal } from "./game.ts"
 
 const raw = (h: any) => h.hero_file_data?.raw_data ?? h
 
@@ -23,7 +22,7 @@ export interface HeroView {
   from?: string // the town event that brought a recruit
 }
 export interface Activity { building: string; buildingName: string; activity: string; name: string; locked: boolean; baseCost: number; cost: number; lockedQuirkCost?: number; heal: number; cure: number; slots: number; used: number; barred: string[] }
-export interface Quest { foeResist?: { bleed: number; blight: number; foes: number }; unknownTypes: string[]; bleeders: string[]; blighters: string[]; walked: boolean; idx: number; dungeon: string; dungeonName: string; type: string; difficulty: number; length: number; plot: boolean; rewards: string[]; known: string[]; unknownCount: number; types: string[] }
+export interface Quest { foeResist?: { bleed: number; blight: number; foes: number }; unknownTypes: string[]; bleeders: string[]; blighters: string[]; walked: boolean; idx: number; dungeon: string; dungeonName: string; type: string; goal: string; difficulty: number; length: number; plot: boolean; rewards: string[]; known: string[]; unknownCount: number; types: string[] }
 export interface Upgrade { hero?: string; toLevel?: number; where?: string; tree: string; label: string; code: string; cost: Cost[]; affordable: boolean; blockedBy: string }
 export interface Town {
   week: number; inRaid: boolean; raidDungeon: string; estate: string
@@ -249,7 +248,7 @@ export async function town(save: Save): Promise<Town> {
     const avg = (k: "bleedResist" | "blightResist") => (met.length ? met.reduce((a, m) => a + m[k], 0) / met.length : 0)
     return {
       foeResist: { bleed: avg("bleedResist"), blight: avg("blightResist"), foes: met.length },
-      unknownTypes: [...unknownTypes], bleeders: [...bleeders], blighters: [...blighters], walked: visited.has(q.dungeon), idx, dungeon: q.dungeon, dungeonName: await nameOf("dungeon", q.dungeon), type: q.type, difficulty: q.difficulty,
+      unknownTypes: [...unknownTypes], bleeders: [...bleeders], blighters: [...blighters], walked: visited.has(q.dungeon), idx, dungeon: q.dungeon, dungeonName: await nameOf("dungeon", q.dungeon), type: q.type, goal: await questGoal(q.type, q.dungeon, Number(q.length ?? 0)), difficulty: q.difficulty,
       length: q.length, plot: !!q.is_plot_quest, rewards, known: [...new Set(seen.values())], unknownCount: unknown.size, types: [...types],
     }
   }

@@ -51,6 +51,12 @@ export async function nameOf(kind: "quirk" | "class" | "trinket" | "dungeon" | "
   }[kind]
   return s.get(key) ?? s.get(`upgrade_tree_name_${cls}.${id}`) ?? titleCase(id)
 }
+/** A road's goal as the quest card names it ("Cleanse", "Detoxify the Corpses"), from town_quest_name_<type>+<length>+<dungeon>+<goal>. */
+export async function questGoal(type: string, dungeon: string, length: number): Promise<string> {
+  const s = await strings(), keys = [...s.keys()].filter((k) => k.startsWith(`town_quest_name_${type}+`))
+  const hit = keys.find((k) => k.startsWith(`town_quest_name_${type}+${length}+${dungeon}+`)) ?? keys.find((k) => k.includes(`+${dungeon}+`)) ?? keys[0]
+  return hit ? s.get(hit)! : titleCase(type)
+}
 export async function describeQuirk(id: string): Promise<string> {
   const said = (await strings()).get(`str_quirk_description_${id}`)
   if (said) return said
