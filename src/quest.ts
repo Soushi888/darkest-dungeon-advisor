@@ -30,7 +30,7 @@ export async function questStatus(raw: any): Promise<QuestStatus | undefined> {
     : g?.type === "activate" ? `use ${d.amount ?? of} ${s.get(`str_curio_title_${d.curio_name}`) ?? words(d.curio_name ?? "curios")}`
     : g?.type === "kill_monster" ? `kill the ${await nameOf("monster", d.monster_class_ids?.[0] ?? "")}`
     : words(id)
-  return { name: await questGoal(String(ri.type ?? ""), String(ri.dungeon ?? ""), Number(ri.length ?? 0)), asks, done, of, complete: of > 0 && done >= of }
+  return { name: await questGoal(String(ri.type ?? ""), String(ri.dungeon ?? ""), Number(ri.length ?? 0), String(ri.id ?? "")), asks, done, of, complete: of > 0 && done >= of }
 }
 
 /** One line: "Scout: explore 90% of the rooms, 8 of 8, done". */

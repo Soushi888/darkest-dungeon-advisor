@@ -20,7 +20,8 @@ import { buildSkin } from "./skin.ts"
 import { loadPicks, reconcile, type Check } from "./reconcile.ts"
 import { contradictions } from "./coherence.ts"
 import { beats, chronicleFor, heirloomTrips, CHRONICLE_RULE, debrief, judge, loadLedger, remember, untried, type Beat, type Debrief, type Lesson } from "./chronicle.ts"
-import { heroClass } from "./game.ts"
+import { dungeonMonsters, heroClass, specialFoes } from "./game.ts"
+import { meetings } from "./foes.ts"
 
 // DD_TOWN_OUT lets the tests build elsewhere, so they never touch the live board or its picks. Read at call time: a test file
 // sets it after its imports, so a value fixed at import would send its builds into the live board's folder
@@ -416,7 +417,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     cards.push(`  context: ${y(`${tr.hero.name}, ${tr.hero.clsName} level ${tr.hero.level}${tr.inParty ? ", in the party I would send" : ""}. ${tr.quirk.name}${tr.quirk.description ? `: ${tr.quirk.description}` : "."}${tr.quirk.locked ? " It has set in, and the ward asks more for it." : ""} The ${tw.name} has ${tw.slots} seat${tw.slots === 1 ? "" : "s"}, ${tw.slots - tw.used} free this week.`)}`, "  options:")
     cards.push(`    - pick: ${y(tw.name)}`, `      effect: ${y(`${tr.cost ? coin(tr.cost) : "free this week"}; the ward works on ${tr.quirk.name}, and ${tr.hero.name} stays in the Hamlet while it does.`)}`)
     cards.push(`    - pick: "Not this week"`, `      effect: ${y(`${tr.hero.name} keeps it for now.`)}`)
-    cards.push(`  lean: ${lean}`, `  lean_why: ${y(opts.placed?.get(tr.hero.guid) === tw.name ? `already there this week, and paid for: the ${tw.name} keeps them.` : tr.inParty ? `${tr.hero.name} rides with the party I would send, and a hero in the ward cannot board the coach; treat it in a week they stay home.` : !gets ? "the seat goes to someone the road needs more." : !purse ? `${firstRoad}.` : `${tr.why}.`)}`)
+    cards.push(`  lean: ${lean}`, `  lean_why: ${y(opts.placed?.get(tr.hero.guid) === tw.name ? `already there this week, and paid for: the ${tw.name} keeps them.` : tr.inParty ? `${tr.hero.name} rides with the party I would send, and a hero in the ward cannot leave with the coach; treat it in a week they stay home.` : !gets ? "the seat goes to someone the road needs more." : !purse ? `${firstRoad}.` : `${tr.why}.`)}`)
   }
   const stuck = a.relief.filter((r) => !r.options.length)
   if (cards.length) {
@@ -798,7 +799,9 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
     const base = { dungeon: t.back.dungeon, difficulty: first?.difficulty ?? 0, length: t.back.length, week: t.week - 1, trip: `${t.back.dungeonName}, week ${t.week - 1}` }
     const j = judge(snaps, bs, { ...base, dungeonName: t.back.dungeonName, success: t.back.success, healer })
     // C102: what the road taught about the foes and the four, kept beside what it used
-    const taught = teachings(snaps, bs, db, base, healers)
+    // C106: the special foes met on the road, kept so the next road is advised by them
+    const met = meetings(snaps, await specialFoes(base.dungeon, base.difficulty), new Set(await dungeonMonsters(base.dungeon, base.difficulty, ["hall", "room"])))
+    const taught = teachings(snaps, bs, db, base, healers, met, `the ${t.back.dungeonName}`)
     j.lessons.push(...taught.lessons)
     if (snaps.length > 1) await remember(j.lessons)
     tale = { snaps: snaps.length, beats: bs, ...j, debrief: db, issues: check.issues, taught: taught.lines }

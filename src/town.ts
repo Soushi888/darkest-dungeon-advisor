@@ -148,7 +148,7 @@ export async function town(save: Save): Promise<Town> {
   const trip = chapters.length ? Object.values<any>(chapters[chapters.length - 1]).find((x) => x && typeof x === "object" && x.heroes && typeof x.dungeon_type === "string") : undefined
   const trips = chapters.flatMap((c) => Object.values<any>(c).filter((x) => x && typeof x === "object" && x.heroes && typeof x.dungeon_type === "string").map((x) => ({ dungeon: String(x.dungeon_type), difficulty: Number(x.difficulty ?? 0) })))
   const back = trip ? {
-    dungeon: trip.dungeon_type, dungeonName: await nameOf("dungeon", trip.dungeon_type), quest: String(trip.quest ?? ""), goal: trip.quest ? await questGoal(String(trip.quest), trip.dungeon_type, Number(trip.length ?? 0)) : undefined, length: Number(trip.length ?? 0), success: !!trip.success,
+    dungeon: trip.dungeon_type, dungeonName: await nameOf("dungeon", trip.dungeon_type), quest: String(trip.quest ?? ""), goal: trip.quest ? await questGoal(String(trip.quest), trip.dungeon_type, Number(trip.length ?? 0), String(trip.quest_id ?? "")) : undefined, length: Number(trip.length ?? 0), success: !!trip.success,
     heroes: Object.values<any>(trip.heroes).map((h) => ({ guid: Number(h.guid), name: String(h.name), cls: String(h.class), died: !!h.died })),
   } : undefined
   let event: TownEvent | undefined
@@ -265,7 +265,7 @@ export async function town(save: Save): Promise<Town> {
     const avg = (k: "bleedResist" | "blightResist") => (met.length ? met.reduce((a, m) => a + m[k], 0) / met.length : 0)
     return {
       foeResist: { bleed: avg("bleedResist"), blight: avg("blightResist"), foes: met.length },
-      unknownTypes: [...unknownTypes], bleeders: [...bleeders], blighters: [...blighters], walked: visited.has(q.dungeon), idx, dungeon: q.dungeon, dungeonName: await nameOf("dungeon", q.dungeon), type: q.type, goal: await questGoal(q.type, q.dungeon, Number(q.length ?? 0)), difficulty: q.difficulty,
+      unknownTypes: [...unknownTypes], bleeders: [...bleeders], blighters: [...blighters], walked: visited.has(q.dungeon), idx, dungeon: q.dungeon, dungeonName: await nameOf("dungeon", q.dungeon), type: q.type, goal: await questGoal(q.type, q.dungeon, Number(q.length ?? 0), String(q.id ?? "")), difficulty: q.difficulty,
       length: q.length, plot: !!q.is_plot_quest, rewards, known: [...new Set(seen.values())], unknownCount: unknown.size, types: [...types],
     }
   }

@@ -218,7 +218,7 @@ export function beats(snaps: Snap[], fell: string[] = []): Beat[] {
       if (!was) continue
       if (!was.affliction && h.affliction) out.push({ i, kind: "affliction", who: h.name, text: `${h.name} broke (${h.affliction})`, bad: true })
       if (!was.virtue && h.virtue) out.push({ i, kind: "virtue", who: h.name, text: `${h.name} rose to the occasion (${h.virtue})`, bad: false })
-      if (!was.deathsDoor && h.deathsDoor) out.push({ i, kind: "deathsdoor", who: h.name, text: `${h.name} stood at Death's Door${h.lastBlow ? `, struck by a ${h.lastBlow}` : ""}`, bad: true })
+      if (!was.deathsDoor && h.deathsDoor) out.push({ i, kind: "deathsdoor", who: h.name, text: `${h.name} stood at Death's Door${h.lastBlow ? `, struck by ${/^the /i.test(h.lastBlow) ? "" : "a "}${h.lastBlow}` : ""}`, bad: true })
       else if (h.stress - was.stress >= CHRONICLE_RULE.stressSpike && !h.affliction) out.push({ i, kind: "spike", who: h.name, text: `${h.name}'s stress leapt to ${h.stress}`, bad: true })
       // a wound or a mending of a large share of the bar between two pages (#12)
       const dh = Math.round(h.hp) - Math.round(was.hp), share = CHRONICLE_RULE.woundShare * (h.maxHp || 1)
@@ -250,7 +250,7 @@ export function beats(snaps: Snap[], fell: string[] = []): Beat[] {
   return out
 }
 
-export interface Lesson { kind: "light" | "food" | "healing" | "retreat" | "worked" | "foe" | "line" | "cost" | "four"; text: string; dungeon: string; difficulty: number; length: number; week: number; trip: string }
+export interface Lesson { kind: "light" | "food" | "healing" | "retreat" | "worked" | "foe" | "line" | "cost" | "four" | "special"; text: string; foe?: string; dungeon: string; difficulty: number; length: number; week: number; trip: string }
 
 /** What went well and what went wrong, tied to what the Hamlet controls (C41). */
 export function judge(snaps: Snap[], bs: Beat[], trip: { dungeon: string; dungeonName: string; difficulty: number; length: number; week: number; success: boolean; healer: boolean }): { well: string[]; wrong: string[]; lessons: Lesson[] } {
@@ -310,7 +310,7 @@ export async function loadLedger(): Promise<Lesson[]> {
 export async function remember(lessons: Lesson[]): Promise<Lesson[]> {
   const trips = new Set(lessons.map((l) => l.trip))
   const all = (await loadLedger()).filter((x) => !trips.has(x.trip))
-  for (const l of lessons) if (!all.some((x) => x.trip === l.trip && x.kind === l.kind)) all.push(l)
+  for (const l of lessons) if (!all.some((x) => x.trip === l.trip && x.kind === l.kind && x.foe === l.foe)) all.push(l)
   await Bun.write(ledgerFile(), JSON.stringify(all, null, 1))
   return all
 }

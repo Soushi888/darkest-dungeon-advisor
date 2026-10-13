@@ -5,33 +5,29 @@
 // board and a lesson for the ledger, so the next road to the same dungeon is advised by it.
 import type { Beat, Debrief, Lesson, Snap } from "./chronicle.ts"
 import { slainIn } from "./slain.ts"
+import { byFoe, fights, meetingLine, type Meeting } from "./foes.ts"
 
 type Base = Omit<Lesson, "kind" | "text">
 
-/** The fights of a trip, each its run of pages in a battle, a round that runs backwards starting a new one. */
-function fights(snaps: Snap[]): { page: string; snap: Snap }[][] {
-  const out: { page: string; snap: Snap }[][] = []
-  let cur: { page: string; snap: Snap }[] = []
-  snaps.forEach((snap, i) => {
-    if (!snap.battle) { if (cur.length) out.push(cur); cur = []; return }
-    if (cur.length && snap.battle.round < cur.at(-1)!.snap.battle!.round) { out.push(cur); cur = [] }
-    cur.push({ page: String(i), snap })
-  })
-  if (cur.length) out.push(cur)
-  return out
-}
+/** A foe's name in the plural: Highwayman, Highwaymen; a name already ending in s keeps it. */
+const many = (n: string) => n.replace(/man$/, "men").replace(/([^s])$/, "$1s")
 
-export function teachings(snaps: Snap[], beats: Beat[], db: Debrief | undefined, base: Base, healers: string[]): { lines: string[]; lessons: Lesson[] } {
+export function teachings(snaps: Snap[], beats: Beat[], db: Debrief | undefined, base: Base, healers: string[], met: Meeting[] = [], where = ""): { lines: string[]; lessons: Lesson[] } {
   const lines: string[] = [], lessons: Lesson[] = []
-  const add = (kind: Lesson["kind"], line: string, lesson = line) => { lines.push(line); lessons.push({ ...base, kind, text: lesson }) }
+  const add = (kind: Lesson["kind"], line: string, lesson = line, foe?: string) => { lines.push(line); lessons.push({ ...base, kind, text: lesson, ...(foe ? { foe } : {}) }) }
+  // C106: a special foe met is the first thing the road taught, one note per meeting
+  for (const ms of byFoe(met)) {
+    const line = ms.map((m, i) => i ? meetingLine(m, where).replace(/^[^:]+: /, "Met again: ") : meetingLine(m, where)).join(" ")
+    add("special", line, line, ms[0]!.cls)
+  }
   const foes = (db?.foes ?? []).map((f) => ({ ...f, total: f.hp + f.bleed + f.blight })).filter((f) => f.total > 0).sort((a, b) => b.total - a.total)
   // the foe that hurt most, and what answers it
   const top = foes[0]
   if (top) {
     const how = [top.bleed ? `${top.bleed} by bleeding` : "", top.blight ? `${top.blight} by blight` : "", top.crits ? `${top.crits} critical${top.crits > 1 ? "s" : ""}` : ""].filter(Boolean)
     const answer = [top.bleed ? "bring bandages" : "", top.blight ? "bring antivenom" : ""].filter(Boolean)
-    add("foe", `The ${top.name}s hurt them most: ${top.total} health${how.length ? `, ${how.join(", ")}` : ""}. Strike them first${answer.length ? `, and ${answer.join(" and ")}` : ""}.`,
-      `${top.name}s hurt most (${top.total} health${how.length ? `, ${how.join(", ")}` : ""}): strike them first${answer.length ? `, ${answer.join(" and ")}` : ""}`)
+    add("foe", `The ${many(top.name)} hurt them most: ${top.total} health${how.length ? `, ${how.join(", ")}` : ""}. Strike them first${answer.length ? `, and ${answer.join(" and ")}` : ""}.`,
+      `${many(top.name)} hurt most (${top.total} health${how.length ? `, ${how.join(", ")}` : ""}): strike them first${answer.length ? `, ${answer.join(" and ")}` : ""}`)
   }
   // whom the foes went for: the healer above all is a lesson about the line
   const taken = new Map<string, number>()
@@ -56,7 +52,7 @@ export function teachings(snaps: Snap[], beats: Beat[], db: Debrief | undefined,
   }
   // who carried the killing blows
   const kills = new Map<string, number>()
-  for (const f of fights(snaps)) for (const s of slainIn(f)) if (s.by) kills.set(s.by, (kills.get(s.by) ?? 0) + 1)
+  for (const f of fights(snaps)) for (const s of slainIn(f.map((x) => ({ page: String(x.page), snap: x.snap })))) if (s.by) kills.set(s.by, (kills.get(s.by) ?? 0) + 1)
   const total = [...kills.values()].reduce((a, b) => a + b, 0)
   const [lead, n] = [...kills].sort((a, b) => b[1] - a[1])[0] ?? []
   if (lead && total >= 3 && n! / total >= 0.4) add("four", `${lead} struck ${n} of the ${total} killing blows I could tell: the four's blade. Keep ${lead} in the four, and train the blow that finishes.`, `${lead} carried the killing blows (${n} of ${total})`)
