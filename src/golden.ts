@@ -6,15 +6,16 @@
 // .dd-runtime/golden/ and are never committed (A4).
 //   bun run golden pin <name> [--upto=<page>]   copy the live profile and state (the newest road cut after that page), build, keep
 //   bun run golden check                        rebuild every case and compare
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs"
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, utimesSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { profileDir, root } from "./paths.ts"
 
 // one set of cases for the main checkout and every worktree, so a refactor step built in a worktree is checked against them
 const common = () => { const r = Bun.spawnSync(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], { cwd: root }); return r.exitCode === 0 ? dirname(r.stdout.toString().trim()) : root }
 export const goldenDir = () => process.env.DD_GOLDEN ?? join(common(), ".dd-runtime", "golden")
-// a case keeps the state folder whole but for what a build makes from it (the pages, the art, the live watchers' marks)
-const BUILT = new Set(["town.md", "town.html", "img", "live-last.txt", "caretaker-last.txt"])
+// a case keeps the state folder whole but for what a build only makes (the pages, the art, the warnings, the sources, the farewell's
+// mark, the live watchers' marks): those must come from the build under test, never back from the copy
+const BUILT = new Set(["town.md", "town.html", "img", "coherence.json", "sources.md", "farewell.key", "live-last.txt", "caretaker-last.txt"])
 // what a build writes beside the board, compared like the board: the warnings, the proposal kept for the week, the ledgers
 const OUTPUTS = ["town.md", "coherence.json", "proposal.json", "sources.md", "lessons.json", "roster-ledger.json", "week-start.json", "farewell.key"]
 
@@ -30,23 +31,36 @@ function files(dir: string, base = dir): string[] {
   return readdirSync(dir).sort().flatMap((f) => statSync(join(dir, f)).isDirectory() ? files(join(dir, f), base) : [join(dir, f).slice(base.length + 1)])
 }
 
-/** Seeds an output folder with a case's state, timestamps kept, since the newest road is found by its time. */
+/** Copies a tree with the times of its files and of its folders: a road is found by its folder's time, which a plain copy resets. */
+function copyTree(src: string, dst: string) {
+  cpSync(src, dst, { recursive: true, preserveTimestamps: true })
+  const fix = (a: string, b: string) => {
+    if (!statSync(a).isDirectory()) return
+    for (const f of readdirSync(a)) fix(join(a, f), join(b, f))
+    const t = statSync(a); utimesSync(b, t.atime, t.mtime)
+  }
+  fix(src, dst)
+}
+
+/** Seeds an output folder with a case's state, every time kept. */
 function seed(stateDir: string, out: string) {
   rmSync(out, { recursive: true, force: true })
-  cpSync(stateDir, out, { recursive: true, preserveTimestamps: true })
+  copyTree(stateDir, out)
 }
 
 /** Builds a case into `out`: the board and every file beside it, and the road page. A build that fails is an error, never an
  *  empty output to compare; the clock is the Hamlet's own zone, so a page's save time reads the same on any machine. */
 async function build(profile: string, out: string): Promise<Record<string, string>> {
+  const seeded = Object.fromEntries(files(out).map((f) => [f, statSync(join(out, f)).mtimeMs]))
   const env = { ...process.env, DD_PROFILE: profile, DD_TOWN_OUT: out, TZ: "America/Toronto" }
   const town = Bun.spawnSync(["bun", "src/cli.ts", "town"], { cwd: root, env })
   if (town.exitCode !== 0) throw new Error(`town build failed: ${town.stderr.toString().slice(0, 400)}`)
   const now = Bun.spawnSync(["bun", "src/now.ts"], { cwd: root, env })
   if (now.exitCode !== 0) throw new Error(`road page failed: ${now.stderr.toString().slice(0, 400)}`)
+  // only what this build wrote counts: a file the state already held and the build left alone is not an output of the build
   const got: Record<string, string> = { "now.txt": now.stdout.toString() }
-  for (const f of OUTPUTS) if (existsSync(join(out, f))) got[f] = await Bun.file(join(out, f)).text()
-  for (const f of files(join(out, "proposals"))) got[`proposals/${f}`] = await Bun.file(join(out, "proposals", f)).text()
+  const wrote = (rel: string) => existsSync(join(out, rel)) && (!(rel in seeded) || statSync(join(out, rel)).mtimeMs !== seeded[rel])
+  for (const f of [...OUTPUTS, ...files(join(out, "proposals")).map((x) => `proposals/${x}`)]) if (wrote(f)) got[f] = await Bun.file(join(out, f)).text()
   if (!got["town.md"]?.trim()) throw new Error("the build wrote no board")
   return got
 }
@@ -57,7 +71,7 @@ export async function pin(name: string, from = profileDir(), state = join(common
   rmSync(dir, { recursive: true, force: true })
   mkdirSync(join(dir, "profile"), { recursive: true }); mkdirSync(join(dir, "state"), { recursive: true })
   for (const f of readdirSync(from)) if (f.startsWith("persist.")) cpSync(join(from, f), join(dir, "profile", f))
-  for (const f of readdirSync(state)) if (!BUILT.has(f)) cpSync(join(state, f), join(dir, "state", f), { recursive: true, preserveTimestamps: true })
+  for (const f of readdirSync(state)) if (!BUILT.has(f)) copyTree(join(state, f), join(dir, "state", f))
   const trip = latestTrip(join(dir, "state", "chronicle"))
   if (trip && upto !== undefined) for (const f of readdirSync(trip)) if (Number(f.match(/^(\d+)\./)?.[1] ?? -1) > upto) rmSync(join(trip, f))
   const out = join(dir, "out")
