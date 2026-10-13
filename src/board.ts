@@ -149,7 +149,7 @@ export function weekSoFar(t: Town, start: WeekStart | undefined): string[] {
 }
 
 export interface Tale { snaps: number; beats: Beat[]; well: string[]; wrong: string[]; lessons: Lesson[]; debrief?: Debrief; issues?: string[] }
-export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: Answers; own?: Party; checks?: Check[]; prices?: Map<string, number>; soFar?: string[]; newcomers?: Set<number>; tale?: Tale; camp?: Map<string, CampSkill>; sent?: Proposal; rates?: Record<string, { trips: number; got: number }>; pack?: PackRules }): { board: string; sources: string } {
+export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: Answers; own?: Party; checks?: Check[]; prices?: Map<string, number>; soFar?: string[]; newcomers?: Set<number>; placed?: Map<number, string>; tale?: Tale; camp?: Map<string, CampSkill>; sent?: Proposal; rates?: Record<string, { trips: number; got: number }>; pack?: PackRules }): { board: string; sources: string } {
   const L: string[] = []
   const picked = (opts.answers.expedition && a.parties.find((p) => questLabel(p) === opts.answers.expedition)) || a.best
   const chosen = opts.own ?? picked
@@ -158,7 +158,12 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   const roadItems = road(t, chosen, opts.prices ?? new Map())
   const reserve = roadItems.reduce((x, i) => x + i.count * i.price, 0)
   let left = Math.max(0, gold - reserve)
-  const firstRoad = `the road comes first: I keep ${coin(reserve)} for provisions, and ${left ? `only ${coin(left)} is` : "nothing is"} free`
+  // C93: the four's new heal lesson is set aside right after the road, before any rest or ward is paid (doctrine: the healer first)
+  const healLesson = a.buys.find((u) => u.learn)
+  const healPrice = healLesson?.cost.find((c) => c.type === "gold")?.amount ?? 0
+  const healHeld = healLesson && healPrice <= left ? healPrice : 0
+  left -= healHeld
+  const firstRoad = `the road comes first: I keep ${coin(reserve)} for provisions, and ${left + healHeld ? `only ${coin(left + healHeld)} is` : "nothing is"} free`
 
   L.push(`# The *Hamlet*, week ${t.week}`, "")
   // C84: the estate's tally under the headline, from the same figures as the opening line
@@ -371,12 +376,14 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     if (a.dismiss.some((d) => d.hero.guid === r.hero.guid)) {
       cards.push(`  lean: ${r.options.length}`, `  lean_why: ${y("I would rather let them go than pay for their rest; see Who stays, who goes.")}`)
     } else {
-      const best = r.options.find((o) => o.activity.cost <= left && (seatsLeft.get(o.activity.activity) ?? 0) > 0)
+      // C90: a hero already placed this week has been paid for out of the coffers: lean where they are, and charge nothing again
+      const paid = opts.placed?.get(r.hero.guid)
+      const best = (paid ? r.options.find((o) => o.activity.name === paid) : undefined) ?? r.options.find((o) => o.activity.cost <= left && (seatsLeft.get(o.activity.activity) ?? 0) > 0)
       const taken = r.options.filter((o) => o.activity.cost <= left && !((seatsLeft.get(o.activity.activity) ?? 0) > 0))
       if (best) {
-        left -= best.activity.cost
+        if (best.activity.name !== paid) left -= best.activity.cost
         seatsLeft.set(best.activity.activity, (seatsLeft.get(best.activity.activity) ?? 1) - 1)
-        cards.push(`  lean: ${r.options.indexOf(best)}`, `  lean_why: ${y(`the cheapest place they accept that has a free seat (${best.note}).`)}`)
+        cards.push(`  lean: ${r.options.indexOf(best)}`, `  lean_why: ${y(best.activity.name === paid ? `already there this week, and paid for: the ${paid} keeps them.` : `the cheapest place they accept that has a free seat (${best.note}).`)}`)
       } else if (taken.length) cards.push(`  lean: ${r.options.length}`, `  lean_why: ${y(`the seats they could take (${taken.map((o) => o.activity.name).join(", ")}) I have already leaned to someone above.`)}`)
       else cards.push(`  lean: ${r.options.length}`, `  lean_why: ${y(`${firstRoad}.`)}`)
     }
@@ -399,9 +406,9 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     cards.push(`  context: ${y(`${h.name}, ${h.clsName} level ${h.level}, carries ${ill}. The Medical Ward has ${ward.slots} bed${ward.slots === 1 ? "" : "s"} as the Sanitarium stands, ${ward.slots - ward.used} free this week, for ${a.disease.length} ill.`)}`, "  options:")
     cards.push(`    - pick: "Medical Ward"`, `      effect: ${y(`${coin(ward.cost)}; the disease is treated before the next expedition.`)}`)
     cards.push(`    - pick: "Not this week"`, `      effect: ${y("The disease stays; keep them out of the party.")}`)
-    const purse = ward.cost <= left
+    const purse = ward.cost <= left || opts.placed?.get(h.guid) === ward.name
     const lean = !going && gets && h.level >= 1 && purse ? 0 : 1
-    if (lean === 0) left -= ward.cost
+    if (lean === 0 && opts.placed?.get(h.guid) !== ward.name) left -= ward.cost
     cards.push(`  lean: ${lean}`, `  lean_why: ${y(going ? `${h.name} goes on the road this week: ${ill} bites only at the campfire, and this road lights none. The ward can wait for a week at home.` : !gets ? "the bed goes to a more experienced hero this week." : h.level < 1 ? "a level 0 hero is cheaper to replace than to cure." : !purse ? `${firstRoad}.` : "a hero with experience is worth the bed.")}`)
     filed.push({ at, place: lean === 0 ? ward.buildingName : "" })
   }
@@ -415,10 +422,10 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     if (seats <= 0) { waiting.push(tr); continue }
     const gets = seats > 0
     if (gets) seats--
-    const purse = tr.cost <= left
+    const purse = tr.cost <= left || opts.placed?.get(tr.hero.guid) === tw.name
     // a hero in the ward cannot board the coach: never lean on treating one of the four I would send (Soushi, 2026-10-10)
     const lean = gets && purse && !tr.inParty ? 0 : 1
-    if (lean === 0) left -= tr.cost
+    if (lean === 0 && opts.placed?.get(tr.hero.guid) !== tw.name) left -= tr.cost
     filed.push({ at: cards.length, place: lean === 0 ? tw.buildingName : "" })
     cards.push(`- q: ${y(`Treat ${tr.hero.name}'s ${tr.quirk.name}?`)}`, `  image: ${y(portrait(tr.hero))}`)
     cards.push(`  context: ${y(`${tr.hero.name}, ${tr.hero.clsName} level ${tr.hero.level}${tr.inParty ? ", in the party I would send" : ""}. ${tr.quirk.name}${tr.quirk.description ? `: ${tr.quirk.description}` : "."}${tr.quirk.locked ? " It has set in, and the ward asks more for it." : ""} The ${tw.name} has ${tw.slots} seat${tw.slots === 1 ? "" : "s"}, ${tw.slots - tw.used} free this week.`)}`, "  options:")
@@ -512,12 +519,13 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     // and every lesson you named that the coffers can pay for, so a preferred skill is never left off the card (#4)
     const named = (u: (typeof a.buys)[number]) => u.where === "Guild" && (opts.answers.preferred ?? []).some((n) => n.toLowerCase() === u.label.toLowerCase())
     const shown = [...a.buys.filter(named), ...a.buys.filter((u) => u.where !== "Blacksmith" && !named(u)).slice(0, 5), ...a.buys.filter((u) => u.where === "Blacksmith")]
-    for (const u of shown) L.push(`    - pick: ${y(`${u.hero}: ${u.label} to level ${u.toLevel}`)}`, `      effect: ${y(`${coin(u.cost.find((c) => c.type === "gold")?.amount ?? 0)} at the ${u.where}.`)}`)
+    for (const u of shown) L.push(`    - pick: ${y(u.learn ? `${u.hero}: learn ${u.label}` : `${u.hero}: ${u.label} to level ${u.toLevel}`)}`, `      effect: ${y(`${coin(u.cost.find((c) => c.type === "gold")?.amount ?? 0)} at the Guild${u.learn ? `; a new heal, about ${u.learn.heals} hit points a cast, cast from ${u.hero}'s seat` : ""}.`.replace("at the Guild", `at the ${u.where}`))}`)
     L.push(`    - pick: "Keep the gold"`, `      effect: ${y("Spend nothing at the Guild or the Blacksmith this week.")}`)
     const price = (u: (typeof shown)[number]) => u.cost.find((c) => c.type === "gold")?.amount ?? 0
     // a skill you named comes first, then healing, then the cheapest step (#4)
     const liked = shown.findIndex((u) => u.where === "Guild" && price(u) <= left && preferred.some((n) => n.toLowerCase() === u.label.toLowerCase()))
-    const heal = shown.findIndex((u) => /medicine|reconstruction|grace|comfort|heal/i.test(u.label) && price(u) <= left)
+    left += healHeld
+    const heal = [shown.findIndex((u) => !!u.learn && price(u) <= left), shown.findIndex((u) => /medicine|reconstruction|grace|comfort|heal/i.test(u.label) && price(u) <= left)].find((i) => i >= 0) ?? -1
     const cheap = shown.findIndex((u) => price(u) <= left)
     const pick = liked >= 0 ? liked : heal >= 0 ? heal : cheap
     if (pick >= 0) left -= price(shown[pick]!)
@@ -528,7 +536,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     L.push("```board-stickies")
     const byNeed = new Map<string, string[]>()
     for (const u of a.blocked) { const k = u.blockedBy; byNeed.set(k, [...(byNeed.get(k) ?? []), `${u.hero} ${u.label}`]) }
-    for (const [need, what] of byNeed) L.push(`- title: ${y(`Waiting on ${inWords(need)}`)}`, "  kind: model", `  body: ${y(`${what.join(", ")}. Buy that building upgrade first, with heirlooms.`)}`)
+    for (const [need, what] of byNeed) L.push(`- title: ${y(`Waiting on ${inWords(need)}`)}`, "  kind: model", `  body: ${y(`${what.join(", ")}. ${/resolve/.test(need) ? "Resolve is earned on the road, not bought: these open as they come home from more expeditions." : "Buy that building upgrade first, with heirlooms."}`)}`)
     L.push("```", "")
   }
 
@@ -813,6 +821,7 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
   const rl = rosterLedger((await ledgerFile.exists()) ? ((await ledgerFile.json()) as RosterLedger) : undefined, t, start)
   await Bun.write(ledgerFile, JSON.stringify(rl, null, 1))
   t.settling = settling(rl, t.week, RULE.settleWeeks)
+  const placed = new Map(t.heroes.filter((h) => h.busy && start?.week === t.week && start.heroes.some((x) => x.guid === h.guid && !x.busy)).map((h) => [h.guid, h.busy] as const))
   t = planView(t, start)
   const a = await advise(t)
   // a party Soushi named in a note, seated for the expedition he picked
@@ -832,7 +841,7 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
   }
   // what each heirloom came home at, per recorded trip (U22)
   const rates = Object.fromEntries(await Promise.all(["crest", "bust", "portrait", "deed"].map(async (k) => [k, await heirloomTrips(k)] as const)))
-  const { board, sources } = source(t, a, { foresight: !!opts.foresight, answers, own, checks, prices: await supplyPrices(), soFar: weekSoFar(t, start), newcomers: start && start.week === t.week ? new Set(t.heroes.filter((h) => !start!.heroes.some((x) => x.guid === h.guid)).map((h) => h.guid)) : undefined, tale, camp: await campingSkills(), sent, rates, pack: await packRules() })
+  const { board, sources } = source(t, a, { foresight: !!opts.foresight, answers, own, checks, prices: await supplyPrices(), soFar: weekSoFar(t, start), placed, newcomers: start && start.week === t.week ? new Set(t.heroes.filter((h) => !start!.heroes.some((x) => x.guid === h.guid)).map((h) => h.guid)) : undefined, tale, camp: await campingSkills(), sent, rates, pack: await packRules() })
   // C38: every build is read back for advice that contradicts itself; the live session is told through coherence.json
   const clash = [...contradictions(board), ...(tale?.issues ?? [])]
   await Bun.write(join(outDir(), "coherence.json"), JSON.stringify({ week: t.week, contradictions: clash }, null, 1))

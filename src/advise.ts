@@ -70,6 +70,7 @@ export const RULE = {
   campStress: 1, campHealth: 10, campCure: 4, campGuard: 6, campBoon: 2,
   frontHp: 1.5, // RULE: per hit point above the four's average, at the front; rank 1 counts twice, rank 4 twice against (Soushi, 2026-10-11: "an occultist on front line? he is not really resistant")
   lessonHeal: 4, // RULE: a true healer's extra weight on a road where healing failed before (C42)
+  learnHealMin: 2, // RULE: a heal worth a new lesson restores at least this much a cast; less is the useless kind (C93)
   settleWeeks: 3, // RULE: a hero who joined within this many weeks is never named for dismissal or as the one of a pair to let go (C92)
   noHealerPerStep: 50, // RULE: a four without a true healer takes the shortest road; this much against each step longer (C87, Soushi, 2026-10-13)
   youngRoster: 0.6, // RULE: when this share of the roster is level 1 or lower, the heirlooms go to the Stage Coach's seasoned recruits first (Soushi, 2026-10-11)
@@ -353,6 +354,19 @@ export async function advise(t: Town): Promise<Advice> {
   const forParty = t.heroUpgrades.filter((u) => partyNames.has(u.hero ?? ""))
   const gold = (u: Upgrade) => u.cost.find((c) => c.type === "gold")?.amount ?? 0
   const buys = forParty.filter((u) => u.affordable && !u.blockedBy).sort((a, b) => gold(a) - gold(b))
+  // C93: a heal the four's healers have not learned yet, taught at the Guild, comes before every other lesson (Soushi,
+  // 2026-10-13: "Boosting Gomboult heal should have been the priority"; God's Comfort, 1,000 gold, was never offered)
+  for (const s of best?.seats ?? []) {
+    const h = s.hero, sk = (await heroClass(h.cls)).skills, trees = await heroTrees(h.cls), mine = new Set((h.learned ?? h.skills).map((x) => x.id))
+    for (const k of sk.values()) {
+      if (mine.has(k.id) || !k.heal || !k.targetsAllies || !k.launch.includes(s.rank) || k.healAvg < RULE.learnHealMin) continue
+      const first = trees.get(`${h.cls}.${k.id}`)?.find((r) => r.code === "0")
+      if (!first || first.pre.length || h.level < first.resolve) continue
+      const price = first.cost.find((c) => c.type === "gold")?.amount ?? 0
+      if (price > (t.wallet.gold ?? 0)) continue
+      buys.unshift({ hero: h.name, tree: `${h.cls}.${k.id}`, label: await nameOf("skill", k.id, h.cls), code: "0", toLevel: 1, where: "Guild", cost: first.cost, affordable: true, blockedBy: "", learn: { heals: k.healAvg } } as Upgrade)
+    }
+  }
   const blocked = forParty.filter((u) => u.blockedBy)
   const heirlooms = t.buildingUpgrades.filter((u) => u.affordable)
   const coach = t.buildingUpgrades.filter((u) => u.tree.startsWith("stage_coach."))
