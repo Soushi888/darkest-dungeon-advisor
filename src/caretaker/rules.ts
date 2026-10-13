@@ -103,6 +103,9 @@ export const UNSHOWN: string[] = [
   "closeCall", "lowLeft",
 ]
 
+/** Where the road's counts of my habit are kept, as sources.md cites it beside each count on the farewell. */
+export const ROAD_HABIT_FROM = "RULE_FOOD and RULE_PROVISION in `advise.ts`"
+
 /** The habits grouped as the board shows them: groups and rows in registry order. */
 export function habitGroups(): [string, Habit[]][] {
   const out: [string, Habit[]][] = []

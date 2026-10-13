@@ -12,9 +12,9 @@ import { outDir, profileDir, root } from "../src/sources/paths.ts"
 import { boardOptions, mergePicks, parseAnswers, reconcile } from "../src/world/reconcile.ts"
 import { contradictions, rawNames } from "../src/voice/coherence.ts"
 import { beats, bearing, capture, chronicleDir, debrief, judge, remember, loadLedger, untried, CHRONICLE_RULE, type Snap } from "../src/road/chronicle.ts"
-import { ACTING_ORDER, road, source, weekSoFar } from "../src/voice/board.ts"
+import { ACTING_ORDER, source, weekSoFar } from "../src/voice/board.ts"
 import { supplyPrices } from "../src/sources/game.ts"
-import { advise, fills, readiness, seatParty, skillWorth, RULE } from "../src/caretaker/advise.ts"
+import { advise, fills, readiness, road, seatParty, skillWorth, RULE } from "../src/caretaker/advise.ts"
 
 let profile = ""
 try { profile = profileDir() } catch {}

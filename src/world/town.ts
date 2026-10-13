@@ -374,3 +374,13 @@ export async function town(save: Save): Promise<Town> {
 }
 
 export { LENGTH, DIFFICULTY }
+
+/** A road as the board names it, what it pays leading, so two roads to the same dungeon read apart at a glance (Soushi,
+ *  2026-10-10). The board's picks are kept by this label, so the plan finds the road picked by it too. */
+export function questLabel(p: { quest: { dungeonName: string; length: number; goal: string; rewards: string[] } }): string {
+  const q = p.quest
+  const gold = q.rewards.find((r) => / gold$/.test(r)), trinket = q.rewards[q.rewards.length - 1]
+  const pays = [trinket, ...q.rewards.filter((r) => r !== gold && r !== trinket), gold].filter(Boolean)
+  return `${q.dungeonName}, ${(LENGTH[q.length] ?? String(q.length)).toLowerCase()} (${q.goal}): ${pays.join(", ")}`
+}
+
