@@ -2,7 +2,7 @@
 // notes) and names every pair of advice that cannot both be followed. Run on every build; a board with a contradiction
 // is still written, and the contradictions go to coherence.json and the watcher's log for the live session to fix.
 
-interface Card { q: string; picks: { pick: string; effect: string }[]; lean: number; context: string }
+interface Card { q: string; picks: { pick: string; effect: string }[]; lean: number; context: string; why: string }
 
 function cards(md: string): Card[] {
   const out: Card[] = []
@@ -11,7 +11,7 @@ function cards(md: string): Card[] {
       const q = raw.match(/^- q: "?(.*?)"?$/m)?.[1]
       if (!q) continue
       const picks = [...raw.matchAll(/^ {4}- pick: "?(.*?)"?\n {6}effect: "?(.*?)"?$/gm)].map((m) => ({ pick: m[1]!, effect: m[2]! }))
-      out.push({ q, picks, lean: Number(raw.match(/^ {2}lean: (\d+)/m)?.[1] ?? -1), context: raw.match(/^ {2}context: "?(.*?)"?$/m)?.[1] ?? "" })
+      out.push({ q, picks, lean: Number(raw.match(/^ {2}lean: (\d+)/m)?.[1] ?? -1), context: raw.match(/^ {2}context: "?(.*?)"?$/m)?.[1] ?? "", why: raw.match(/^ {2}lean_why: "?(.*?)"?$/m)?.[1] ?? "" })
     }
   }
   return out
@@ -62,7 +62,7 @@ export function contradictions(md: string): string[] {
   // the leans together stay within the gold left after the road
   const free = gold(md.match(/([\d,]+ gold) is free to spend/)?.[1] ?? "")
   if (free || /is free to spend/.test(md)) {
-    const spend = all.reduce((sum, c) => (c.q === "Which expedition next?" || c.q === "Where do the heirlooms go?" ? sum : sum + gold(c.picks[c.lean]?.effect ?? "")), 0)
+    const spend = all.reduce((sum, c) => (c.q === "Which expedition next?" || c.q === "Where do the heirlooms go?" || /already there this week, and paid for/.test(c.why) ? sum : sum + gold(c.picks[c.lean]?.effect ?? "")), 0)
     if (spend > free) found.push(`the leans spend ${spend.toLocaleString("en-US")} gold, and only ${free.toLocaleString("en-US")} is free after the road`)
   }
 

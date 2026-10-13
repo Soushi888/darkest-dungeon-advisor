@@ -94,3 +94,27 @@ describe("C91, C92: an order of priorities, and a roster that remembers who join
     for (const p of adv.alike) expect(settle.has(p.drop.guid)).toBe(false)
   })
 })
+
+describe("C93: the healer's new heal is the first lesson, and paid seats are never paid twice", () => {
+  test("a heal the four's healer has not learned is offered first, worth a lesson, and leaned when the purse allows", async () => {
+    const t = await town(await readSave())
+    const a = await advise(t)
+    const { RULE } = await import("../src/advise.ts")
+    for (const u of a.buys.filter((u) => u.learn)) {
+      expect(u.learn!.heals).toBeGreaterThanOrEqual(RULE.learnHealMin)
+      expect(a.best!.seats.some((s) => s.hero.name === u.hero)).toBe(true)
+    }
+    const learns = a.buys.findIndex((u) => u.learn), other = a.buys.findIndex((u) => !u.learn)
+    if (learns >= 0 && other >= 0) expect(learns).toBeLessThan(other)
+  })
+
+  test("a hero placed this week is leaned where they are, at no further charge", async () => {
+    const t = await town(await readSave())
+    const a = await advise(t)
+    const r = a.relief.find((x) => x.options.length)
+    if (!r) return
+    const place = r.options[0]!.activity.name
+    const md = source(t, a, { foresight: false, answers: {}, placed: new Map([[r.hero.guid, place]]) }).board
+    expect(md).toContain(`already there this week, and paid for: the ${place} keeps them.`)
+  })
+})

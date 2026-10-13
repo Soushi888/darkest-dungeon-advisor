@@ -26,7 +26,7 @@ export interface HeroView {
 }
 export interface Activity { building: string; buildingName: string; activity: string; name: string; locked: boolean; baseCost: number; cost: number; lockedQuirkCost?: number; heal: number; cure: number; slots: number; used: number; barred: string[]; caretaker?: number }
 export interface Quest { foeResist?: { bleed: number; blight: number; foes: number }; unknownTypes: string[]; bleeders: string[]; blighters: string[]; walked: boolean; idx: number; dungeon: string; dungeonName: string; type: string; goal: string; difficulty: number; length: number; plot: boolean; rewards: string[]; known: string[]; unknownCount: number; types: string[] }
-export interface Upgrade { hero?: string; toLevel?: number; where?: string; tree: string; label: string; code: string; cost: Cost[]; affordable: boolean; blockedBy: string
+export interface Upgrade { learn?: { heals: number }; hero?: string; toLevel?: number; where?: string; tree: string; label: string; code: string; cost: Cost[]; affordable: boolean; blockedBy: string
   // a building upgrade's whole road (U29): every upgrade not yet bought that it waits on, in an order the Hamlet allows, itself last
   chain?: Step[] }
 /** One upgrade on the road to another, as the game's upgrade files require it: buyable now when everything it waits on is bought
