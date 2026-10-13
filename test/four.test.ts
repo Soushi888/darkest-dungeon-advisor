@@ -84,6 +84,15 @@ describe.skipIf(!has)("C112: one four drives the whole plan", () => {
     expect(p.heirlooms!.lean).toBe(1)
   })
 
+  test("B11: the Caretaker's judgement imports nothing from the voice, and the README lists every module of it", async () => {
+    const { readdirSync, readFileSync } = await import("node:fs")
+    const dir = new URL("../src/caretaker/", import.meta.url)
+    const files = readdirSync(dir).filter((f) => f.endsWith(".ts"))
+    for (const f of files) expect(`${f}: ${readFileSync(new URL(f, dir), "utf8").match(/from "\.\.\/voice\/[^"]+"/)?.[0] ?? "none"}`).toBe(`${f}: none`)
+    const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8")
+    for (const f of files) expect(readme).toContain(`src/caretaker/${f}`)
+  })
+
   test("a plan given advice made for another four refuses it", async () => {
     const t = await town(await readSave())
     const answers = { partyNames: t.heroes.slice(0, 4).map((h) => h.name) }

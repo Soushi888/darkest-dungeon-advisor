@@ -377,6 +377,9 @@ export { LENGTH, DIFFICULTY }
 
 /** A road as the board names it, what it pays leading, so two roads to the same dungeon read apart at a glance (Soushi,
  *  2026-10-10). The board's picks are kept by this label, so the plan finds the road picked by it too. */
+/** Gold as the board writes it: "1,500 gold". Neutral ground for the Caretaker's habits and the board's words alike (B11). */
+export const coin = (n: number) => `${n.toLocaleString("en-US")} gold`
+
 export function questLabel(p: { quest: { dungeonName: string; length: number; goal: string; rewards: string[] } }): string {
   const q = p.quest
   const gold = q.rewards.find((r) => / gold$/.test(r)), trinket = q.rewards[q.rewards.length - 1]

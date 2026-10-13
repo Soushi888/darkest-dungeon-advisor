@@ -2,7 +2,6 @@
 // compiled page. One fixed file name, so the picks a reader makes survive every rebuild of the board.
 // The board speaks only as the Caretaker, in the Hamlet's own words (C13): no file, field or save is named on it.
 // Where each figure comes from goes to sources.md beside it (C14).
-import { coin } from "./words.ts"
 import { teachings } from "../road/teach.ts"
 import { campTell } from "../caretaker/camp.ts"
 import { ROLE_WORDS } from "../caretaker/roles.ts"
@@ -17,7 +16,7 @@ import { farewellPlan, plan, prepare, saving, taleHealers, theWeek, type Mix, ty
 import { weekStartOf, type RosterLedger, type WeekStart } from "../world/week.ts"
 import { campingSkills, supplyPrices, type CampSkill, nameOf } from "../sources/game.ts"
 import { install, outDir, root } from "../sources/paths.ts"
-import { DIFFICULTY, LENGTH, questLabel, type HeroView, type Town, type Upgrade } from "../world/town.ts"
+import { coin, DIFFICULTY, LENGTH, questLabel, type HeroView, type Town, type Upgrade } from "../world/town.ts"
 import { buildSkin } from "./skin.ts"
 import { loadPicks, reconcile, type Check } from "../world/reconcile.ts"
 import { contradictions } from "./coherence.ts"

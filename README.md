@@ -71,6 +71,7 @@ src/caretaker/pack.ts    the pack's slots and stacks, from the game's files
 src/caretaker/upkeep.ts  the upkeep plan for the four who leave: skills, weapon, armour, camping skill
 src/caretaker/roles.ts   the roster's balance: what each hero does, and pairs too alike
 src/caretaker/plan.ts    the week's plan: every decision the board shows (the road, the gold each lean spends in turn, who rests, who is treated, who stays), and the farewell's, as one value
+src/caretaker/rules.ts   the Caretaker's habits, one registry: each row of the board's habits section with the constant it reads (C110)
 
 # src/voice/: the board and the words in his voice
 src/voice/coherence.ts   reads every built board back for advice that contradicts itself
