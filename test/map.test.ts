@@ -133,3 +133,8 @@ describe("C54: the road zone keys its map and takes the board's pins", () => {
     expect(roadPanel).not.toContain('<div class="msg')
   })
 })
+
+test("C101: every passage room has an ordinal, past the sixth", async () => {
+  const { ordinal } = await import("../src/map.ts")
+  expect([0, 5, 6, 11, 12].map(ordinal)).toEqual(["first", "sixth", "seventh", "twelfth", "13th"])
+})

@@ -81,7 +81,7 @@ export function readMap(map: any, raid: any): MapView | undefined {
     const mid = [(m.bounds?.[0] + m.bounds?.[1]) / 2 || 0, (m.bounds?.[2] + m.bounds?.[3]) / 2 || 0]
     const where = same.map((r) => compass(r.tiles[0]!.x - mid[0]!, r.tiles[0]!.y - mid[1]!))
     const byPlace = where.every((w) => w) && new Set(where).size === where.length
-    same.forEach((r, i) => names.set(r.id, `the ${same.length === 1 ? "" : `${byPlace ? adj(where[i]!) : RANKS[same.length]?.[i] ?? `${["first", "second", "third", "fourth", "fifth", "sixth"][i]} from the west`} `}${kind}`))
+    same.forEach((r, i) => names.set(r.id, `the ${same.length === 1 ? "" : `${byPlace ? adj(where[i]!) : RANKS[same.length]?.[i] ?? `${ordinal(i)} from the west`} `}${kind}`))
   }
   const short = (id: string) => (names.get(id) ?? "").replace(/ where \w+ ways meet/, "")
   const ends = new Map<string, string[]>()
@@ -201,4 +201,9 @@ export function mapSvg(v: MapView | undefined, icons: Record<string, string> = {
   if (t && art && icons.indicator) out.push(`<circle class="party" cx="${px(t.x) + c / 2}" cy="${py(t.y) + c / 2}" r="${c * 0.75}" fill="none" stroke="#f5f5f4" stroke-width="3"/>`, img("indicator", px(t.x) + c * 0.1, py(t.y) - c * 0.55, c * 0.8))
   else if (t) out.push(`<circle class="party" cx="${px(t.x) + c / 2}" cy="${py(t.y) + c / 2}" r="${c * 0.62}" fill="none" stroke="#f5f5f4" stroke-width="2"/>`)
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="the map as the party knows it"><rect width="${W}" height="${H}" fill="#0b0a08"/>${out.join("")}</svg>`
+}
+
+/** "first" to "twelfth", then "13th" and on: a dungeon with more passage rooms than six still names each one (the Weald, week 22, said "the undefined from the west"). */
+export function ordinal(i: number): string {
+  return ["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth", "eleventh", "twelfth"][i] ?? `${i + 1}th`
 }
