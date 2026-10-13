@@ -16,7 +16,7 @@ function page(store = new Map<string, string>()) {
   new Function("document", "window", "sessionStorage", "addEventListener", "MutationObserver", "setTimeout", keepDrafts)(
     doc, win, ss, (t: string, f: () => void) => (listeners[t] ??= []).push(f), MO, (f: () => void) => timers.push(f))
   return {
-    store, popText, road, doc, writing: () => win.ddWriting() as boolean,
+    store, popText, road, doc, writing: (waited = 0) => win.ddWriting(waited) as boolean,
     open: () => { cls.add("on"); observers.forEach((f) => f()) }, close: () => cls.delete("on"),
     fire: (t: string) => (listeners[t] ?? []).forEach((f) => f()), settle: () => timers.splice(0).forEach((f) => f()),
   }
@@ -47,7 +47,16 @@ describe("C77: his writing survives a rebuild", () => {
 
   test("the served page carries it, ahead of the reload loop, and waits on it", async () => {
     const src = await Bun.file(new URL("../src/cli.ts", import.meta.url)).text()
-    expect(src).toContain("${keepDrafts}let v=null,due=false")
-    expect(src).toContain("if(due&&!window.ddWriting()){due=false;location.reload()}")
+    expect(src).toContain("${keepDrafts}let v=null,due=0")
+    expect(src).toContain("if(due&&!window.ddWriting(Date.now()-due)){due=0;location.reload()}")
+  })
+
+  test("C94: a field that only has focus holds a reload 15 seconds at most; the popup and the road box hold it while they last", () => {
+    const p = page()
+    p.doc.activeElement = { tagName: "TEXTAREA" }
+    expect(p.writing(14000)).toBe(true)
+    expect(p.writing(16000)).toBe(false) // the coach has left: the farewell must not wait on a note field left focused
+    p.open(); expect(p.writing(60000)).toBe(true)
+    p.close(); p.road.value = "half a question"; expect(p.writing(60000)).toBe(true)
   })
 })
