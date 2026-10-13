@@ -52,6 +52,7 @@ export const RULE = {
   campStress: 1, campHealth: 10, campCure: 4, campGuard: 6, campBoon: 2,
   frontHp: 1.5, // RULE: per hit point above the four's average, at the front; rank 1 counts twice, rank 4 twice against (Soushi, 2026-10-11: "an occultist on front line? he is not really resistant")
   lessonHeal: 4, // RULE: a true healer's extra weight on a road where healing failed before (C42)
+  noHealerPerStep: 50, // RULE: a four without a true healer takes the shortest road; this much against each step longer (C87, Soushi, 2026-10-13)
   youngRoster: 0.6, // RULE: when this share of the roster is level 1 or lower, the heirlooms go to the Stage Coach's seasoned recruits first (Soushi, 2026-10-11)
   healerWorth: 8, lightHealWorth: 0, stunWorth: 3, sameClass: 2, levelWorth: 3, stressWeight: 0.1, // RULE: a party's healer, a heal too small to count, stun, a doubled class against, each level, each point of stress against
 }
@@ -283,6 +284,8 @@ export async function advise(t: Town): Promise<Advice> {
     if (hurt.length && p.healer) p.score += RULE.lessonHeal
     if (hurt.length) p.notes.push(`healing failed on this road before (${hurt.join(", ")})`)
   }
+  // C87: with no true healer in the four, the shortest road; the usual weighing returns once one can go
+  for (const p of parties) if (!p.healer && p.quest.length > 1) { p.score -= RULE.noHealerPerStep * (p.quest.length - 1); p.notes.push("no true healer can go, so I keep to the shortest roads") }
   parties.sort((a, b) => b.score - a.score)
   const best = parties[0]
 
