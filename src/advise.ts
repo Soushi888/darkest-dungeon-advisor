@@ -416,7 +416,7 @@ export async function advise(t: Town): Promise<Advice> {
   // Heroes I would rather let go (level 0, outside the party) are left to Who stays, who goes.
   const ward = t.activities.find((x) => x.activity === "treatment")
   const barring = new Set(t.activities.filter((x) => x.heal > 0).flatMap((x) => x.barred))
-  const treat: Treat[] = []
+  const treat: Treat[] = [], prio = new Map<number, number>()
   for (const h of free) {
     const inPartyNow = inParty.has(h.guid)
     if (!ward || (h.level === 0 && !inPartyNow)) continue
@@ -427,13 +427,15 @@ export async function advise(t: Town): Promise<Advice> {
       [bad.find((q) => barring.has(q.id)), "it shuts them out of a place of relief"],
       [bad.find((q) => road.includes(q.name)), `it turns against them on the road to the ${best?.quest.dungeonName}`],
     ]
-    const hit = pick.find(([q]) => q)
-    if (!hit) continue
-    const q = hit[0]!
+    const at = pick.findIndex(([q]) => q)
+    if (at < 0) continue
+    const hit = pick[at]!, q = hit[0]!
+    prio.set(h.guid, at)
     treat.push({ hero: h, quirk: q, why: hit[1], cost: q.locked ? ward.lockedQuirkCost ?? ward.cost : ward.cost, inParty: inPartyNow })
   }
-  // the four I would send are on the road this week, so the ward's seats go first to those who stay home
-  treat.sort((x, y) => Number(x.inParty) - Number(y.inParty) || y.hero.level - x.hero.level)
+  // a thief comes first in line, wherever they go (Soushi, 2026-10-13); within one habit the four I would send are on the road
+  // this week, so the ward's seats go first to those who stay home
+  treat.sort((x, y) => prio.get(x.hero.guid)! - prio.get(y.hero.guid)! || Number(x.inParty) - Number(y.inParty) || y.hero.level - x.hero.level)
   // a thief I would not pay to cure is a thief I would let go, if they are not needed on the road
   for (const h of free.filter((h) => h.level === 0 && !inParty.has(h.guid) && h.quirks.some((q) => q.thief && !q.positive))) {
     if (!dismiss.some((d) => d.hero.guid === h.guid)) dismiss.push({ hero: h, why: `level 0, and ${h.quirks.find((q) => q.thief)!.name}: they keep for themselves what the party finds` })

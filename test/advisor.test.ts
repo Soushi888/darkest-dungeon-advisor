@@ -412,6 +412,9 @@ describe.skipIf(!has)("on the local save", () => {
     const cards = a.treat.filter((tr) => md.includes(`Treat ${tr.hero.name}'s ${tr.quirk.name}?`)).length
     expect(cards).toBeLessThanOrEqual(Math.max(0, ward.slots - ward.used))
     if (a.treat.length > cards) expect(md).toContain(`The ${ward.name} is full this week`)
+    // C103: a thief is first in line, before every other habit, in the four or not
+    const thief = a.treat.map((tr) => tr.quirk.thief)
+    expect(thief).toEqual([...thief].sort((x, y) => Number(y) - Number(x)))
   })
 
   test("C26: what was done this week comes from the saves, against the Hamlet as the week found it", async () => {
