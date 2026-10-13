@@ -273,10 +273,13 @@ export function judge(snaps: Snap[], bs: Beat[], trip: { dungeon: string; dungeo
   for (const s of snaps) for (const h of s.heroes) if (h.maxHp && (!lowest.has(h.name) || h.hp < lowest.get(h.name)!.hp)) lowest.set(h.name, { hp: Math.round(h.hp), max: Math.round(h.maxHp) })
   const brink = [...lowest].filter(([, v]) => v.hp > 0 && v.hp <= v.max * CHRONICLE_RULE.closeCall)
   const mended = bs.filter((b) => b.kind === "mend" && brink.some(([n]) => n === b.who))
-  if (doors + falls >= 2 || falls || (brink.length && !trip.healer)) {
+  // C100: with a healer aboard, a close call is a lesson when the trip failed or two or more were brought to the brink (the Warrens,
+  // week 21: three at the brink, Guernon aboard); one rescue on a trip that worked is the heal earning its seat (C96)
+  const healFellShort = brink.length && (!trip.healer || !trip.success || brink.length >= 2)
+  if (doors + falls >= 2 || falls || healFellShort) {
     const close = brink.map(([n, v]) => `${n} at ${v.hp} of ${v.max}`).join(", ")
-    wrong.push(trip.healer ? `Healing did not keep up: ${doors} at Death's Door${falls ? `, ${falls} fell` : ""}.` : `There was no true healer${doors ? `, and ${doors} stood at Death's Door` : ""}${falls ? `, ${falls} fell` : ""}${close ? `; brought to the brink: ${close}` : ""}.`)
-    lessons.push({ ...base, kind: "healing", text: trip.healer ? "send a stronger heal, or a second one" : `never go without a true healer${close ? ` (${close})` : ""}` })
+    wrong.push(trip.healer ? `Healing did not keep up: ${doors ? `${doors} at Death's Door` : "nobody at Death's Door"}${falls ? `, ${falls} fell` : ""}${close ? `; brought to the brink: ${close}` : ""}.` : `There was no true healer${doors ? `, and ${doors} stood at Death's Door` : ""}${falls ? `, ${falls} fell` : ""}${close ? `; brought to the brink: ${close}` : ""}.`)
+    lessons.push({ ...base, kind: "healing", text: trip.healer ? `send a stronger heal, or a second one${close ? ` (${close})` : ""}` : `never go without a true healer${close ? ` (${close})` : ""}` })
   } else if (mended.length && trip.healer) well.push(`The heal earned its seat: ${mended.map((b) => b.text).join("; ")}.`)
   // C96: what the road used, against what they carried: running short on the way home is a lesson before it is a hunger or the dark
   const first = snaps[0]?.supplies ?? {}, last = snaps.at(-1)?.supplies ?? {}
