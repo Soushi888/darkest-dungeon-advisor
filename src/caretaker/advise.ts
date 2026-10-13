@@ -2,9 +2,9 @@
 // Figures come from the Town (save + game files). Thresholds marked RULE are the Caretaker's own judgement,
 // stated as such on the board, never presented as the game's numbers (ISA A2).
 import { alikePairs, gaps, rolesOf, type Alike, type Member, type Role } from "./roles.ts"
-import { heroClass, heroTrees, nameOf, quirks, supplyPrices, type Skill } from "./game.ts"
-import { bearing, CHRONICLE_RULE, untried } from "./chronicle.ts"
-import type { Activity, HeroView, Quest, QuirkView, Town, Upgrade } from "./town.ts"
+import { heroClass, heroTrees, nameOf, quirks, supplyPrices, type Skill } from "../sources/game.ts"
+import { bearing, CHRONICLE_RULE, untried } from "../road/chronicle.ts"
+import type { Activity, HeroView, Quest, QuirkView, Town, Upgrade } from "../world/town.ts"
 
 export const RULE_FOOD = [0, 8, 12, 16] // RULE: torches by expedition length
 // RULE (C99): food by expedition length, in full slots of the pack (12 a slot in the inventory files), so a hunger or a meal of

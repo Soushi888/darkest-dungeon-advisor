@@ -3,8 +3,8 @@
 import { describe, expect, test } from "bun:test"
 import { mkdirSync, rmSync, utimesSync } from "node:fs"
 import { join } from "node:path"
-import { alreadyTold, inOrder } from "../src/livemark.ts"
-import { root } from "../src/paths.ts"
+import { alreadyTold, inOrder } from "../src/road/livemark.ts"
+import { root } from "../src/sources/paths.ts"
 
 const old = (n: number) => ({ path: `/c/generated_3_old/${String(n).padStart(4, "0")}.json`, mtime: 1000 + n })
 const now = (n: number) => ({ path: `/c/generated_2_new/${String(n).padStart(4, "0")}.json`, mtime: 5000 + n })

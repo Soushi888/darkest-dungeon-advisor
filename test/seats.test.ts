@@ -3,9 +3,9 @@
 import { describe, expect, test } from "bun:test"
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs"
 import { join } from "node:path"
-import { profileDir, root } from "../src/paths.ts"
-import { readSave } from "../src/read.ts"
-import { town } from "../src/town.ts"
+import { profileDir, root } from "../src/sources/paths.ts"
+import { readSave } from "../src/sources/read.ts"
+import { town } from "../src/world/town.ts"
 
 let profile = ""
 try { profile = profileDir() } catch {}

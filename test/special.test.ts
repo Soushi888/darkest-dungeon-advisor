@@ -2,11 +2,11 @@
 // "We need to take note when we encounter special foes like that to improve our strategy").
 import { describe, expect, test } from "bun:test"
 import { existsSync } from "node:fs"
-import { byFoe, meetingLine, meetings } from "../src/foes.ts"
-import { dungeonMonsters, specialFoes } from "../src/game.ts"
-import { install } from "../src/paths.ts"
-import { teachings } from "../src/teach.ts"
-import type { Snap } from "../src/chronicle.ts"
+import { byFoe, meetingLine, meetings } from "../src/road/foes.ts"
+import { dungeonMonsters, specialFoes } from "../src/sources/game.ts"
+import { install } from "../src/sources/paths.ts"
+import { teachings } from "../src/road/teach.ts"
+import type { Snap } from "../src/road/chronicle.ts"
 
 const hero = (name: string, hp: number, deathsDoor = false) => ({ guid: name.length, name, cls: "vestal", hp, maxHp: 20, stress: 0, affliction: "", virtue: "", deathsDoor, lastBlow: "" })
 const page = (round: number | undefined, foes: { name: string; cls: string; hp: number }[], heroes = [hero("Guernon", 10)], narrated: string[] = [], won = 0): Snap =>

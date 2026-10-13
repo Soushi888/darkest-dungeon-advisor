@@ -1,7 +1,7 @@
 // C102: what a road teaches about the foes and the four (Soushi, 2026-10-13: "Those learning are such superficials... I was more
 // expecting learning about foes and synergie between the heroes").
 import { describe, expect, test } from "bun:test"
-import { teachings } from "../src/teach.ts"
+import { teachings } from "../src/road/teach.ts"
 
 const base = { dungeon: "weald", difficulty: 1, length: 1, week: 22, trip: "Weald, week 22" }
 const foe = (name: string, hp: number, bleed: number, victims: Record<string, number>, crits = 0) => ({ name, blows: 3, hp, crits, attacks: {}, victims, blight: 0, bleed })

@@ -5,10 +5,10 @@
   "type": "module",
   "description": "The town advisor for a Darkest Dungeon playthrough: reads the game's data and a copy of the save, and advises between expeditions, only from what the player has seen.",
   "scripts": {
-    "read": "bun src/read.ts",
+    "read": "bun src/sources/read.ts",
     "town": "bun src/cli.ts town",
     "watch": "bun src/cli.ts watch",
-    "skin": "bun src/skin.ts",
+    "skin": "bun src/voice/skin.ts",
     "live": "bun src/live.ts",
     "say": "bun src/road.ts say",
     "now": "bun src/now.ts",

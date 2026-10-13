@@ -1,7 +1,7 @@
 // What the road's quest asks and how far along it is (C68), read from the save: the goal on `raid.raid_instance.goal_ids`,
 // its definition in `campaign/quest/quest.types.json`, and its progress kept under the goal's own id on the raid instance
 // (`explore_all_rooms: { explored_room_count: 8, target_room_count: 8 }`). Soushi, 2026-10-11 05:19: track the quest status.
-import { nameOf, questGoal, strings, text } from "./game.ts"
+import { nameOf, questGoal, strings, text } from "../sources/game.ts"
 
 export interface QuestStatus { name: string; asks: string; done: number; of: number; complete: boolean }
 

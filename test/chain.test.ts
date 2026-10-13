@@ -1,8 +1,8 @@
 // C75: the road to a saved-for upgrade, from the game's upgrade files (Soushi, 2026-10-11 06:16: "detail better the target we
 // save for. For example, we need armorsmith first for Stage Coach seasoned recruits").
 import { describe, expect, test } from "bun:test"
-import { buildingTrees } from "../src/game.ts"
-import { savingPlan } from "../src/board.ts"
+import { buildingTrees } from "../src/sources/game.ts"
+import { savingPlan } from "../src/voice/board.ts"
 
 describe("C75: the whole road to what we save for", () => {
   test("the game's files make seasoned recruits wait on the Guild and both trees of the Blacksmith", async () => {
@@ -38,12 +38,12 @@ describe("C75: the whole road to what we save for", () => {
 // the board leaned "Save them" while the Blacksmith's armour, first tier, was buyable and on the road to the seasoned recruits)
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import { advise } from "../src/advise.ts"
-import { source } from "../src/board.ts"
-import { contradictions } from "../src/coherence.ts"
-import { profileDir, root } from "../src/paths.ts"
-import { readSave } from "../src/read.ts"
-import { town } from "../src/town.ts"
+import { advise } from "../src/caretaker/advise.ts"
+import { source } from "../src/voice/board.ts"
+import { contradictions } from "../src/voice/coherence.ts"
+import { profileDir, root } from "../src/sources/paths.ts"
+import { readSave } from "../src/sources/read.ts"
+import { town } from "../src/world/town.ts"
 
 let profile = ""
 try { profile = profileDir() } catch {}

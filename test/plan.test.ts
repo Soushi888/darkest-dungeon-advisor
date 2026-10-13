@@ -2,7 +2,7 @@
 // give a vision"): what is short, which of this week's roads pay it, how many trips at the rate the recorded roads brought it
 // home, and what the other heirlooms can pay for now without delaying the target.
 import { describe, expect, test } from "bun:test"
-import { savingPlan } from "../src/board.ts"
+import { savingPlan } from "../src/voice/board.ts"
 
 const up = (label: string, cost: [string, number][], tree = "x.y") => ({ tree, label, code: "a", cost: cost.map(([type, amount]) => ({ type, amount })), affordable: true, blockedBy: "" })
 const target = { ...up("Stage Coach: seasoned recruits", [["bust", 9], ["crest", 12]], "stage_coach.upgraded_recruits"), affordable: false }

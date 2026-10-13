@@ -3,9 +3,9 @@
 import { describe, expect, test } from "bun:test"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
-import { P } from "../src/game.ts"
-import { install } from "../src/paths.ts"
-import { seatFaces } from "../src/board.ts"
+import { P } from "../src/sources/game.ts"
+import { install } from "../src/sources/paths.ts"
+import { seatFaces } from "../src/voice/board.ts"
 
 describe("C76: their own look, and a face on every seat", () => {
   test("colour_variation 0 to 3 picks the class's art folder A to D, and each folder has its own portrait", () => {

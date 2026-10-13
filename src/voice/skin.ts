@@ -5,7 +5,7 @@ import { existsSync, mkdirSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 
-const root = resolve(import.meta.dir, "..")
+const root = resolve(import.meta.dir, "..", "..")
 export const install = process.env.DD_INSTALL ?? join(homedir(), ".steam/steam/steamapps/common/DarkestDungeon")
 
 // Each name the skin uses, and the file under the install it is drawn from.

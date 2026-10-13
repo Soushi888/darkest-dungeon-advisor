@@ -2,7 +2,7 @@
 // trip had been kept as "this preparation brought them home with the work done", and week 19, with Furnival at 4 of 22 and no
 // true healer, counted as one that worked.
 import { describe, expect, test } from "bun:test"
-import { beats, judge, type Snap } from "../src/chronicle.ts"
+import { beats, judge, type Snap } from "../src/road/chronicle.ts"
 
 const hero = (name: string, hp: number, maxHp: number) => ({ guid: name.length, name, cls: "x", hp, maxHp, stress: 10, affliction: "", virtue: "", deathsDoor: false, lastBlow: "" })
 const snap = (torch: number, food: number, heroes: ReturnType<typeof hero>[]): Snap => ({ at: "", dungeon: "warrens", difficulty: 1, length: 1, quest: "", key: "", torch: 90, inBattle: false, supplies: { torch, food }, tally: {}, heroes })
@@ -36,8 +36,8 @@ describe("C96: a lesson says what happened", () => {
     const snaps = [snap(8, 8, [hero("Herbert", 33, 33)]), snap(6, 4, [hero("Herbert", 30, 33)])]
     const j = judge(snaps, beats(snaps), trip(true))
     expect(j.lessons.find((l) => l.kind === "food")?.text).toBe("carry more food (4 of 8 left on the way home)")
-    const { RULE_PROVISION } = await import("../src/advise.ts")
-    const { packRules } = await import("../src/pack.ts")
+    const { RULE_PROVISION } = await import("../src/caretaker/advise.ts")
+    const { packRules } = await import("../src/caretaker/pack.ts")
     const slot = (await packRules()).stack.get("food")!
     for (const n of RULE_PROVISION.slice(1)) expect(n % slot).toBe(0)
   })

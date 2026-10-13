@@ -1,7 +1,7 @@
 // C84: the estate's tally under the headline (Soushi, 2026-10-11 07:10: "I would like the number of expedition won / total
 // expedition to be more visible").
 import { describe, expect, test } from "bun:test"
-import { headerTally } from "../src/board.ts"
+import { headerTally } from "../src/voice/board.ts"
 
 describe("C84: won of all, first and large", () => {
   test("the tally sits under the headline: expeditions won of all leading, the roster of its limit, the gold", () => {

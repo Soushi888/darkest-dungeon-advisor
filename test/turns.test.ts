@@ -1,7 +1,7 @@
 // C53: a turn is told by what it did. Pages shaped like the Cove trip of 2026-10-11 (page 59: Wissant struck, nothing
 // changed, and the foes' dodge counter rose; page 106 likewise for Emory).
 import { describe, expect, test } from "bun:test"
-import { turnKind } from "../src/turns.ts"
+import { turnKind } from "../src/road/turns.ts"
 
 const hero = (name: string, hp: number, more: object = {}) => ({ name, guid: 100 + name.charCodeAt(0) * 7 + name.charCodeAt(1), hp, stress: 30, effects: [] as string[], ...more })
 const foe = (name: string, guid: number, hp: number, more: object = {}) => ({ name, guid, hp, effects: [] as string[], ...more })

@@ -3,7 +3,7 @@
 import { readdirSync, statSync } from "node:fs"
 import { join, basename } from "node:path"
 import { stringHash } from "./dson.ts"
-import { install } from "./paths.ts"
+import { install, root } from "./paths.ts"
 
 const DIRS = ["heroes", "monsters", "trinkets", "campaign", "upgrades", "dungeons", "inventory", "raid", "curios", "loot", "shared", "scripts", "raid_results", "activity_log", "modes"]
 const TEXT = /\.(darkest|json|csv|txt|xml)$/
@@ -54,7 +54,7 @@ export async function buildNames(root = install): Promise<Map<number, string>> {
 let cached: Map<number, string> | undefined
 export async function names(): Promise<Map<number, string>> {
   if (cached) return cached
-  const file = Bun.file(join(import.meta.dir, "..", "data", "names.json"))
+  const file = Bun.file(join(root, "data", "names.json"))
   if (await file.exists()) {
     cached = new Map((await file.json() as [number, string][]))
   } else {

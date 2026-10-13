@@ -1,7 +1,7 @@
 // C85: the roster's balance (Soushi, 2026-10-11 07:15: "if we have 2 heroes too similar we can dismiss one and recruit a new one
 // that could better complement the roster, even if lower level").
 import { describe, expect, test } from "bun:test"
-import { alikePairs, gaps, rolesOf, type Member } from "../src/roles.ts"
+import { alikePairs, gaps, rolesOf, type Member } from "../src/caretaker/roles.ts"
 
 const sk = (o: Partial<{ heal: boolean; healAvg: number; stun: boolean; marks: boolean; stressHeal: boolean; targetsAllies: boolean; launch: number[]; target: number[] }>) =>
   ({ id: "x", launch: [1, 2], targetsAllies: false, heal: false, healAvg: 0, stun: false, type: "melee", target: [1], move: [0, 0], marks: false, onMarked: false, bleed: false, blight: false, ...o }) as any

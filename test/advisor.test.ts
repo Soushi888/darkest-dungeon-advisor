@@ -3,18 +3,18 @@
 import { describe, expect, test } from "bun:test"
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import { decode } from "../src/dson.ts"
-import { monster, dungeonMonsters, nameOf, heroClass } from "../src/game.ts"
-import { names } from "../src/names.ts"
-import { readSave } from "../src/read.ts"
-import { town } from "../src/town.ts"
-import { profileDir, root } from "../src/paths.ts"
-import { boardOptions, mergePicks, parseAnswers, reconcile } from "../src/reconcile.ts"
-import { contradictions, rawNames } from "../src/coherence.ts"
-import { beats, bearing, capture, chronicleDir, debrief, judge, remember, loadLedger, untried, CHRONICLE_RULE, type Snap } from "../src/chronicle.ts"
-import { ACTING_ORDER, outDir, road, source, weekSoFar } from "../src/board.ts"
-import { supplyPrices } from "../src/game.ts"
-import { advise, fills, readiness, seatParty, skillWorth, RULE } from "../src/advise.ts"
+import { decode } from "../src/sources/dson.ts"
+import { monster, dungeonMonsters, nameOf, heroClass } from "../src/sources/game.ts"
+import { names } from "../src/sources/names.ts"
+import { readSave } from "../src/sources/read.ts"
+import { town } from "../src/world/town.ts"
+import { outDir, profileDir, root } from "../src/sources/paths.ts"
+import { boardOptions, mergePicks, parseAnswers, reconcile } from "../src/world/reconcile.ts"
+import { contradictions, rawNames } from "../src/voice/coherence.ts"
+import { beats, bearing, capture, chronicleDir, debrief, judge, remember, loadLedger, untried, CHRONICLE_RULE, type Snap } from "../src/road/chronicle.ts"
+import { ACTING_ORDER, road, source, weekSoFar } from "../src/voice/board.ts"
+import { supplyPrices } from "../src/sources/game.ts"
+import { advise, fills, readiness, seatParty, skillWorth, RULE } from "../src/caretaker/advise.ts"
 
 let profile = ""
 try { profile = profileDir() } catch {}
@@ -36,7 +36,7 @@ function copyProfile(): string {
 
 /** The copy with every hero rested (stress 0), for a probe that needs a four fit to send whatever the live roster is this week:
  *  on 2026-10-11 the four were out in the Cove and everyone else over the habit's stress, so no road was offered and five
- *  probes failed on the save rather than on the code. Stress is a float after its name, aligned to four bytes, as dson.ts reads it. */
+ *  probes failed on the save rather than on the code. Stress is a float after its name, aligned to four bytes, as sources/dson.ts reads it. */
 function restedProfile(): string {
   const dir = copyProfile(), p = join(dir, "persist.roster.json"), buf = readFileSync(p), dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
   const needle = Buffer.from("m_Stress\0")

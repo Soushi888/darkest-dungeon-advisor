@@ -5,9 +5,9 @@ import { copyFileSync, existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import type { Snap } from "./chronicle.ts"
 import { whereLine } from "./map.ts"
-import { packRules, slotsOf } from "./pack.ts"
-import { install } from "./paths.ts"
-import { journalPage, pageTitle, plain } from "./words.ts"
+import { packRules, slotsOf } from "../caretaker/pack.ts"
+import { install } from "../sources/paths.ts"
+import { journalPage, pageTitle, plain } from "../voice/words.ts"
 
 export interface Recap {
   page: string; savedAt: string

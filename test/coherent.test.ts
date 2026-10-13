@@ -3,11 +3,11 @@
 // and a recruit of a class the roster already holds is never taken.
 import { describe, expect, test } from "bun:test"
 import { existsSync } from "node:fs"
-import { advise } from "../src/advise.ts"
-import { source } from "../src/board.ts"
-import { profileDir } from "../src/paths.ts"
-import { readSave } from "../src/read.ts"
-import { town } from "../src/town.ts"
+import { advise } from "../src/caretaker/advise.ts"
+import { source } from "../src/voice/board.ts"
+import { profileDir } from "../src/sources/paths.ts"
+import { readSave } from "../src/sources/read.ts"
+import { town } from "../src/world/town.ts"
 
 let profile = ""
 try { profile = profileDir() } catch {}
@@ -42,12 +42,12 @@ describe.skipIf(!has)("C87, C88: a roster and a road that hold together", () => 
 
 describe("C89, C90: a disease that bites only at camp, and a plan that holds while it is applied", () => {
   test("C89: Bulimic counts as biting only at camp, from the game's own buffs", async () => {
-    const { quirks } = await import("../src/game.ts")
+    const { quirks } = await import("../src/sources/game.ts")
     expect((await quirks()).get("bulimic")?.campOnly).toBe(true)
   })
 
   test("C90: a hero placed in a building since the week began is free to the plan, and their seat open", async () => {
-    const { planView } = await import("../src/board.ts")
+    const { planView } = await import("../src/voice/board.ts")
     const t = await town(await readSave())
     const h = t.heroes[0]!, act = t.activities[0]!
     const placed = { ...t, heroes: t.heroes.map((x) => (x.guid === h.guid ? { ...x, busy: act.name } : x)), activities: t.activities.map((x) => (x === act ? { ...x, used: x.used + 1 } : x)) }
@@ -62,7 +62,7 @@ describe("C89, C90: a disease that bites only at camp, and a plan that holds whi
 
 describe("C91, C92: an order of priorities, and a roster that remembers who joined", () => {
   test("C91: a lower rung never outweighs a higher one", async () => {
-    const { byDoctrine, DOCTRINE } = await import("../src/advise.ts")
+    const { byDoctrine, DOCTRINE } = await import("../src/caretaker/advise.ts")
     const road = (healer: boolean, left: number, length: number, score: number) => ({ healer, left, score, quest: { length } as any })
     // a healer beats any score without one
     expect([road(false, 5000, 1, 999), road(true, 100, 2, 1)].sort(byDoctrine)[0]!.healer).toBe(true)
@@ -79,13 +79,13 @@ describe("C91, C92: an order of priorities, and a roster that remembers who join
     expect([hard, easy].sort(byDoctrine as any)[0]!.score).toBe(1)
     expect([{ ...hard, seats: four(2) }, easy].sort(byDoctrine as any)[0]!.score).toBe(99)
     // a newcomer at level 0 learns on the lowest danger only (Soushi, 2026-10-13: "A hero level 0 to a mission level 3...")
-    const { learners } = await import("../src/advise.ts")
+    const { learners } = await import("../src/caretaker/advise.ts")
     expect(learners({ quest: { length: 1, difficulty: 3 }, seats: [...four(2), { hero: { level: 0 } }] })).toBe(0)
     expect(learners({ quest: { length: 1, difficulty: 1 }, seats: [...four(2), { hero: { level: 0 } }] })).toBe(1)
   })
 
   test("C92: a hero who joined within the settling weeks is kept from every dismissal", async () => {
-    const { rosterLedger, settling } = await import("../src/board.ts")
+    const { rosterLedger, settling } = await import("../src/voice/board.ts")
     const t = await town(await readSave())
     const [a, b] = t.heroes
     const start = { week: t.week, heroes: t.heroes.filter((h) => h.guid !== b!.guid).map((h) => ({ guid: h.guid, name: h.name })), bought: [], gold: 0 }
@@ -108,7 +108,7 @@ describe("C93: the healer's new heal is the first lesson, and paid seats are nev
   test("a heal the four's healer has not learned is offered first, worth a lesson, and leaned when the purse allows", async () => {
     const t = await town(await readSave())
     const a = await advise(t)
-    const { RULE } = await import("../src/advise.ts")
+    const { RULE } = await import("../src/caretaker/advise.ts")
     for (const u of a.buys.filter((u) => u.learn)) {
       expect(u.learn!.heals).toBeGreaterThanOrEqual(RULE.learnHealMin)
       expect(a.best!.seats.some((s) => s.hero.name === u.hero)).toBe(true)
@@ -143,7 +143,7 @@ describe("C97: the heirlooms aim at what they can build now", () => {
 
 describe("C98: newcomers learn on short roads", () => {
   test("among roads alike in healing and purse, the short one taking level 0 heroes along comes first; never on a long road", async () => {
-    const { byDoctrine, learners } = await import("../src/advise.ts")
+    const { byDoctrine, learners } = await import("../src/caretaker/advise.ts")
     const seat = (level: number) => ({ hero: { level } })
     const road = (length: number, levels: number[], score: number) => ({ healer: true, left: 10, score, quest: { length } as any, seats: levels.map(seat) as any })
     expect([road(1, [1, 1, 1, 1], 99), road(1, [1, 1, 0, 0], 1)].sort(byDoctrine)[0]!.score).toBe(1)

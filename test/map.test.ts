@@ -1,7 +1,7 @@
 // C51: the map as the party knows it. A synthetic dungeon shaped like the Cove trip of 2026-10-11, so the claim is probed
 // whether or not Soushi is out: an entrance to the east, a crossroads, a dead end to the west and another past a corridor at the crossroads' own longitude.
 import { describe, expect, test } from "bun:test"
-import { mapSvg, newlySeen, readMap, whereLine } from "../src/map.ts"
+import { mapSvg, newlySeen, readMap, whereLine } from "../src/road/map.ts"
 
 const id = (s: string) => new DataView(new TextEncoder().encode(s).buffer).getInt32(0, true)
 const door = (to: string, tile = 0) => ({ area_to: id(to), tile_to: tile, implied: true, type: 0 })
@@ -116,7 +116,7 @@ describe("C51: the map as the party knows it", () => {
 
 describe("C54: the road zone keys its map and takes the board's pins", () => {
   test("every colour on the drawing is in the legend, and a tile seen but not walked stands out", async () => {
-    const { mapLegend } = await import("../src/map.ts")
+    const { mapLegend } = await import("../src/road/map.ts")
     const svg = mapSvg(readMap(fixture(), { in_area: id("rooN"), areatile: 0, last_room_id: id("coNO") }))
     const legend = mapLegend()
     for (const c of new Set([...svg.matchAll(/fill="(#[0-9a-f]{6})"/g)].map((m) => m[1]!).filter((c) => c !== "#0b0a08"))) expect(legend).toContain(c)
@@ -135,6 +135,6 @@ describe("C54: the road zone keys its map and takes the board's pins", () => {
 })
 
 test("C101: every passage room has an ordinal, past the sixth", async () => {
-  const { ordinal } = await import("../src/map.ts")
+  const { ordinal } = await import("../src/road/map.ts")
   expect([0, 5, 6, 11, 12].map(ordinal)).toEqual(["first", "sixth", "seventh", "twelfth", "13th"])
 })

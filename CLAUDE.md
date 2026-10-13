@@ -31,27 +31,27 @@ Environment: `DD_INFERENCE` (the PAI Inference tool `bun run caretaker` calls, d
 
 ## Pipeline
 
-`paths.ts` → `read.ts` → `town.ts` → `advise.ts` (+ `reconcile.ts`, `chronicle.ts`) → `board.ts` (+ `coherence.ts`) → `cli.ts`; `live.ts` streams events for a live session
+`sources/paths.ts` → `sources/read.ts` → `world/town.ts` → `caretaker/advise.ts` (+ `world/reconcile.ts`, `road/chronicle.ts`) → `voice/board.ts` (+ `voice/coherence.ts`) → `cli.ts`; `live.ts` streams events for a live session
 
-The road zone and live-session modules (`road.ts`, `now.ts`, `caretaker.ts`, `recap.ts`, `map.ts`, `quest.ts`, `turns.ts` and the rest) are listed one line each in `README.md` § How it is put together, the canonical module list.
+The road zone and live-session modules (`road.ts`, `now.ts`, `caretaker.ts`, `road/recap.ts`, `road/map.ts`, `world/quest.ts`, `road/turns.ts` and the rest) are listed one line each in `README.md` § How it is put together, the canonical module list.
 
-- `read.ts` copies every `persist.*.json` into `.dd-runtime/profile/` and decodes the copy with `dson.ts` (DSON, ported from robojumper's spec). The original profile is only ever read.
+- `sources/read.ts` copies every `persist.*.json` into `.dd-runtime/profile/` and decodes the copy with `sources/dson.ts` (DSON, ported from robojumper's spec). The original profile is only ever read.
 
-- `names.ts` resolves DSON string hashes by hashing every identifier token in the install's data plus every `<class>.<skill>` pair, cached in `data/names.json`. Delete that file to rebuild it. Integers under 100 000 are never unhashed (a 4500 gold reward once decoded as "Se").
+- `sources/names.ts` resolves DSON string hashes by hashing every identifier token in the install's data plus every `<class>.<skill>` pair, cached in `data/names.json`. Delete that file to rebuild it. Integers under 100 000 are never unhashed (a 4500 gold reward once decoded as "Se").
 
-- `game.ts` loads the game's own files. Every path it reads is declared in `P` so the board can cite it.
+- `sources/game.ts` loads the game's own files. Every path it reads is declared in `P` so the board can cite it.
 
-- `town.ts` turns the save into a `Town`: pure derivation, no advice. It also computes the knowledge boundary.
+- `world/town.ts` turns the save into a `Town`: pure derivation, no advice. It also computes the knowledge boundary.
 
-- `advise.ts` is the Caretaker's judgement: relief, parties seated by rank, dismissals, recruits, Guild and Blacksmith purchases, heirlooms, trinkets.
+- `caretaker/advise.ts` is the Caretaker's judgement: relief, parties seated by rank, dismissals, recruits, Guild and Blacksmith purchases, heirlooms, trinkets.
 
-- `board.ts` writes the niceboard markdown in his voice, copies portraits into `.local/town/img/`, and compiles with the external compiler plus the skin.
+- `voice/board.ts` writes the niceboard markdown in his voice, copies portraits into `.local/town/img/`, and compiles with the external compiler plus the skin.
 
-- `chronicle.ts` keeps a snapshot of the party at every dungeon save (`.local/town/chronicle/<expedition>/`, a summary plus the whole decoded record), turns it into the survivors' tale and the lessons on return, and keeps the ledger (`.local/town/lessons.json`).
+- `road/chronicle.ts` keeps a snapshot of the party at every dungeon save (`.local/town/chronicle/<expedition>/`, a summary plus the whole decoded record), turns it into the survivors' tale and the lessons on return, and keeps the ledger (`.local/town/lessons.json`).
 
-- `coherence.ts` reads every built board back and lists advice that contradicts itself into `.local/town/coherence.json`.
+- `voice/coherence.ts` reads every built board back and lists advice that contradicts itself into `.local/town/coherence.json`.
 
-- `cli.ts` serves the page with an injected "Send to the Caretaker" button (also Ctrl+Shift+Enter). It POSTs the board's answers to `/answers`, which writes `.local/town/answers.md`, merges `.local/town/picks.json` and rebuilds. The page keeps picks by card number, so a head script re-attaches each stored pick to its question text, and the server drops a pick that is not one of its card's options (C18); `readAnswers()` in `board.ts` still finds the expedition and party picks by card title, so keep those titles stable. The page reloads on `/version` (`<watcher start>-<build count>`, served `no-store`). Rebuilds are serialized, with at most one queued rerun.
+- `cli.ts` serves the page with an injected "Send to the Caretaker" button (also Ctrl+Shift+Enter). It POSTs the board's answers to `/answers`, which writes `.local/town/answers.md`, merges `.local/town/picks.json` and rebuilds. The page keeps picks by card number, so a head script re-attaches each stored pick to its question text, and the server drops a pick that is not one of its card's options (C18); `readAnswers()` in `voice/board.ts` still finds the expedition and party picks by card title, so keep those titles stable. The page reloads on `/version` (`<watcher start>-<build count>`, served `no-store`). Rebuilds are serialized, with at most one queued rerun.
 
 ## Invariants the tests and ISA enforce
 
@@ -59,17 +59,17 @@ The road zone and live-session modules (`road.ts`, `now.ts`, `caretaker.ts`, `re
 
 - **Knowledge boundary (C5, C6, A3).** A monster may be named only if it lives in a dungeon level the campaign log records as walked *and* one of its attacks is in `persist.game_knowledge.json`. Attack ids are shared across tiers, so the walked level is what tells variants apart. A dungeon never walked gets no foe named. Curio interactions are never shown. The `--foresight` flag is the only exception, and it names kinds, never monsters.
 
-- **No figure from memory (A2, C14).** Every number comes from the save or a game file, or, for a rule of the game no file holds, from the wiki with its page cited; each is listed with its source in `.local/town/sources.md`, never on the board. The advisor's own thresholds (`RULE` and `RULE_FOOD` in `advise.ts`, `CHRONICLE_RULE` in `chronicle.ts`) are labelled "my habit" on the board.
+- **No figure from memory (A2, C14).** Every number comes from the save or a game file, or, for a rule of the game no file holds, from the wiki with its page cited; each is listed with its source in `.local/town/sources.md`, never on the board. The advisor's own thresholds (`RULE` and `RULE_FOOD` in `caretaker/advise.ts`, `CHRONICLE_RULE` in `road/chronicle.ts`) are labelled "my habit" on the board.
 
-- **The board stays in the fiction (C13).** Everything on it is the Caretaker speaking in the Hamlet's words: no save, file, field, upgrade code or tool named. Name upgrade trees through `TREE_WORDS` in `town.ts` and prerequisites through `inWords()` in `board.ts`. The C13 test greps the board for meta vocabulary.
+- **The board stays in the fiction (C13).** Everything on it is the Caretaker speaking in the Hamlet's words: no save, file, field, upgrade code or tool named. Name upgrade trees through `TREE_WORDS` in `world/town.ts` and prerequisites through `inWords()` in `voice/board.ts`. The C13 test greps the board for meta vocabulary.
 
-- **Picks are checked, never applied (C18).** The board cannot act in the game; `src/reconcile.ts` compares the week's picks (`.local/town/picks.json`) with the next Hamlet save and the board shows each as done, not yet, or not as chosen.
+- **Picks are checked, never applied (C18).** The board cannot act in the game; `src/world/reconcile.ts` compares the week's picks (`.local/town/picks.json`) with the next Hamlet save and the board shows each as done, not yet, or not as chosen.
 
 - **No game art or wiki text committed (A4).** Art is inlined into `.local/` at build time; `.local/`, `data/` and `.dd-runtime/` are gitignored. Fonts in `skin/fonts/` are SIL OFL and are the only committed assets.
 
-- **The road is paid for first (C22).** `road()` in `advise.ts` prices the expedition's provisions from `inventory/base.supply.inventory.items.darkest` (with the week's event applied); every spending lean on the board draws only on the gold left after that reserve.
+- **The road is paid for first (C22).** `road()` in `caretaker/advise.ts` prices the expedition's provisions from `inventory/base.supply.inventory.items.darkest` (with the week's event applied); every spending lean on the board draws only on the gold left after that reserve.
 
-- **The fallen are never advised (C21).** `persist.roster.json` keeps dead heroes; `town.ts` sets aside every guid the campaign log records as `died`.
+- **The fallen are never advised (C21).** `persist.roster.json` keeps dead heroes; `world/town.ts` sets aside every guid the campaign log records as `died`.
 
 - **A save made in a dungeon** (`persist.game.json` `inraid`) is refused in character and writes no board (C8). The watcher's `/version` only moves on Hamlet saves (C16).
 
@@ -87,7 +87,7 @@ When Soushi plays with the board open, watch the session yourself; he should nev
 
 - **On SAVE town:** the board has rebuilt. Read its "Did you do what you chose?" zone and name anything Not as chosen.
 
-- **On WARN:** the rebuilt board advises two things that cannot both be done (C38, `src/coherence.ts`). Fix the advice at its source before Soushi acts on it, and add a check to `contradictions()` for any new kind of clash he catches.
+- **On WARN:** the rebuilt board advises two things that cannot both be done (C38, `src/voice/coherence.ts`). Fix the advice at its source before Soushi acts on it, and add a check to `contradictions()` for any new kind of clash he catches.
 
 - **On ASK:** Soushi wrote from the road zone at the top of the farewell board (C49). Answer there with `bun run say --page <page> "<text>"` after reading `bun run now`, and keep commenting every dungeon page there too, so the thread is the whole conversation.
 

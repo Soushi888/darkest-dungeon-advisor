@@ -43,38 +43,49 @@ What "done" means, with falsifiers, is in [`ISA.md`](ISA.md). The kickoff board 
 ## How it is put together
 
 ```
-src/dson.ts     the DSON save decoder (ported from robojumper's spec, MIT)
-src/names.ts    the name table: every identifier in the game's data, by its DSON hash
-src/read.ts     copies the profile into .dd-runtime/ and decodes it
-src/paths.ts    where the install, the profile and the board live (DD_INSTALL, DD_PROFILE, DD_TOWN_OUT)
-src/game.ts     the game's own data: quirks, class skills (reach, moves, marks, bleed, blight, heals), upgrade trees, buildings, monsters, trinkets, effects, English names
-src/town.ts     the Hamlet as the save describes it, the knowledge boundary, the expedition just brought back
-src/advise.ts   the Caretaker's reading: relief, wards, party and its fighting shape, roster, purchases, trinkets, readiness, the road's provisions
-src/reconcile.ts the week's picks against the next Hamlet save: done, not yet, not as chosen
-src/chronicle.ts the expedition's chronicle, the survivors' tale, what went well and wrong, the ledger of lessons
-src/coherence.ts reads every built board back for advice that contradicts itself
-src/board.ts    the board source in his voice (Hamlet, farewell, return), compiled with the Niceboard compiler and the skin; sources.md beside it
-src/skin.ts     the in-game panel theme, with art read from your install
-src/cli.ts      town, watch, the answers endpoint and the send shortcut
-src/live.ts     the live session's event stream
-src/livemark.ts where a restarted live stream resumes
-src/words.ts    the live stream's effects in the game's own words
-src/notable.ts  which chronicle page changes the story
-src/now.ts      bun run now: the latest chronicle page, read whole
-src/road.ts     the road zone: the conversation with the Caretaker while the party is out (bun run say)
-src/recap.ts    the Caretaker's recap, its numbers built from the page
-src/caretaker.ts bun run caretaker: he comments the road and answers ASKs by himself
-src/camp.ts     the campfire council: camping skills in the Hamlet's words, and what the four carry to the fire
-src/map.ts      the dungeon's map as the party knows it
-src/quest.ts    what the road's quest asks and how far along it is
-src/turns.ts    what a turn did: a hit, a dodge, a move, a buff or a heal
-src/slain.ts    the foes slain in the fight under way
-src/talecheck.ts the tale checked against the pages before it is told
-src/pack.ts     the pack's slots and stacks, from the game's files
-src/upkeep.ts   the upkeep plan for the four who leave: skills, weapon, armour, camping skill
-src/roles.ts    the roster's balance: what each hero does, and pairs too alike
-src/drafts.ts   a rebuild never reloads the page under his hands
-src/ship.ts     bun run ship: a PR merges only through a green suite
+# the shell: commands, each an entry point
+src/cli.ts               town, watch, the answers endpoint and the send shortcut
+src/live.ts              the live session's event stream
+src/now.ts               bun run now: the latest chronicle page, read whole
+src/road.ts              the road zone: the conversation with the Caretaker while the party is out (bun run say)
+src/caretaker.ts         bun run caretaker: he comments the road and answers ASKs by himself
+src/ship.ts              bun run ship: a PR merges only through a green suite
+
+# src/sources/: the save and the game's files, read
+src/sources/dson.ts      the DSON save decoder (ported from robojumper's spec, MIT)
+src/sources/names.ts     the name table: every identifier in the game's data, by its DSON hash
+src/sources/read.ts      copies the profile into .dd-runtime/ and decodes it
+src/sources/paths.ts     where the install, the profile and the board live (DD_INSTALL, DD_PROFILE, DD_TOWN_OUT)
+src/sources/game.ts      the game's own data: quirks, class skills (reach, moves, marks, bleed, blight, heals), upgrade trees, buildings, monsters, trinkets, effects, English names
+
+# src/world/: the Hamlet as a value, and the picks checked against it
+src/world/town.ts        the Hamlet as the save describes it, the knowledge boundary, the expedition just brought back
+src/world/reconcile.ts   the week's picks against the next Hamlet save: done, not yet, not as chosen
+src/world/quest.ts       what the road's quest asks and how far along it is
+
+# src/caretaker/: the Caretaker's judgement
+src/caretaker/advise.ts  the Caretaker's reading: relief, wards, party and its fighting shape, roster, purchases, trinkets, readiness, the road's provisions
+src/caretaker/camp.ts    the campfire council: camping skills in the Hamlet's words, and what the four carry to the fire
+src/caretaker/pack.ts    the pack's slots and stacks, from the game's files
+src/caretaker/upkeep.ts  the upkeep plan for the four who leave: skills, weapon, armour, camping skill
+src/caretaker/roles.ts   the roster's balance: what each hero does, and pairs too alike
+
+# src/voice/: the board and the words in his voice
+src/voice/coherence.ts   reads every built board back for advice that contradicts itself
+src/voice/board.ts       the board source in his voice (Hamlet, farewell, return), compiled with the Niceboard compiler and the skin; sources.md beside it
+src/voice/skin.ts        the in-game panel theme, with art read from your install
+src/voice/words.ts       the live stream's effects in the game's own words
+src/voice/drafts.ts      a rebuild never reloads the page under his hands
+
+# src/road/: the expedition under way, and its chronicle
+src/road/chronicle.ts    the expedition's chronicle, the survivors' tale, what went well and wrong, the ledger of lessons
+src/road/livemark.ts     where a restarted live stream resumes
+src/road/notable.ts      which chronicle page changes the story
+src/road/recap.ts        the Caretaker's recap, its numbers built from the page
+src/road/map.ts          the dungeon's map as the party knows it
+src/road/turns.ts        what a turn did: a hit, a dodge, a move, a buff or a heal
+src/road/slain.ts        the foes slain in the fight under way
+src/road/talecheck.ts    the tale checked against the pages before it is told
 ```
 
 ## References

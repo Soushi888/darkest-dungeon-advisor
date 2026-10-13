@@ -8,7 +8,7 @@
 //   bun run golden check                        rebuild every case and compare
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, utimesSync } from "node:fs"
 import { dirname, join } from "node:path"
-import { profileDir, root } from "./paths.ts"
+import { profileDir, root } from "./sources/paths.ts"
 
 // one set of cases for the main checkout and every worktree, so a refactor step built in a worktree is checked against them
 const common = () => { const r = Bun.spawnSync(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], { cwd: root }); return r.exitCode === 0 ? dirname(r.stdout.toString().trim()) : root }

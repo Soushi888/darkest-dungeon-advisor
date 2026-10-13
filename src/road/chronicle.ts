@@ -3,11 +3,11 @@
 // what went wrong, and a ledger of lessons that outlives the trip. Writes only under .local/town (ISA A1).
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs"
 import { join } from "node:path"
-import { outDir } from "./board.ts"
-import { monster, nameOf, strings, text } from "./game.ts"
-import type { Save } from "./read.ts"
+import { outDir } from "../sources/paths.ts"
+import { monster, nameOf, strings, text } from "../sources/game.ts"
+import type { Save } from "../sources/read.ts"
 import { mapOf, type MapView } from "./map.ts"
-import { effectWords } from "./words.ts"
+import { effectWords } from "../voice/words.ts"
 
 // RULE: my own reading of a trip, not the game's numbers (ISA A2)
 export const CHRONICLE_RULE = {
@@ -173,7 +173,7 @@ export async function heirloomTrips(kind: string): Promise<{ trips: number; got:
     const first = (await Bun.file(join(d, pages[0]!)).json()) as Snap, last = (await Bun.file(join(d, pages.at(-1)!)).json()) as Snap
     const raws = readdirSync(d).filter((f) => /^\d+\.raw\.json$/.test(f)).sort()
     const raw = raws.length ? await Bun.file(join(d, raws.at(-1)!)).json().catch(() => undefined) : undefined
-    const { questStatus } = await import("./quest.ts")
+    const { questStatus } = await import("../world/quest.ts")
     const q = await questStatus(raw)
     const reward = q?.complete ? Object.values<any>(raw?.raid?.raid_instance?.completion_reward?.items_definition?.items ?? {}).filter((i) => i.type === "heirloom" && i.id === kind).reduce((t, i) => t + Number(i.amount ?? 0), 0) : 0
     trips++

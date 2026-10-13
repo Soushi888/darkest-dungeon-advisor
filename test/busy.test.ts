@@ -3,8 +3,8 @@
 import { describe, expect, test } from "bun:test"
 import { mkdirSync, rmSync, utimesSync } from "node:fs"
 import { join } from "node:path"
-import { isNotable } from "../src/notable.ts"
-import { root } from "../src/paths.ts"
+import { isNotable } from "../src/road/notable.ts"
+import { root } from "../src/sources/paths.ts"
 import { feed, roadPanel, say } from "../src/road.ts"
 
 const page = (torch: number, tally: Record<string, number> = {}) => ({ at: "", dungeon: "warrens", difficulty: 1, length: 1, quest: "explore", key: "k", torch, inBattle: false, supplies: {}, tally, heroes: [{ guid: 1, name: "Azor", cls: "vestal", hp: 20, maxHp: 24, stress: 10 }] })

@@ -1,7 +1,7 @@
 // C61: on return, the road and four that left are named against what was proposed the week they left, each difference marked,
 // and whose choice it was (issue #3).
 import { describe, expect, test } from "bun:test"
-import { sentAgainst, type Proposal } from "../src/board.ts"
+import { sentAgainst, type Proposal } from "../src/voice/board.ts"
 
 const names: Record<number, string> = { 24: "Poussin", 69: "Burci", 60: "Azor", 67: "Petremol", 19: "Guernon" }
 const name = (g: number) => names[g] ?? ""

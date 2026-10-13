@@ -3,10 +3,10 @@
 import { describe, expect, test } from "bun:test"
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import { advise, RULE } from "../src/advise.ts"
-import { profileDir, root } from "../src/paths.ts"
-import { readSave } from "../src/read.ts"
-import { town } from "../src/town.ts"
+import { advise, RULE } from "../src/caretaker/advise.ts"
+import { profileDir, root } from "../src/sources/paths.ts"
+import { readSave } from "../src/sources/read.ts"
+import { town } from "../src/world/town.ts"
 
 let profile = ""
 try { profile = profileDir() } catch {}

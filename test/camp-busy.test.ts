@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdirSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import { comment } from "../src/caretaker.ts"
-import { root } from "../src/paths.ts"
+import { root } from "../src/sources/paths.ts"
 import { feed, roadPanel, setCaretaker } from "../src/road.ts"
 
 const withEnv = async (env: Record<string, string>, f: () => Promise<void>) => {

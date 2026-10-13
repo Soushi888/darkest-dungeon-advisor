@@ -1,7 +1,7 @@
 // C77: a rebuild never reloads the page under his hands (Soushi, 2026-10-11 06:42: "Comment On..., because it is a popup is
 // often dismissed while I'm writing because of a page reload, we need to fix this").
 import { describe, expect, test } from "bun:test"
-import { keepDrafts } from "../src/drafts.ts"
+import { keepDrafts } from "../src/voice/drafts.ts"
 
 // a stand-in page: the comment popup, the road box, focus, storage that survives a reload, and the timers run by hand
 function page(store = new Map<string, string>()) {

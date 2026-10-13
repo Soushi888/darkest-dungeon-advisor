@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdirSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import { FIGHT, promptFor } from "../src/caretaker.ts"
-import { root } from "../src/paths.ts"
+import { root } from "../src/sources/paths.ts"
 import { feed, roadPanel } from "../src/road.ts"
 
 const hero = (name: string, guid: number) => ({ guid, name, cls: "crusader", hp: 20, maxHp: 33, stress: 30, affliction: "", virtue: "", deathsDoor: false, lastBlow: "", effects: ["speed_rating 1 (2)"] })

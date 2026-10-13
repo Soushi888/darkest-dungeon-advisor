@@ -16,5 +16,9 @@ export function profileDir(): string {
   throw new Error("no Darkest Dungeon profile found; set DD_PROFILE to the folder holding persist.game.json")
 }
 
-export const root = join(import.meta.dir, "..")
+export const root = join(import.meta.dir, "..", "..")
 export const runtime = join(root, ".dd-runtime")
+
+// DD_TOWN_OUT lets the tests build elsewhere, so they never touch the live board or its picks. Read at call time: a test file
+// sets it after its imports, so a value fixed at import would send its builds into the live board's folder
+export const outDir = () => process.env.DD_TOWN_OUT ?? join(root, ".local", "town")

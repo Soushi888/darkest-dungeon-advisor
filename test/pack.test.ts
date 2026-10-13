@@ -1,6 +1,6 @@
 // C79: the pack's slots (Soushi, 2026-10-11 06:48: "There is only 6 remaining places. It is to take into consideration").
 import { describe, expect, test } from "bun:test"
-import { dropFirst, packRules, slotsOf, trims } from "../src/pack.ts"
+import { dropFirst, packRules, slotsOf, trims } from "../src/caretaker/pack.ts"
 
 describe("C79: the pack has room, or I say what to leave", () => {
   test("the slots and the stacks come from the game's files", async () => {
