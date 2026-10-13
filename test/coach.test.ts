@@ -40,7 +40,8 @@ describe.skipIf(!has)("C59: the Stage Coach on the heirlooms' card", () => {
     const md = await Bun.file(join(out, "town.md")).text(), a = await advise(await town(await readSave(dir)))
     const card = md.split(/\n- q: /).find((c) => c.startsWith('"Where do the heirlooms go?"')) ?? ""
     for (const u of a.coach.filter((u) => !u.affordable)) expect(card).toContain(`${u.label.replace(/^[^:]+: /, "")} (${u.cost.map((c) => `${c.amount} ${c.type}s`).join(" and ")};`)
-    if (a.young && a.coach.some((u) => u.tree === "stage_coach.upgraded_recruits")) expect(card).toMatch(/lean_why: "my habit: \d+ of your \d+ heroes are level 1 or lower/)
+    // C97: the habit holds only for the first tier of seasoned recruits
+    if (a.young && a.coach.some((u) => u.tree === "stage_coach.upgraded_recruits" && u.code === "a")) expect(card).toMatch(/lean_why: "my habit: \d+ of your \d+ heroes are level 1 or lower/)
     expect(md).toContain(`the heirlooms go to the Stage Coach's seasoned recruits first | ${Math.round(RULE.youngRoster * 100)}% |`)
     rmSync(dir, { recursive: true, force: true })
   })

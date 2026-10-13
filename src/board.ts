@@ -411,7 +411,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     const purse = ward.cost <= left || opts.placed?.get(h.guid) === ward.name
     const lean = !going && gets && h.level >= 1 && purse ? 0 : 1
     if (lean === 0 && opts.placed?.get(h.guid) !== ward.name) left -= ward.cost
-    cards.push(`  lean: ${lean}`, `  lean_why: ${y(going ? `${h.name} goes on the road this week: ${ill} bites only at the campfire, and this road lights none. The ward can wait for a week at home.` : !gets ? "the bed goes to a more experienced hero this week." : h.level < 1 ? "a level 0 hero is cheaper to replace than to cure." : !purse ? `${firstRoad}.` : "a hero with experience is worth the bed.")}`)
+    cards.push(`  lean: ${lean}`, `  lean_why: ${y(opts.placed?.get(h.guid) === ward.name ? `already there this week, and paid for: the ${ward.name} keeps them.` : going ? `${h.name} goes on the road this week: ${ill} bites only at the campfire, and this road lights none. The ward can wait for a week at home.` : !gets ? "the bed goes to a more experienced hero this week." : h.level < 1 ? "a level 0 hero is cheaper to replace than to cure." : !purse ? `${firstRoad}.` : "a hero with experience is worth the bed.")}`)
     filed.push({ at, place: lean === 0 ? ward.buildingName : "" })
   }
   // the Treatment Ward (C25): one quirk per hero, by my habit; seats to the party first, then the most experienced
@@ -433,7 +433,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     cards.push(`  context: ${y(`${tr.hero.name}, ${tr.hero.clsName} level ${tr.hero.level}${tr.inParty ? ", in the party I would send" : ""}. ${tr.quirk.name}${tr.quirk.description ? `: ${tr.quirk.description}` : "."}${tr.quirk.locked ? " It has set in, and the ward asks more for it." : ""} The ${tw.name} has ${tw.slots} seat${tw.slots === 1 ? "" : "s"}, ${tw.slots - tw.used} free this week.`)}`, "  options:")
     cards.push(`    - pick: ${y(tw.name)}`, `      effect: ${y(`${tr.cost ? coin(tr.cost) : "free this week"}; the ward works on ${tr.quirk.name}, and ${tr.hero.name} stays in the Hamlet while it does.`)}`)
     cards.push(`    - pick: "Not this week"`, `      effect: ${y(`${tr.hero.name} keeps it for now.`)}`)
-    cards.push(`  lean: ${lean}`, `  lean_why: ${y(tr.inParty ? `${tr.hero.name} rides with the party I would send, and a hero in the ward cannot board the coach; treat it in a week they stay home.` : !gets ? "the seat goes to someone the road needs more." : !purse ? `${firstRoad}.` : `${tr.why}.`)}`)
+    cards.push(`  lean: ${lean}`, `  lean_why: ${y(opts.placed?.get(tr.hero.guid) === tw.name ? `already there this week, and paid for: the ${tw.name} keeps them.` : tr.inParty ? `${tr.hero.name} rides with the party I would send, and a hero in the ward cannot board the coach; treat it in a week they stay home.` : !gets ? "the seat goes to someone the road needs more." : !purse ? `${firstRoad}.` : `${tr.why}.`)}`)
   }
   const stuck = a.relief.filter((r) => !r.options.length)
   if (cards.length) {
