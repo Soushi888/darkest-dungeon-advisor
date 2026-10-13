@@ -329,7 +329,8 @@ describe.skipIf(!has)("on the local save", () => {
     // the return section mourns who fell on the last road (C37); nothing after it may advise them
     const full = await Bun.file(join(townOut, "town.md")).text(), at = full.indexOf("## The coach is back")
     const md = at < 0 ? full : full.slice(0, at) + full.slice(full.indexOf("\n## ", at + 5))
-    for (const h of t.fallen) expect(t.heroes.some((x) => x.name === h.name) || !md.includes(h.name)).toBe(true)
+    // a name the living or the coach's new arrivals also carry (the coach may bring a second Herbard) is not the fallen one
+    for (const h of t.fallen) expect([...t.heroes, ...t.recruits].some((x) => x.name === h.name) || !md.includes(h.name)).toBe(true)
   })
 
   test("C22: the road is priced from the Provisioner's list and paid for first; no lean spends what it needs", async () => {
@@ -412,6 +413,9 @@ describe.skipIf(!has)("on the local save", () => {
     const cards = a.treat.filter((tr) => md.includes(`Treat ${tr.hero.name}'s ${tr.quirk.name}?`)).length
     expect(cards).toBeLessThanOrEqual(Math.max(0, ward.slots - ward.used))
     if (a.treat.length > cards) expect(md).toContain(`The ${ward.name} is full this week`)
+    // C103: a thief is first in line, before every other habit, in the four or not
+    const thief = a.treat.map((tr) => tr.quirk.thief)
+    expect(thief).toEqual([...thief].sort((x, y) => Number(y) - Number(x)))
   })
 
   test("C26: what was done this week comes from the saves, against the Hamlet as the week found it", async () => {
