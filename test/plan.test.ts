@@ -8,7 +8,7 @@ import { savingPlan, source } from "../src/voice/board.ts"
 import { coin } from "../src/voice/words.ts"
 import { questLabel } from "../src/world/town.ts"
 import { plan, prepare } from "../src/caretaker/plan.ts"
-import { advise } from "../src/caretaker/advise.ts"
+import { advise, bears } from "../src/caretaker/advise.ts"
 import { campingSkills, supplyPrices } from "../src/sources/game.ts"
 import { profileDir, root } from "../src/sources/paths.ts"
 import { readSave } from "../src/sources/read.ts"
@@ -84,7 +84,7 @@ describe("C111: the board renders one plan", () => {
     rmSync(copy, { recursive: true, force: true }); mkdirSync(copy, { recursive: true })
     for (const f of readdirSync(profile)) if (f.startsWith("persist.") && f !== "persist.raid.json") cpSync(join(profile, f), join(copy, f))
     const t0 = await readTown(await readSave(copy)), prices = await supplyPrices(), camp = await campingSkills()
-    let checked = 0, owned = 0, camped = 0, broke = 0
+    let checked = 0, owned = 0, camped = 0, broke = 0, leanNo = 0
     for (const gold of [t0.wallet.gold ?? 0, 0, 600, 2500, 12000]) {
       const t = { ...t0, wallet: { ...t0.wallet, gold } }
       const base = await advise(t)
@@ -104,6 +104,20 @@ describe("C111: the board renders one plan", () => {
         checked++
         if (own) { owned++; expect(p.chosen).toBe(own) }
         if (own && r0) { const c = p.relief.find((x) => x.relief.hero.guid === r0.hero.guid)!; expect(c.why.kind).toBe("paid"); expect(p.spends.some((s) => s.step === "relief" && s.who === r0.hero.name)).toBe(false) }
+        // B6: "Take this party?" leans yes only when the coffers pay for the road and the four can bear it, and says why not
+        if (p.chosen) {
+          const no = !p.roadPaid || !bears(p.chosen)
+          expect(p.expedition.partyLean).toBe(no ? 1 : 0)
+          if (no) {
+            leanNo++
+            const md = source(t, a, { foresight: false, answers, prices, camp, ...(own ? { own, placed, newcomers } : {}) }).board
+            const card = md.split(/\n- q: /).find((x) => x.startsWith('"Take this party'))!
+            expect(card).toMatch(/\n {2}lean: 1\n/)
+            const why = JSON.parse(card.match(/lean_why: (".*")/)![1]!) as string
+            if (!p.roadPaid) expect(why).toContain(`${coin(p.short)} short`)
+            if (!bears(p.chosen)) expect(why).toContain("beyond what they can bear")
+          }
+        }
         // the reserve comes first and leaves the rest free; every lean after it spends from what is left, never below nothing
         expect(p.spends[0]!.step).toBe("reserve")
         expect(p.free).toBe(Math.max(0, gold - p.reserve))
@@ -163,6 +177,7 @@ describe("C111: the board renders one plan", () => {
     }
     expect(checked).toBeGreaterThan(5)
     expect(broke).toBeGreaterThan(0)
+    expect(leanNo).toBeGreaterThan(0)
     expect(owned).toBeGreaterThan(0)
     // at 12,000 gold some road camps and the Survivalist teaches on it, or no road camps this week
     if (t0.quests.some((q) => q.length >= 2 && !q.plot)) expect(camped).toBeGreaterThan(0)

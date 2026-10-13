@@ -98,7 +98,9 @@ export interface ExpeditionPlan {
   lean: number
   learners: string[]
   greenKeptShort: boolean
+  /** B6: card 2 leans to the four only when the coffers pay for the road and the four can bear it (doctrine rungs 2 and 3) */
   partyLean: number
+  partyWhy: { unpaid: boolean; beyond: boolean; meanLevel: number; danger: number }
   mix: Mix
   learnPrice: Map<string, number>
 }
@@ -226,7 +228,8 @@ export function plan(t: Town, a: Advice, inp: PlanInputs): Plan {
     learners: chosen && learners(chosen) ? chosen.seats.filter((x) => x.hero.level === 0).slice(0, RULE.learners).map((x) => x.hero.name) : [],
     // only said of a short road chosen over longer ones that a green party would have taken
     greenKeptShort: (chosen?.quest.length === 1 ? a.parties.filter((p) => p !== chosen && p.quest.length > 1 && p.green).length : 0) > 0,
-    partyLean: 0,
+    partyLean: chosen && (gold < reserve || !bears(chosen)) ? 1 : 0,
+    partyWhy: { unpaid: !!chosen && gold < reserve, beyond: !!chosen && !bears(chosen), meanLevel: chosen ? chosen.seats.reduce((x, s) => x + s.hero.level, 0) / chosen.seats.length : 0, danger: chosen?.quest.difficulty ?? 0 },
     mix: chosen ? mix(chosen, t) : undefined,
     learnPrice: new Map((chosen?.seats ?? []).filter((s) => s.learn).map((s) => [s.hero.name, Math.round(s.learn!.gold * (1 - t.skillDiscount))])),
   }
