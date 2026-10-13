@@ -542,12 +542,14 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   rows.push([`${t.rosterSize} / ${t.rosterCap}`, "roster and its cap", "`persist.roster.json` heroes; `stage_coach.building.json` roster_size_upgrades at your `stage_coach.rostersize` purchases"])
   rows.push([`${t.quests_won} / ${t.quests_done}`, "expeditions won", "`persist.progression.json` total_successful_quests_finished / total_quests_finished"])
   const shown = new Set<number>()
-  for (const h of [...a.relief.map((r) => r.hero), ...a.disease, ...(chosen?.seats.map((x) => x.hero) ?? []), ...a.dismiss.map((d) => d.hero)]) {
+  // B8: every dismissal on the board, the ones made for a recruit at the coach included
+  for (const h of [...a.relief.map((r) => r.hero), ...a.disease, ...(chosen?.seats.map((x) => x.hero) ?? []), ...P.roster.dismiss.map((d) => d.hero)]) {
     if (shown.has(h.guid)) continue
     shown.add(h.guid)
     rows.push([`${h.stress}`, `${h.name}'s stress`, `\`persist.roster.json\` heroes.${h.guid}.m_Stress`])
     rows.push([`${h.level}`, `${h.name}'s level`, `resolveXp ${h.xp} against \`roster.variables.json\` resolve_level_thresholds`])
   }
+  for (const d of P.roster.dismiss) if (d.swap) rows.push([`${d.swap.bad}`, `${d.hero.name}'s bad quirks`, `\`persist.roster.json\` heroes.${d.hero.guid} quirks, negative and not diseases, by \`shared/quirk/quirk_library.json\``], [`${d.swap.good}`, `${d.hero.name}'s good quirks`, `\`persist.roster.json\` heroes.${d.hero.guid} quirks, positive, by \`shared/quirk/quirk_library.json\``])
   for (const act of t.activities) {
     const file = `\`campaign/town/buildings/${act.building}/${act.building}.building.json\``
     rows.push([`${act.cost}`, `${act.name}, gold`, `${file} ${act.activity} cost tier at your purchases`])
