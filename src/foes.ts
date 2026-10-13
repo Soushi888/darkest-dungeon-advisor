@@ -36,12 +36,20 @@ export function meetings(snaps: Snap[], special: Map<string, "wanderer" | "boss"
     const outcome: Meeting["outcome"] = said.includes("battle_retreat") ? "fled" : won ? "won" : after ? "fled" : "unfinished"
     // what it called to its side: foes of this fight that neither the usual halls field nor are special themselves, by name
     const brought = [...new Set(foes.filter((f) => f.cls && !usual.has(f.cls) && !special.has(f.cls) && !/^corpse/.test(f.cls)).map((f) => f.name))]
-    const brink = [...new Set(fight.flatMap((f) => f.snap.heroes.filter((h) => h.deathsDoor).map((h) => h.name)))]
-      .filter((n) => !fight[0]!.snap.heroes.find((h) => h.name === n)?.deathsDoor || fight.some((f) => f.snap.heroes.find((h) => h.name === n && h.hp <= 0)))
+    // brought to Death's Door here: at the door in the fight and not on the page before it began
+    const before = new Set((snaps[fight[0]!.page - 1]?.heroes ?? []).filter((h) => h.deathsDoor).map((h) => h.name))
+    const brink = [...new Set(fight.flatMap((f) => f.snap.heroes.filter((h) => h.deathsDoor && !before.has(h.name)).map((h) => h.name)))]
     const rounds = Math.max(...fight.map((f) => f.snap.battle!.round))
     for (const [cls, name] of named) out.push({ cls, name, kind: special.get(cls)!, outcome, rounds, brought, brink, page: fight[0]!.page })
   }
   return out
+}
+
+/** One trip's meetings with the same foe as one, so the ledger keeps one lesson per foe and trip, each fight told in turn. */
+export function byFoe(ms: Meeting[]): Meeting[][] {
+  const out = new Map<string, Meeting[]>()
+  for (const m of ms) out.set(m.cls, [...(out.get(m.cls) ?? []), m])
+  return [...out.values()]
 }
 
 /** The meeting in a sentence for the return board and the ledger. */

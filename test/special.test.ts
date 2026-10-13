@@ -2,7 +2,7 @@
 // "We need to take note when we encounter special foes like that to improve our strategy").
 import { describe, expect, test } from "bun:test"
 import { existsSync } from "node:fs"
-import { meetingLine, meetings } from "../src/foes.ts"
+import { byFoe, meetingLine, meetings } from "../src/foes.ts"
 import { dungeonMonsters, specialFoes } from "../src/game.ts"
 import { install } from "../src/paths.ts"
 import { teachings } from "../src/teach.ts"
@@ -27,6 +27,27 @@ describe("C106: special foes are noted", () => {
     expect(meetings([page(1, [{ name: "Maggot", cls: "maggot_A", hp: 5 }]), page(undefined, [], undefined, ["victory"], 1)], special, usual)).toEqual([])
   })
 
+  test("a hero already at Death's Door before the fight is not counted against the foe", () => {
+    const snaps = [page(undefined, [], [hero("Patremol", 20, true)]), page(1, [collector], [hero("Patremol", 20, true)]), page(undefined, [], [hero("Patremol", 20, true)], ["battle_retreat"])]
+    expect(meetings(snaps, special, usual)[0]!.brink).toEqual([])
+  })
+
+  test("a fight that ends with a battle won and nothing narrated is a win; a retreat leaves the count as it was", () => {
+    const silent = [page(1, [collector]), page(undefined, [], undefined, [], 1)]
+    expect(meetings(silent, special, usual)[0]!.outcome).toBe("won")
+  })
+
+  test("two fights with one foe make one lesson, each fight told in turn", () => {
+    const snaps = [page(1, [collector]), page(undefined, [], undefined, ["battle_retreat"]), page(1, [collector], undefined, ["battle_retreat"]), page(undefined, [], undefined, ["battle_retreat", "victory"], 1)]
+    const met = meetings(snaps, special, usual)
+    expect(met.map((m) => m.outcome)).toEqual(["fled", "won"])
+    expect(byFoe(met)).toHaveLength(1)
+    const base = { dungeon: "warrens", difficulty: 1, length: 2, week: 25, trip: "the Warrens, week 25" }
+    const { lessons } = teachings(snaps, [], undefined, base, [], met, "the Warrens")
+    expect(lessons.filter((l) => l.kind === "special")).toHaveLength(1)
+    expect(lessons[0]!.text).toContain("Met again: they beat it in 1 round.")
+  })
+
   test("a boss beaten is a win", () => {
     const snaps = [page(1, [{ name: "Swine Prince", cls: "swine_prince_A", hp: 50 }], undefined, ["combat_start"]), page(undefined, [], undefined, ["combat_start", "victory"], 1)]
     expect(meetings(snaps, special, usual)[0]).toMatchObject({ kind: "boss", outcome: "won", rounds: 1 })
@@ -40,10 +61,14 @@ describe("C106: special foes are noted", () => {
     expect(lessons[0]).toMatchObject({ kind: "special", foe: "collector_A", dungeon: "warrens" })
   })
 
-  test.skipIf(!existsSync(install))("the game's own files tell a wanderer and a boss from the usual halls", async () => {
-    const s = await specialFoes("warrens", 1), halls = await dungeonMonsters("warrens", 1, ["hall", "room"])
+  test.skipIf(!existsSync(install))("the game's own files tell a wanderer and a boss from the usual halls, in every dungeon and level", async () => {
+    const s = await specialFoes("warrens", 1)
     expect(s.get("collector_A")).toBe("wanderer")
     expect(s.get("swine_prince_A")).toBe("boss")
-    expect(halls.some((h) => s.has(h))).toBe(false)
+    expect(s.has("swine_piglet_A")).toBe(false) // the boss's add, not a boss
+    for (const d of ["cove", "weald", "warrens", "crypts", "darkestdungeon"]) for (const level of [1, 3, 5, 6]) {
+      const sp = await specialFoes(d, level), halls = await dungeonMonsters(d, level, ["hall", "room"])
+      expect(halls.filter((h) => sp.has(h))).toEqual([])
+    }
   })
 })

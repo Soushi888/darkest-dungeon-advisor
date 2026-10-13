@@ -41,7 +41,8 @@ export async function nowText(p: Snap, raw: any, page: string, savedAt: number, 
     const slots = Object.entries<any>(b.enemies ?? {}).filter(([, e]) => !e.is_hero).sort(([x], [y]) => Number(x) - Number(y))
     // C106: a foe not of these halls is named as such, with what an earlier road learned of it
     const special = p.dungeon ? await specialFoes(p.dungeon, p.difficulty) : new Map<string, "wanderer" | "boss">()
-    const before = special.size ? (await loadLedger()).filter((l) => l.kind === "special" && l.foe) : []
+    // a ledger caught mid-write never breaks the live page: it only loses the "met before" this once
+    const before = special.size ? (await loadLedger().catch(() => [])).filter((l) => l.kind === "special" && l.foe) : []
     for (const [k, e] of slots) {
       const d = e.data ?? {}, a = d.actor ?? {}, cls = String(d.monster_class ?? ""), f = p.battle?.foes.find((x) => x.guid === Number(d.battle_guid))
       const name = f?.name ?? plain(cls), max = cls ? (await monster(cls))?.hp : undefined, hp = f?.hp ?? Math.round(Number(a.current_hp ?? 0))

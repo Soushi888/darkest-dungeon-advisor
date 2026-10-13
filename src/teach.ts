@@ -5,7 +5,7 @@
 // board and a lesson for the ledger, so the next road to the same dungeon is advised by it.
 import type { Beat, Debrief, Lesson, Snap } from "./chronicle.ts"
 import { slainIn } from "./slain.ts"
-import { fights, meetingLine, type Meeting } from "./foes.ts"
+import { byFoe, fights, meetingLine, type Meeting } from "./foes.ts"
 
 type Base = Omit<Lesson, "kind" | "text">
 
@@ -16,7 +16,10 @@ export function teachings(snaps: Snap[], beats: Beat[], db: Debrief | undefined,
   const lines: string[] = [], lessons: Lesson[] = []
   const add = (kind: Lesson["kind"], line: string, lesson = line, foe?: string) => { lines.push(line); lessons.push({ ...base, kind, text: lesson, ...(foe ? { foe } : {}) }) }
   // C106: a special foe met is the first thing the road taught, one note per meeting
-  for (const m of met) add("special", meetingLine(m, where), meetingLine(m, where), m.cls)
+  for (const ms of byFoe(met)) {
+    const line = ms.map((m, i) => i ? meetingLine(m, where).replace(/^[^:]+: /, "Met again: ") : meetingLine(m, where)).join(" ")
+    add("special", line, line, ms[0]!.cls)
+  }
   const foes = (db?.foes ?? []).map((f) => ({ ...f, total: f.hp + f.bleed + f.blight })).filter((f) => f.total > 0).sort((a, b) => b.total - a.total)
   // the foe that hurt most, and what answers it
   const top = foes[0]

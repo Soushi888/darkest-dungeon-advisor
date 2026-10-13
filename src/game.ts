@@ -248,12 +248,17 @@ export async function dungeonMonsters(d: string, level: number, kinds?: string[]
 /** C106: the foes that are not of a dungeon's usual halls and rooms at a quest level: the wanderers of its conditional lines,
  *  and its boss and named lines. Each variant maps to what it is. */
 export async function specialFoes(d: string, level: number): Promise<Map<string, "wanderer" | "boss">> {
-  const out = new Map<string, "wanderer" | "boss">()
+  const out = new Map<string, "wanderer" | "boss">(), usual = new Set(await dungeonMonsters(d, level, ["hall", "room"]))
   for (const rel of P.conditionalMash(d, level)) {
     if (!existsSync(join(install, rel))) continue
-    for (const m of (await text(rel)).matchAll(/^\w+:[^\n]*?\.types ([^\n.]+)/gm)) for (const t of m[1]!.trim().split(/\s+/)) out.set(t, "wanderer")
+    for (const m of (await text(rel)).matchAll(/^\w+:[^\n]*?\.types ([^\n.]+)/gm)) for (const t of m[1]!.trim().split(/\s+/)) if (!usual.has(t)) out.set(t, "wanderer")
   }
-  for (const t of await dungeonMonsters(d, level, ["boss", "named"])) if (!out.has(t)) out.set(t, "boss")
+  // a boss line lists the boss first and its adds after it (swine_prince_A swine_piglet_A); named lines are summons, not bosses
+  const rel = P.mash(d, level)
+  if (existsSync(join(install, rel))) for (const m of (await text(rel)).matchAll(/^boss:[^\n]*?\.types ([^\n.]+)/gm)) {
+    const first = m[1]!.trim().split(/\s+/)[0]
+    if (first && !usual.has(first) && !out.has(first)) out.set(first, "boss")
+  }
   return out
 }
 

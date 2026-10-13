@@ -310,7 +310,7 @@ export async function loadLedger(): Promise<Lesson[]> {
 export async function remember(lessons: Lesson[]): Promise<Lesson[]> {
   const trips = new Set(lessons.map((l) => l.trip))
   const all = (await loadLedger()).filter((x) => !trips.has(x.trip))
-  for (const l of lessons) if (!all.some((x) => x.trip === l.trip && x.kind === l.kind)) all.push(l)
+  for (const l of lessons) if (!all.some((x) => x.trip === l.trip && x.kind === l.kind && x.foe === l.foe)) all.push(l)
   await Bun.write(ledgerFile(), JSON.stringify(all, null, 1))
   return all
 }
