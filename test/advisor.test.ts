@@ -404,7 +404,7 @@ describe.skipIf(!has)("on the local save", () => {
     expect([/persist/i, /\.json/, /`/, /\bRULE\b/, /\bsav(e|ed|es)\b/i, /\bgame\b/i].filter((re) => re.test(seen)).map(String)).toEqual([])
   })
 
-  test("C25: the Treatment Ward is offered only by my habit, priced by whether the quirk has set in, one card per free seat", async () => {
+  test("C25: the Treatment Ward is offered only by my habit, priced by whether the quirk has set in, one seat per card leaning to it", async () => {
     const t = await town(await readSave(copyProfile()))
     const a = await advise(t)
     const ward = t.activities.find((x) => x.activity === "treatment")!
@@ -417,7 +417,9 @@ describe.skipIf(!has)("on the local save", () => {
     }
     const md = source(t, a, { foresight: false, answers: {}, prices: await supplyPrices() }).board
     const cards = a.treat.filter((tr) => md.includes(`Treat ${tr.hero.name}'s ${tr.quirk.name}?`)).length
-    expect(cards).toBeLessThanOrEqual(Math.max(0, ward.slots - ward.used))
+    // only a card that leans to the ward takes a seat; one leaned Not this week passes it on (Soushi, 2026-10-13)
+    const toWard = md.split(/\n- q: /).filter((c) => c.startsWith('"Treat ') && /\n {4}- pick: "Treatment Ward"/.test(c) && /\n {2}lean: 0\n/.test(c)).length
+    expect(toWard).toBeLessThanOrEqual(Math.max(0, ward.slots - ward.used))
     if (a.treat.length > cards) expect(md).toContain(`The ${ward.name} is full this week`)
     // C103: a thief is first in line, before every other habit, in the four or not
     const thief = a.treat.map((tr) => tr.quirk.thief)
