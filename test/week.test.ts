@@ -46,6 +46,23 @@ describe.skipIf(!has)("B1: what was done is read from the save, not from the pla
   }, 60_000)
 })
 
+describe.skipIf(!has)("C42, C91: the lessons ledger is part of the Town", () => {
+  test("the Town carries the kept lessons, so every advise() caller ranks the roads with them; the board loads them nowhere else", async () => {
+    const { readFileSync } = await import("node:fs")
+    const dir = join(root, ".dd-runtime", "test-week-ledger"), saved = process.env.DD_TOWN_OUT
+    rmSync(dir, { recursive: true, force: true }); mkdirSync(dir, { recursive: true })
+    const lessons = [{ trip: "Weald, week 1", dungeon: "weald", difficulty: 1, length: 1, week: 1, kind: "light", text: "they broke in the dark" }]
+    writeFileSync(join(dir, "lessons.json"), JSON.stringify(lessons))
+    process.env.DD_TOWN_OUT = dir
+    try {
+      expect((await town(await readSave())).ledger).toEqual(lessons as any)
+      rmSync(join(dir, "lessons.json"))
+      expect((await town(await readSave())).ledger).toEqual([])
+    } finally { if (saved === undefined) delete process.env.DD_TOWN_OUT; else process.env.DD_TOWN_OUT = saved }
+    expect(readFileSync(new URL("../src/voice/board.ts", import.meta.url), "utf8")).not.toContain("t.ledger = await loadLedger()")
+  })
+})
+
 /** A card of the built board by its question: its options in order, the option it leans to, and why. */
 function card(md: string, q: string): { options: string[]; lean: string | undefined; why: string } | undefined {
   const c = md.split(/\n- q: /).find((x) => x.startsWith(JSON.stringify(q)))

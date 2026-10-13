@@ -2,7 +2,7 @@
 // is a save field or a game-file value, and every piece of advice carries the paths it came from (C14).
 import { existsSync } from "node:fs"
 import { join } from "node:path"
-import { install } from "../sources/paths.ts"
+import { install, outDir } from "../sources/paths.ts"
 import type { Dson } from "../sources/dson.ts"
 import type { Save } from "../sources/read.ts"
 import type { Lesson } from "../road/chronicle.ts"
@@ -39,7 +39,7 @@ export interface Town {
   quests_done: number; quests_won: number; lastQuest: string; lastWon: boolean
   // the expedition the coach just brought back, as the campaign log's latest chapter records it (C37)
   trips: { dungeon: string; difficulty: number }[] // every expedition the campaign log records
-  ledger?: Lesson[] // the lessons kept from past expeditions (C42), loaded by the board before it advises
+  ledger?: Lesson[] // the lessons kept from past expeditions (C42), read with the Town so every advise() caller ranks with them
   settling?: Set<number> // C92: heroes who joined within RULE.settleWeeks, never let go while they settle; set by the board from its roster ledger
   back?: { dungeon: string; dungeonName: string; quest: string; goal?: string; length: number; success: boolean; heroes: { guid: number; name: string; cls: string; died: boolean }[] }
   skillDiscount: number; gearDiscount: number; campDiscount: number; visited: string[]; knownVariants: string[]
@@ -93,6 +93,13 @@ async function heroView(guid: number, h: any, thr: number[], busy: Map<number, s
     dungeons: (r.dungeon_history ?? []).filter((d: unknown) => typeof d === "string"), portrait: existsSync(join(install, P.portrait(r.heroClass, Number(r.actor?.colour_variation ?? 0)))) ? P.portrait(r.heroClass, Number(r.actor?.colour_variation ?? 0)) : P.portrait(r.heroClass),
     campEquipped: Object.keys(r.skills?.selected_camping_skills ?? {}),
   }
+}
+
+/** C42: where the lessons kept from past expeditions live, beside the board, and the lessons themselves (none yet: an empty list). */
+export const lessonsFile = () => join(outDir(), "lessons.json")
+export async function readLessons(): Promise<Lesson[]> {
+  const f = Bun.file(lessonsFile())
+  return (await f.exists()) ? ((await f.json()) as Lesson[]) : []
 }
 
 export async function town(save: Save): Promise<Town> {
@@ -369,6 +376,8 @@ export async function town(save: Save): Promise<Town> {
     lastQuest: typeof prog?.last_quest_played_id === "string" ? prog.last_quest_played_id : "", lastWon: !!prog?.last_raid_success, back, trips,
     skillDiscount, gearDiscount, campDiscount, visited: [...visited], knownVariants: [...knownVariants],
     heroUpgrades, buildingUpgrades, estateTrinkets, worn, trinketSlots, bought, supply: await supplies(), event, raid,
+    // C42, C91: the lessons are part of the Town, so the road is ranked with them whoever asks
+    ledger: await readLessons(),
     purchases: Object.values<any>((save.upgrades as any)?.purchases ?? {}).filter((p) => p.is_purchased !== false).map((p) => ({ key: `${p.tree_id}:${p.requirement_code}`, guid: Number(p.instance_number) || 0 })),
   }
 }

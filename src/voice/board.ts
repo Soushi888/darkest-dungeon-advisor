@@ -20,7 +20,7 @@ import { coin, DIFFICULTY, LENGTH, questLabel, type HeroView, type Town, type Up
 import { buildSkin } from "./skin.ts"
 import { loadPicks, reconcile, type Check } from "../world/reconcile.ts"
 import { contradictions } from "./coherence.ts"
-import { beats, chronicleFor, heirloomTrips, debrief, judge, loadLedger, remember, type Beat, type Debrief, type Lesson } from "../road/chronicle.ts"
+import { beats, chronicleFor, heirloomTrips, debrief, judge, remember, type Beat, type Debrief, type Lesson } from "../road/chronicle.ts"
 import { dungeonMonsters, specialFoes } from "../sources/game.ts"
 import { meetings } from "../road/foes.ts"
 import { habitGroups, ROAD_HABIT_FROM } from "../caretaker/rules.ts"
@@ -621,10 +621,10 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
     const met = meetings(snaps, await specialFoes(base.dungeon, base.difficulty), new Set(await dungeonMonsters(base.dungeon, base.difficulty, ["hall", "room"])))
     const taught = teachings(snaps, bs, db, base, healers, met, `the ${t.back.dungeonName}`)
     j.lessons.push(...taught.lessons)
-    if (snaps.length > 1) await remember(j.lessons)
+    // the Town was read with the lessons kept before this return (C42); the road just walked joins them before the week is advised
+    if (snaps.length > 1) t.ledger = await remember(j.lessons)
     tale = { snaps: snaps.length, beats: bs, ...j, debrief: db, issues: check.issues, taught: taught.lines }
   }
-  t.ledger = await loadLedger()
   // the week's first board keeps the Hamlet as it found it (C26)
   const wsFile = Bun.file(join(outDir(), "week-start.json"))
   let start = (await wsFile.exists()) ? ((await wsFile.json()) as WeekStart) : undefined
@@ -867,8 +867,7 @@ export async function buildFarewell(t: Town): Promise<string> {
   mkdirSync(join(outDir(), "img"), { recursive: true })
   const f = Bun.file(join(outDir(), "proposal.json"))
   const proposal = (await f.exists()) ? ((await f.json()) as Proposal) : undefined
-  // U33: the farewell weighs the packs by the same habit the provisions table set, lessons learnt included (C42)
-  t.ledger = await loadLedger()
+  // U33: the farewell weighs the packs by the same habit the provisions table set, lessons learnt included (C42): the Town carries them
   const { board, sources } = farewellSource(t, t.raid!, { proposal, checks: reconcile(await loadPicks(outDir()), t), prices: await supplyPrices(), pack: await packRules() })
   return compile(board, sources)
 }

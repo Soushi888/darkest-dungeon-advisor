@@ -4,6 +4,7 @@
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs"
 import { join } from "node:path"
 import { outDir } from "../sources/paths.ts"
+import { lessonsFile, readLessons } from "../world/town.ts"
 import { monster, nameOf, strings, text } from "../sources/game.ts"
 import type { Save } from "../sources/read.ts"
 import { mapOf, type MapView } from "./map.ts"
@@ -301,11 +302,8 @@ export function judge(snaps: Snap[], bs: Beat[], trip: { dungeon: string; dungeo
 }
 
 // ---------- the ledger (C42) ----------
-export const ledgerFile = () => join(town(), "lessons.json")
-export async function loadLedger(): Promise<Lesson[]> {
-  const f = Bun.file(ledgerFile())
-  return (await f.exists()) ? ((await f.json()) as Lesson[]) : []
-}
+export const ledgerFile = lessonsFile
+export const loadLedger = readLessons
 /** Keeps a trip's lessons, once: a trip judged again replaces what was kept for it, so a sharper judgement (C96) reaches the ledger. */
 export async function remember(lessons: Lesson[]): Promise<Lesson[]> {
   const trips = new Set(lessons.map((l) => l.trip))

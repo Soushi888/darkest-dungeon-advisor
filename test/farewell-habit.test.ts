@@ -21,14 +21,18 @@ describe.skipIf(!has)("U33: the farewell's habit counts what was learnt", () => 
     for (const f of readdirSync(profile)) if (f.startsWith("persist.") && f !== "persist.raid.json") cpSync(join(profile, f), join(prof, f))
     const g = join(prof, "persist.game.json"), buf = readFileSync(g), at = buf.indexOf("inraid\0")
     if (at >= 0 && buf[at + 7]) { buf[at + 7] = 0; writeFileSync(g, buf) }
-    const t = await town(await readSave(prof))
-    // a road as if they had just left on the week's first quest, packed by the plain habit
-    const q = t.quests.find((x) => !x.plot)!, len = Math.max(1, Math.min(3, q.length))
-    t.raid = { key: "test", quest: q, party: t.heroes.slice(0, 4).map((h) => h.guid), carried: { provision: RULE_PROVISION[len]!, torch: RULE_FOOD[len]! } }
-    writeFileSync(join(out, "lessons.json"), JSON.stringify([{ dungeon: q.dungeon, difficulty: q.difficulty, length: q.length, week: 1, trip: "a test road", kind: "food", text: "they went hungry" }]))
     const was = process.env.DD_TOWN_OUT
     process.env.DD_TOWN_OUT = out
-    try { await buildFarewell(t) } finally { process.env.DD_TOWN_OUT = was }
+    try {
+      // the lessons are read with the Town (C42), so they are kept before it is read
+      const q = (await town(await readSave(prof))).quests.find((x) => !x.plot)!, len = Math.max(1, Math.min(3, q.length))
+      writeFileSync(join(out, "lessons.json"), JSON.stringify([{ dungeon: q.dungeon, difficulty: q.difficulty, length: q.length, week: 1, trip: "a test road", kind: "food", text: "they went hungry" }]))
+      const t = await town(await readSave(prof))
+      // a road as if they had just left on the week's first quest, packed by the plain habit
+      t.raid = { key: "test", quest: t.quests.find((x) => !x.plot)!, party: t.heroes.slice(0, 4).map((h) => h.guid), carried: { provision: RULE_PROVISION[len]!, torch: RULE_FOOD[len]! } }
+      await buildFarewell(t)
+    } finally { process.env.DD_TOWN_OUT = was }
+    const q = (await town(await readSave(prof))).quests.find((x) => !x.plot)!, len = Math.max(1, Math.min(3, q.length))
     const md = readFileSync(join(out, "town.md"), "utf8")
     const want = RULE_PROVISION[len]! + CHRONICLE_RULE.lessonFood
     expect(md).toContain(`Food: ${RULE_PROVISION[len]} carried, ${want} by my habit`)
