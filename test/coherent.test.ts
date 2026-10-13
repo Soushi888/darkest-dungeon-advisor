@@ -118,3 +118,16 @@ describe("C93: the healer's new heal is the first lesson, and paid seats are nev
     expect(md).toContain(`already there this week, and paid for: the ${place} keeps them.`)
   })
 })
+
+describe("C97: the heirlooms aim at what they can build now", () => {
+  test("once the first tier of seasoned recruits is bought, the young habit no longer holds the heirlooms for the next", async () => {
+    const t = await town(await readSave())
+    const a = await advise(t)
+    const seasoned = a.coach.find((u) => u.tree === "stage_coach.upgraded_recruits")
+    const md = source(t, a, { foresight: false, answers: {} }).board
+    const card = md.split(/\n- q: /).find((c) => c.startsWith('"Where do the heirlooms go?"'))
+    if (!card || !seasoned) return
+    if (seasoned.code !== "a") expect(card).not.toContain("seasoned recruits come first")
+    else expect(card).toContain("seasoned recruits come first")
+  })
+})

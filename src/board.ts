@@ -366,6 +366,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   const cards: string[] = [], filed: { at: number; place: string }[] = []
   // each lean takes its seat, so no two cards lean to the same last seat (U11)
   const seatsLeft = new Map(t.activities.map((x) => [x.activity, x.slots - x.used]))
+  const reliefUsed: string[] = [] // C97: the relief activities leaned this week, for the heirlooms to improve
   for (const r of a.relief) {
     if (!r.options.length) continue
     const at = cards.length
@@ -382,6 +383,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
       const taken = r.options.filter((o) => o.activity.cost <= left && !((seatsLeft.get(o.activity.activity) ?? 0) > 0))
       if (best) {
         if (best.activity.name !== paid) left -= best.activity.cost
+        reliefUsed.push(best.activity.name)
         seatsLeft.set(best.activity.activity, (seatsLeft.get(best.activity.activity) ?? 1) - 1)
         cards.push(`  lean: ${r.options.indexOf(best)}`, `  lean_why: ${y(best.activity.name === paid ? `already there this week, and paid for: the ${paid} keeps them.` : `the cheapest place they accept that has a free seat (${best.note}).`)}`)
       } else if (taken.length) cards.push(`  lean: ${r.options.length}`, `  lean_why: ${y(`the seats they could take (${taken.map((o) => o.activity.name).join(", ")}) I have already leaned to someone above.`)}`)
@@ -662,13 +664,20 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
       const san = a.heirlooms.findIndex((u) => u.tree === "sanitarium.disease_quirk_cost" || u.tree === "sanitarium.cost")
       // my habit: a roster mostly at level 1 or lower wants seasoned recruits before anything else the heirlooms can buy
       const seasoned = a.coach.find((u) => u.tree === "stage_coach.upgraded_recruits"), si = seasoned ? a.heirlooms.indexOf(seasoned) : -1
-      const youngWhy = a.young && seasoned ? `my habit: ${a.young.low} of your ${a.young.of} heroes are level 1 or lower, so the Stage Coach's seasoned recruits come first` : ""
+      // C97: the habit buys the first tier of seasoned recruits; once that is bought, the next tier waits behind upgrades the estate is far
+      // from, and the heirlooms go to what they can build now (Soushi, 2026-10-13: "We already bought the Stage Coach upgrade, we need
+      // to plan next target based on what we got")
+      const youngWhy = a.young && seasoned && seasoned.code === "a" ? `my habit: ${a.young.low} of your ${a.young.of} heroes are level 1 or lower, so the Stage Coach's seasoned recruits come first` : ""
       // U40: on the road to the seasoned recruits, a step the estate can buy tonight is bought, not saved for: the one the four
       // wait on first, else the first in the plan's order (C75); "Save them" only when no step is buyable
       const onRoad = (seasoned?.chain ?? []).filter((x) => x.ready).map((x) => a.heirlooms.findIndex((u) => u.tree === x.tree && u.code === x.code)).filter((i) => i >= 0)
       const step = onRoad.find((i) => (opens[i]?.length ?? 0) > 0) ?? onRoad[0] ?? -1
-      const lean = youngWhy ? (si >= 0 ? si : step >= 0 ? step : a.heirlooms.length) : most >= 0 ? most : san >= 0 ? san : a.heirlooms.length
-      const why = youngWhy ? (si >= 0 ? `${youngWhy}.` : step >= 0 ? `${youngWhy}, and the road to them can start tonight: ${a.heirlooms[step]!.label} is one of its steps${opens[step]?.length ? `, and it opens what the party is waiting for: ${opens[step]!.map((b) => `${b.hero} ${b.label}`).join(", ")}` : ""}.` : seasoned!.blockedBy ? `${youngWhy}; I keep the heirlooms for them, and the road to them comes first: it waits on ${waitsWords(seasoned!)}.` : `${youngWhy}; I keep the heirlooms for them, ${cost(seasoned!)}, ${short(seasoned!)} short.`) : most >= 0 ? `it opens what the party is waiting for: ${opens[most]!.map((b) => `${b.hero} ${b.label}`).join(", ")}.` : san >= 0 ? `${a.disease.length} of your heroes are ill; cheaper treatment pays back quickly.` : "nothing affordable opens anything the party is waiting for."
+      // C97: after the young habit, the doctrine's order: what opens the four's waiting upgrades, the Sanitarium, the relief the
+      // heroes use this week (stress), then a lower price where the party's gold goes (the Guild if it trains this week, else the smith)
+      const relief = a.heirlooms.findIndex((u) => reliefUsed.some((n) => u.label.includes(n)))
+      const cut = a.heirlooms.findIndex((u) => u.label === (a.buys.some((b) => b.where === "Guild") ? "Guild: lower prices" : "Blacksmith: lower prices"))
+      const lean = youngWhy ? (si >= 0 ? si : step >= 0 ? step : a.heirlooms.length) : most >= 0 ? most : san >= 0 ? san : relief >= 0 ? relief : cut >= 0 ? cut : a.heirlooms.length
+      const why = youngWhy ? (si >= 0 ? `${youngWhy}.` : step >= 0 ? `${youngWhy}, and the road to them can start tonight: ${a.heirlooms[step]!.label} is one of its steps${opens[step]?.length ? `, and it opens what the party is waiting for: ${opens[step]!.map((b) => `${b.hero} ${b.label}`).join(", ")}` : ""}.` : seasoned!.blockedBy ? `${youngWhy}; I keep the heirlooms for them, and the road to them comes first: it waits on ${waitsWords(seasoned!)}.` : `${youngWhy}; I keep the heirlooms for them, ${cost(seasoned!)}, ${short(seasoned!)} short.`) : most >= 0 ? `it opens what the party is waiting for: ${opens[most]!.map((b) => `${b.hero} ${b.label}`).join(", ")}.` : san >= 0 ? `${a.disease.length} of your heroes are ill; cheaper treatment pays back quickly.` : relief >= 0 ? `my order puts stress next, and this week I lean heroes to the ${reliefUsed.find((n) => a.heirlooms[relief]!.label.includes(n))}: improving it serves them now and every week after.` : cut >= 0 ? `my order puts the gold next: the party ${a.buys.some((b) => b.where === "Guild") ? "trains at the Guild" : "is armed at the Blacksmith"} this week, and a lower price there pays back every week.` : "nothing affordable opens anything the party is waiting for."
       L.push(`  lean: ${lean}`, `  lean_why: ${y(why)}`)
       L.push("```", "")
       // U22: saving is a plan, not a wait (Soushi, 05:22: "when you propose to save for later, at least give a vision")
