@@ -15,7 +15,7 @@ describe("C85: two of the same leave a gap elsewhere", () => {
     expect(rolesOf([sk({ stressHeal: true, targetsAllies: true, target: [] })], 4)).toEqual(["stress"])
   })
 
-  test("a pair is the same class, or the same roles with a speciality; the weaker goes, never one of the four leaving", () => {
+  test("a pair is the same class only (C105); the weaker goes, never one of the four leaving", () => {
     const a = m("Patremol", "houndmaster", 1, ["marker", "back"], 4, 0, 1), g = m("Fossard", "houndmaster", 1, ["marker", "back"], 2, 0, 2)
     const d = m("Dismas", "highwayman", 2, ["front", "back"], 0, 0, 3), p = m("Papon", "man_at_arms", 1, ["front", "back"], 0, 0, 4)
     const pairs = alikePairs([a, g, d, p], new Set())
@@ -23,6 +23,8 @@ describe("C85: two of the same leave a gap elsewhere", () => {
     expect(pairs[0]!.why).toBe("Patremol carries 4 bad quirks to Fossard's 2")
     expect(alikePairs([a, g], new Set([1]))).toEqual([]) // Patremol leaves with the four: not let go
     expect(alikePairs([m("A", "houndmaster", 2, ["marker"], 0, 0, 5), m("B", "houndmaster", 0, ["marker"], 0, 0, 6)], new Set())[0]!.why).toBe("A is level 2, B level 0")
+    // C105: the same roles in two classes are no pair (week 25: Papon, Man-at-Arms, and Wissant, Abomination)
+    expect(alikePairs([m("Papon", "man_at_arms", 1, ["stunner", "front", "back"], 4, 0, 9), m("Wissant", "abomination", 1, ["stunner", "front", "back"], 1, 0, 10)], new Set())).toEqual([])
     // C86: two true healers are never too alike, even of one class
     expect(alikePairs([m("Azor", "vestal", 1, ["healer", "back"], 4, 0, 7), m("Gomboult", "vestal", 1, ["healer", "back"], 2, 0, 8)], new Set())).toEqual([])
   })

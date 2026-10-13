@@ -217,7 +217,9 @@ describe.skipIf(!has)("on the local save", () => {
 
   test("C18: answers sent from the page come back as a checked list on the next board", async () => {
     const dir = restedProfile()
-    const port = 4392
+    // a free port, never a fixed one another server on this machine may hold (4392 was a board's live server, 2026-10-13)
+    const probe = Bun.serve({ port: 0, fetch: () => new Response() }), port = probe.port
+    probe.stop(true)
     const out = join(townOut)
     rmSync(join(out, "picks.json"), { force: true })
     const w = Bun.spawn(["bun", "src/cli.ts", "watch", `--port=${port}`], { cwd: root, env: { ...process.env, DD_PROFILE: dir }, stdout: "pipe" })

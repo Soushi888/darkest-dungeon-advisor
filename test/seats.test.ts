@@ -33,6 +33,8 @@ describe.skipIf(!has)("C58: seats as the game gives them", () => {
     const leaned = new Map<string, number>()
     for (const card of md.split(/\n- q: /).filter((c) => /^"Where does .+ go\?"/.test(c))) {
       const picks = [...card.matchAll(/- pick: "([^"]+)"/g)].map((m) => m[1]!), lean = Number(card.match(/\n {2}lean: (\d+)/)?.[1] ?? -1)
+      // a hero already placed and paid for this week (C93) sits in a seat the save already counts as used
+      if (/lean_why: "already there this week/.test(card)) continue
       const place = picks[lean]
       if (place && place !== "Leave them be") leaned.set(place, (leaned.get(place) ?? 0) + 1)
     }
