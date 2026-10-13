@@ -48,6 +48,14 @@ describe("C106: special foes are noted", () => {
     expect(lessons[0]!.text).toContain("Met again: they beat it in 1 round.")
   })
 
+  test("a boss in several parts is one meeting", () => {
+    const parts = new Map<string, "wanderer" | "boss">([["formless_melee_A", "boss"], ["formless_guard_A", "boss"]])
+    const snaps = [page(1, [{ name: "Formless Melee", cls: "formless_melee_A", hp: 30 }, { name: "Formless Guard", cls: "formless_guard_A", hp: 30 }]), page(undefined, [], undefined, ["victory"], 1)]
+    const met = meetings(snaps, parts, usual)
+    expect(met).toHaveLength(1)
+    expect(met[0]).toMatchObject({ cls: "formless_melee_A", name: "Formless Melee and Formless Guard", brought: [] })
+  })
+
   test("a boss beaten is a win", () => {
     const snaps = [page(1, [{ name: "Swine Prince", cls: "swine_prince_A", hp: 50 }], undefined, ["combat_start"]), page(undefined, [], undefined, ["combat_start", "victory"], 1)]
     expect(meetings(snaps, special, usual)[0]).toMatchObject({ kind: "boss", outcome: "won", rounds: 1 })
@@ -66,6 +74,12 @@ describe("C106: special foes are noted", () => {
     expect(s.get("collector_A")).toBe("wanderer")
     expect(s.get("swine_prince_A")).toBe("boss")
     expect(s.has("swine_piglet_A")).toBe(false) // the boss's add, not a boss
+    // the boss is what a kill goal asks for, wherever it stands on its line (the Prophet behind its pews, the Pounder behind a cutthroat)
+    const crypts = await specialFoes("crypts", 1), weald = await specialFoes("weald", 1)
+    expect(crypts.get("prophet_A")).toBe("boss")
+    expect(crypts.has("pew_small_A")).toBe(false)
+    for (const b of ["hag_A", "crow_A", "brigand_cannon_A"]) expect(weald.get(b)).toBe("boss")
+    for (const add of ["cauldron_empty_A", "nest_A"]) expect(weald.has(add)).toBe(false)
     for (const d of ["cove", "weald", "warrens", "crypts", "darkestdungeon"]) for (const level of [1, 3, 5, 6]) {
       const sp = await specialFoes(d, level), halls = await dungeonMonsters(d, level, ["hall", "room"])
       expect(halls.filter((h) => sp.has(h))).toEqual([])

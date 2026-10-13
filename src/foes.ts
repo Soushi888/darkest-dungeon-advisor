@@ -40,7 +40,9 @@ export function meetings(snaps: Snap[], special: Map<string, "wanderer" | "boss"
     const before = new Set((snaps[fight[0]!.page - 1]?.heroes ?? []).filter((h) => h.deathsDoor).map((h) => h.name))
     const brink = [...new Set(fight.flatMap((f) => f.snap.heroes.filter((h) => h.deathsDoor && !before.has(h.name)).map((h) => h.name)))]
     const rounds = Math.max(...fight.map((f) => f.snap.battle!.round))
-    for (const [cls, name] of named) out.push({ cls, name, kind: special.get(cls)!, outcome, rounds, brought, brink, page: fight[0]!.page })
+    // one meeting per fight: a boss in several parts (the Formless Flesh) is one foe, kept under its first part
+    const [cls] = named.keys()
+    out.push({ cls: cls!, name: [...new Set(named.values())].join(" and "), kind: special.get(cls!)!, outcome, rounds, brought, brink, page: fight[0]!.page })
   }
   return out
 }

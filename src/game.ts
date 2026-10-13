@@ -15,6 +15,8 @@ export const P = {
   buildingUpgrades: (b: string) => `upgrades/building/${b}.upgrades.json`,
   building: (b: string) => `campaign/town/buildings/${b}/${b}.building.json`,
   mash: (d: string, level: number) => `dungeons/${d}/${d}.${level}.mash.darkest`,
+  // every quest goal; a kill goal names the boss it asks for (C106)
+  questTypes: "campaign/quest/quest.types.json",
   // the wanderers a dungeon may field beside its usual foes (the Collector, the Shambler): its own and the shared ones (C106)
   conditionalMash: (d: string, level: number) => [`dungeons/${d}/${d}.conditional.${level}.mash.darkest`, `dungeons/_shared/conditional.${level}.mash.darkest`],
   // a hero's own look (U30): actor.colour_variation 0 to 3 picks the class's art folder _A to _D
@@ -253,12 +255,10 @@ export async function specialFoes(d: string, level: number): Promise<Map<string,
     if (!existsSync(join(install, rel))) continue
     for (const m of (await text(rel)).matchAll(/^\w+:[^\n]*?\.types ([^\n.]+)/gm)) for (const t of m[1]!.trim().split(/\s+/)) if (!usual.has(t)) out.set(t, "wanderer")
   }
-  // a boss line lists the boss first and its adds after it (swine_prince_A swine_piglet_A); named lines are summons, not bosses
-  const rel = P.mash(d, level)
-  if (existsSync(join(install, rel))) for (const m of (await text(rel)).matchAll(/^boss:[^\n]*?\.types ([^\n.]+)/gm)) {
-    const first = m[1]!.trim().split(/\s+/)[0]
-    if (first && !usual.has(first) && !out.has(first)) out.set(first, "boss")
-  }
+  // a boss is what a kill goal of the game asks for (kill_prophet_A asks for prophet_A, the Formless Flesh's goal for all four of its
+  // parts); a boss line lists it among its adds in no fixed order (the pews before the Prophet), so the line alone cannot tell
+  const killed = new Set<string>(((await json(P.questTypes)).goals ?? []).filter((g: any) => g.type === "kill_monster").flatMap((g: any) => g.data?.monster_class_ids ?? []))
+  for (const t of await dungeonMonsters(d, level, ["boss"])) if (killed.has(t) && !usual.has(t) && !out.has(t)) out.set(t, "boss")
   return out
 }
 
