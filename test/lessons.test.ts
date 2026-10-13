@@ -31,4 +31,14 @@ describe("C96: a lesson says what happened", () => {
     expect(worked.text).toContain("3 of 8 torches burnt")
     expect(worked.text).not.toContain("this preparation brought them home")
   })
+
+  test("C99: half the food or less brought home is a food lesson, and the road packs food in full slots", async () => {
+    const snaps = [snap(8, 8, [hero("Herbert", 33, 33)]), snap(6, 4, [hero("Herbert", 30, 33)])]
+    const j = judge(snaps, beats(snaps), trip(true))
+    expect(j.lessons.find((l) => l.kind === "food")?.text).toBe("carry more food (4 of 8 left on the way home)")
+    const { RULE_PROVISION } = await import("../src/advise.ts")
+    const { packRules } = await import("../src/pack.ts")
+    const slot = (await packRules()).stack.get("food")!
+    for (const n of RULE_PROVISION.slice(1)) expect(n % slot).toBe(0)
+  })
 })

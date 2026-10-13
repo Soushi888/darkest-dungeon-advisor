@@ -10,7 +10,7 @@ import { checkTale } from "./talecheck.ts"
 import { copyFileSync, existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { homedir } from "node:os"
-import { advise, DOCTRINE, fills, learners, readiness, road, seatParty, RULE, RULE_FOOD, type Advice, type Party } from "./advise.ts"
+import { advise, DOCTRINE, fills, learners, readiness, road, seatParty, RULE, RULE_FOOD, RULE_PROVISION, type Advice, type Party } from "./advise.ts"
 export { road, type RoadItem } from "./advise.ts"
 import { campingSkills, supplyPrices, type CampSkill, type Cost, nameOf } from "./game.ts"
 import { install, root } from "./paths.ts"
@@ -747,7 +747,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     ["A true healer's extra weight on a road where healing failed before", `+${RULE.lessonHeal}`],
   ])
   H("On the road", [
-    ["Food and torches for a short, medium and long road", RULE_FOOD.slice(1).join(", ")],
+    ["Torches for a short, medium and long road", RULE_FOOD.slice(1).join(", ")], ["Food for a short, medium and long road, in full slots of 12", RULE_PROVISION.slice(1).join(", ")],
     ["When this many of the four have broken, I bring them home", RULE.turnBackBroken],
     ["Below this light I count them as walking in the dark", CHRONICLE_RULE.darkTorch],
     ["This much stress between two pages is a blow worth telling", CHRONICLE_RULE.stressSpike],
@@ -1070,7 +1070,7 @@ export function farewellSource(t: Town, r: NonNullable<Town["raid"]>, opts: { pr
   L.push(`Go now. I will keep the gate, and a lamp in the window for ${names.length === 4 ? `all four of them` : "each of them"}. Come back with ${names.join(", ").replace(/, ([^,]*)$/, " and $1")}, and the ledgers will be open when you do.`, "")
 
   const S = [`# Where each figure comes from, departure in week ${t.week}`, "", "Every number on the farewell beside the save field or game file it was read from (C14). Counts labelled my habit are RULE values.", "", "| Figure | What | Read from |", "|---|---|---|"]
-  for (const i of habit) rows.push([`${i.count}`, `${i.label}, my habit`, "RULE_FOOD in `advise.ts`"])
+  for (const i of habit) rows.push([`${i.count}`, `${i.label}, my habit`, "RULE_FOOD and RULE_PROVISION in `advise.ts`"])
   rows.push([`${t.wallet.gold ?? 0}`, "gold in the coffers", "`persist.estate.json` wallet"])
   for (const [n, what, from] of rows) S.push(`| ${n} | ${what} | ${from} |`)
   return { board: L.join("\n"), sources: S.join("\n") }

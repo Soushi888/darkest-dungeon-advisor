@@ -6,7 +6,10 @@ import { heroClass, heroTrees, nameOf, quirks, supplyPrices, type Skill } from "
 import { bearing, CHRONICLE_RULE, untried } from "./chronicle.ts"
 import type { Activity, HeroView, Quest, QuirkView, Town, Upgrade } from "./town.ts"
 
-export const RULE_FOOD = [0, 8, 12, 16] // RULE: food and torches by expedition length
+export const RULE_FOOD = [0, 8, 12, 16] // RULE: torches by expedition length
+// RULE (C99): food by expedition length, in full slots of the pack (12 a slot in the inventory files), so a hunger or a meal of
+// healing never empties the pack (Soushi, 2026-10-13, back from the Cove with 4 of 8: "It is food that is short")
+export const RULE_PROVISION = [0, 12, 12, 24]
 
 export interface RoadItem { id: string; label: string; count: number; price: number; why?: string }
 /** What the road to a quest asks of the Provisioner (counts are RULE), priced from the game's list with this week's event applied (C22). */
@@ -39,7 +42,7 @@ export function road(t: Town, p: Party | undefined, prices: Map<string, number>)
   const q = p.quest, len = Math.max(1, Math.min(3, q.length))
   const change = (id: string) => (t.event?.provisions ?? []).filter((v) => v.item === (id === "provision" ? "provision" : "supply")).reduce((x, v) => x + v.cost, 0)
   const item = (id: string, label: string, count: number): RoadItem => ({ id, label, count, price: Math.max(0, Math.round((prices.get(id) ?? 0) * (1 + change(id)))) })
-  const out = [item("provision", "Food", RULE_FOOD[len]!), item("torch", "Torches", RULE_FOOD[len]!), item("shovel", "Shovels", len)]
+  const out = [item("provision", "Food", RULE_PROVISION[len]!), item("torch", "Torches", RULE_FOOD[len]!), item("shovel", "Shovels", len)]
   if (q.bleeders.length) out.push(item("bandage", "Bandages", len + 1))
   if (q.blighters.length) out.push(item("antivenom", "Antivenom", len + 1))
   // C42: what past trips on this dungeon taught, at this difficulty or lower; and a margin on a road harder than any yet
