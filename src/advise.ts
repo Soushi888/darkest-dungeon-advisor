@@ -86,6 +86,7 @@ export interface Party {
 }
 export interface Advice {
   relief: Relief[]; disease: HeroView[]; afflicted: HeroView[]
+  trueHealer: Set<number> // guids of heroes whose learned skills hold a true heal (C86)
   ready: HeroView[]; parties: Party[]; best?: Party
   dismiss: { hero: HeroView; why: string }[]; recruits: Recruit[]
   // C85: pairs too alike to keep both, what the roster would then lack, and the coach's recruit who brings it
@@ -200,7 +201,9 @@ async function bestParty(pool: HeroView[], q: Quest): Promise<Party | undefined>
       else if (heal) score += RULE.lightHealWorth
       if (stunner) score += RULE.stunWorth
       if (new Set(order.map((h) => h.cls)).size < 4) score -= RULE.sameClass
-      if (!best || score > best.score) {
+      // C86: a four with a true healer always beats a four without, whatever else either is worth (Soushi, 2026-10-13, from the
+      // road with Furnival at 4 health: "we need heal, our recruiting and seating strategy should not overlook that")
+      if (!best || (healer && !best.healer) || (healer === best.healer && score > best.score)) {
         best = {
           quest: q, score, healer, heal, stunner, notes: [], reach: [...reach].sort(), pair,
           seats: order.map((h, i) => ({ hero: h, rank: i + 1, skills: usable(h, i + 1), notes: fit.get(h.guid)!.notes, carry: kit(h, i + 1).map((s) => s.name) })),
@@ -241,7 +244,11 @@ export async function advise(t: Town): Promise<Advice> {
 
   // relief: everyone over my threshold or afflicted, with the activities their quirks allow and slots left
   const relief: Relief[] = []
-  for (const h of free.filter((h) => h.affliction || h.stress >= RULE.restAbove).sort((x, y) => y.stress - x.stress)) {
+  // C86: a true healer is relieved first, so the next four has one to take (Soushi, 2026-10-13)
+  const heals = async (h: HeroView) => { const sk = (await heroClass(h.cls)).skills; return (h.learned ?? h.skills).some((s) => sk.get(s.id)?.heal && sk.get(s.id)!.targetsAllies && sk.get(s.id)!.healAvg >= RULE.realHeal) }
+  const trueHealer = new Set<number>()
+  for (const h of t.heroes) if (await heals(h)) trueHealer.add(h.guid)
+  for (const h of free.filter((h) => h.affliction || h.stress >= RULE.restAbove).sort((x, y) => Number(trueHealer.has(y.guid)) - Number(trueHealer.has(x.guid)) || y.stress - x.stress)) {
     const why = [h.affliction ? `afflicted (${h.affliction})` : "", `${h.stress} stress`].filter(Boolean)
     const allowedHere = t.activities.filter((a) => a.heal > 0 && !a.locked && allowed(a, h))
     const full = allowedHere.filter((a) => a.slots <= a.used)
@@ -390,7 +397,7 @@ export async function advise(t: Town): Promise<Advice> {
     const top = (h.learned ?? h.skills).map((s) => ({ name: h.name, skill: s.name, avg: sk.get(s.id)?.targetsAllies ? sk.get(s.id)!.healAvg : 0 })).sort((x, y) => y.avg - x.avg)[0]
     if (top && top.avg >= RULE.realHeal) healers.push(top)
   }
-  return { relief, disease, afflicted, ready, parties, best, dismiss, recruits, alike, buys, blocked, heirlooms, coach, young, trinkets, treat, healers, lostHealers, spend: t.wallet.gold ?? 0 }
+  return { trueHealer, relief, disease, afflicted, ready, parties, best, dismiss, recruits, alike, buys, blocked, heirlooms, coach, young, trinkets, treat, healers, lostHealers, spend: t.wallet.gold ?? 0 }
 }
 
 /** Seats a party Soushi named, front to back, and says what is wrong with it rather than refusing it. */
