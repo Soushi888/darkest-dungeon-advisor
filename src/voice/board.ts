@@ -2,6 +2,7 @@
 // compiled page. One fixed file name, so the picks a reader makes survive every rebuild of the board.
 // The board speaks only as the Caretaker, in the Hamlet's own words (C13): no file, field or save is named on it.
 // Where each figure comes from goes to sources.md beside it (C14).
+import { coin } from "./words.ts"
 import { teachings } from "../road/teach.ts"
 import { campTell, campWorth } from "../caretaker/camp.ts"
 import { ROLE_WORDS } from "../caretaker/roles.ts"
@@ -11,7 +12,7 @@ import { checkTale } from "../road/talecheck.ts"
 import { copyFileSync, existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { homedir } from "node:os"
-import { advise, bears, DOCTRINE, fills, learners, readiness, road, seatParty, RULE, RULE_FOOD, RULE_PROVISION, type Advice, type Party } from "../caretaker/advise.ts"
+import { advise, bears, DOCTRINE, fills, learners, readiness, road, seatParty, RULE, type Advice, type Party } from "../caretaker/advise.ts"
 export { road, type RoadItem } from "../caretaker/advise.ts"
 import { campingSkills, supplyPrices, type CampSkill, type Cost, nameOf } from "../sources/game.ts"
 import { install, outDir, root } from "../sources/paths.ts"
@@ -19,14 +20,14 @@ import { DIFFICULTY, LENGTH, type HeroView, type Town, type Upgrade } from "../w
 import { buildSkin } from "./skin.ts"
 import { loadPicks, reconcile, type Check } from "../world/reconcile.ts"
 import { contradictions } from "./coherence.ts"
-import { beats, chronicleFor, heirloomTrips, CHRONICLE_RULE, debrief, judge, loadLedger, remember, untried, type Beat, type Debrief, type Lesson } from "../road/chronicle.ts"
+import { beats, chronicleFor, heirloomTrips, debrief, judge, loadLedger, remember, untried, type Beat, type Debrief, type Lesson } from "../road/chronicle.ts"
 import { dungeonMonsters, heroClass, specialFoes } from "../sources/game.ts"
 import { meetings } from "../road/foes.ts"
+import { habitGroups } from "../caretaker/rules.ts"
 
 const BOARD = process.env.NICEBOARD ?? join(homedir(), ".claude/skills/Niceboard/Tools/Board.ts")
 const y = (s: string) => JSON.stringify(s) // a JSON string is a valid YAML scalar, quotes and colons included
 const HABIT = "(my habit)" // how a RULE number is labelled on the board, in his voice (A2)
-const coin = (n: number) => `${n.toLocaleString("en-US")} gold`
 // C46: stress drawn as a bar on the hero's own gauge, 0 to 200: resolve is tested at 100 and the heart gives out at 200
 // (the game's rule as the Darkest Dungeon wiki states it, darkestdungeon.wiki.gg/wiki/Stress; Soushi allowed the wiki 2026-10-11)
 const STRESS = { test: 100, max: 200 }
@@ -702,48 +703,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   L.push("## The Caretaker's habits {wide}", "")
   L.push(`Every rule of my own that bends the advice on this page, so you can weigh it and change it as we learn the dark together. None of these is a law of the dark; each is my own judgement. Pin a comment on any row to change it, and I will. Your heroes have suffered ${t.witnessedSkills} kinds of blow so far, in ${t.visited.length ? `${t.visited.length} of the places beyond the Hamlet` : "no place yet"}.`, "")
   const H = (group: string, rows: [string, string | number][]) => { L.push(`**${group}**`, "", "| Habit | Now |", "|---|---|"); for (const [w, v] of rows) L.push(`| ${w} | ${v} |`); L.push("") }
-  H("Rest and sending", [
-    ["A hero at this much stress or more rests before going out again", RULE.restAbove],
-    ["I only send heroes under this much stress", RULE.sendBelow],
-    ["A level 0 hero with this many bad quirks is one I would let go", RULE.dismissNegatives],
-    ["When this share of the roster is level 1 or lower, the heirlooms go to the Stage Coach's seasoned recruits first", `${Math.round(RULE.youngRoster * 100)}%`],
-    ["A heal restoring this many hit points a cast, at its first level, makes a healer; less is no heal at all", RULE.realHeal],
-  ])
-  H("Choosing the road", [
-    ["When this many of the four are level 0, a longer road counts against itself", RULE.greenParty],
-    ["How much it counts, for each step beyond a short road", RULE.greenPerStep],
-    ["Every this much gold the road leaves in the coffers counts one point", coin(RULE.goldPerPoint)],
-    ["Up to this many points for gold left", RULE.goldCap],
-    ["A road the coffers cannot provision counts this much against itself", RULE.brokeRoad],
-  ])
-  H("Seating the four", [
-    ["A true healer in the four", `+${RULE.healerWorth}`], ["A stun in the four", `+${RULE.stunWorth}`],
-    ["Two of the same calling in the four", `−${RULE.sameClass}`], ["Each level of a hero", `+${RULE.levelWorth}`], ["Each point of stress a hero carries", `−${RULE.stressWeight}`],
-    ["Each enemy rank the four can strike from their seats", `+${RULE.reachPerRank}`],
-    ["Each neighbouring rank a hero can still strike from, if knocked out of their seat", `+${RULE.shufflePerSide}`],
-    ["A skill that moves its user back into their seat", `+${RULE.moveWorth}`],
-    ["A mark carried with a hand that strikes the marked harder", `+${RULE.markPair}`],
-    ["A bleed or blight, times the share of the road's known foes that fail to resist it", `+${RULE.dotWorth}`],
-    ["Each hit point above the four's average at the front (rank 1 twice, rank 2 once, rank 3 once against, rank 4 twice against)", `${RULE.frontHp}`],
-    ["A true healer's extra weight on a road where healing failed before", `+${RULE.lessonHeal}`],
-  ])
-  H("On the road", [
-    ["Torches for a short, medium and long road", RULE_FOOD.slice(1).join(", ")], ["Food for a short, medium and long road, in full slots of 12", RULE_PROVISION.slice(1).join(", ")],
-    ["When this many of the four have broken, I bring them home", RULE.turnBackBroken],
-    ["Below this light I count them as walking in the dark", CHRONICLE_RULE.darkTorch],
-    ["This much stress between two pages is a blow worth telling", CHRONICLE_RULE.stressSpike],
-    ["This share of a hero's health lost or regained between two pages is a wound or a mending worth telling", `${Math.round(CHRONICLE_RULE.woundShare * 100)}%`],
-  ])
-  H("Learning from the road", [
-    ["Torches a lesson about the dark adds on its dungeon", `+${CHRONICLE_RULE.lessonTorches}`],
-    ["Food a lesson about hunger adds on its dungeon", `+${CHRONICLE_RULE.lessonFood}`],
-    ["One more torch and food on a road harder than any yet", `+${CHRONICLE_RULE.untriedMargin}`],
-  ])
-  H("At the Survivalist", [
-    ["Each point of stress a camping skill relieves, times how many it reaches", RULE.campStress],
-    ["A camping heal, per whole health bar, times how many it reaches", RULE.campHealth],
-    ["A cure at camp (bleeding, blight, disease)", RULE.campCure], ["A guard on the camp against a night ambush", RULE.campGuard], ["A boon until the next fight", RULE.campBoon],
-  ])
+  for (const [group, habits] of habitGroups()) H(group, habits.map((h): [string, string] => [h.words, h.value()]))
 
   const S: string[] = [`# Where each figure comes from, week ${t.week}`, "", "Every number on the town board beside the save field or game file it was read from (C14). Numbers labelled (my habit) on the board are RULE values and are not here.", ""]
   S.push("| Figure | What | Read from |", "|---|---|---|")

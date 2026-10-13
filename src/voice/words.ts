@@ -3,6 +3,9 @@
 // (shared/buffs/base.buffs.json), and a long line cut into lines short enough for a notification to carry whole.
 import { nameOf, strings, text } from "../sources/game.ts"
 
+/** Gold as the board writes it: "1,500 gold". */
+export const coin = (n: number) => `${n.toLocaleString("en-US")} gold`
+
 let lib: Map<string, any> | undefined
 const buffs = async () => (lib ??= new Map(JSON.parse(await text("shared/buffs/base.buffs.json")).buffs.map((b: any) => [b.id, b])))
 
