@@ -15,6 +15,7 @@
     "caretaker": "bun src/caretaker.ts",
     "ship": "bun src/ship.ts",
     "golden": "bun src/golden.ts",
+    "graph": "bun src/graph.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
