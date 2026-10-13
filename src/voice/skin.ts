@@ -2,11 +2,10 @@
 // Fonts come from skin/fonts (SIL OFL 1.1); art is read from the game install at build time and lands
 // only in .local/, which is never committed (ISA A4).
 import { existsSync, mkdirSync } from "node:fs"
-import { homedir } from "node:os"
-import { dirname, join, resolve } from "node:path"
+import { dirname, join } from "node:path"
+import { install, root } from "../sources/paths.ts"
 
-const root = resolve(import.meta.dir, "..", "..")
-export const install = process.env.DD_INSTALL ?? join(homedir(), ".steam/steam/steamapps/common/DarkestDungeon")
+export { install }
 
 // Each name the skin uses, and the file under the install it is drawn from.
 const ART: Record<string, string> = {

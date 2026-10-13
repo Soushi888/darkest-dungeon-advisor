@@ -20,11 +20,11 @@ function* files(dir: string): Generator<string> {
   }
 }
 
-export async function buildNames(root = install): Promise<Map<number, string>> {
+export async function buildNames(dir = install): Promise<Map<number, string>> {
   const names = new Map<number, string>()
   const offer = (s: string) => { if (!names.has(stringHash(s))) names.set(stringHash(s), s) }
   for (const d of DIRS) {
-    for (const f of files(join(root, d))) {
+    for (const f of files(join(dir, d))) {
       const base = basename(f)
       offer(base.split(".")[0]!)
       if (!TEXT.test(f) || statSync(f).size > 4_000_000) continue
@@ -37,13 +37,13 @@ export async function buildNames(root = install): Promise<Map<number, string>> {
     }
   }
   // Upgrade trees are stored as "<class>.<skill>", a pair no single file spells out, camping skills included.
-  const classes = readdirSync(join(root, "heroes"))
+  const classes = readdirSync(join(dir, "heroes"))
   const skills = new Set<string>()
   for (const c of classes) {
-    const info = await Bun.file(join(root, "heroes", c, `${c}.info.darkest`)).text().catch(() => "")
+    const info = await Bun.file(join(dir, "heroes", c, `${c}.info.darkest`)).text().catch(() => "")
     for (const m of info.matchAll(/\.id "([^"]+)"/g)) skills.add(m[1]!)
   }
-  for (const f of files(join(root, "raid", "camping"))) {
+  for (const f of files(join(dir, "raid", "camping"))) {
     if (!f.endsWith(".json")) continue
     for (const m of (await Bun.file(f).text()).matchAll(/"id"\s*:\s*"([^"]+)"/g)) skills.add(m[1]!)
   }
