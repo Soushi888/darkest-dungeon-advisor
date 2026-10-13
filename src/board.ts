@@ -11,7 +11,7 @@ import { checkTale } from "./talecheck.ts"
 import { copyFileSync, existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { homedir } from "node:os"
-import { advise, DOCTRINE, fills, learners, readiness, road, seatParty, RULE, RULE_FOOD, RULE_PROVISION, type Advice, type Party } from "./advise.ts"
+import { advise, bears, DOCTRINE, fills, learners, readiness, road, seatParty, RULE, RULE_FOOD, RULE_PROVISION, type Advice, type Party } from "./advise.ts"
 export { road, type RoadItem } from "./advise.ts"
 import { campingSkills, supplyPrices, type CampSkill, type Cost, nameOf } from "./game.ts"
 import { install, root } from "./paths.ts"
@@ -311,7 +311,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
       const foes = q.walked ? (q.known.length ? `foes you know: ${q.known.slice(0, 6).join(", ")}${q.known.length > 6 ? ` and ${q.known.length - 6} more` : ""}; ${q.unknownCount} kind${q.unknownCount === 1 ? "" : "s"} you have not met` : `${q.unknownCount} kind${q.unknownCount === 1 ? "" : "s"} of foe you have not met`) : "you have never walked it; I will not speak of what lives there"
       // foresight speaks only about the expedition being prepared (C7)
       const rumour = opts.foresight && p === chosen && q.unknownCount ? ` Foresight: travellers speak of ${q.unknownTypes.length ? q.unknownTypes.join(" and ") + " things" : "things I cannot name"} there that you have not met.` : ""
-      L.push(`    - pick: ${y(questLabel(p))}`, `      effect: ${y(`${DIFFICULTY[q.difficulty] ?? `level ${q.difficulty}`}; rewards ${q.rewards.join(", ")}; ${foes}.${rumour}`)}`)
+      L.push(`    - pick: ${y(questLabel(p))}`, `      effect: ${y(`${DIFFICULTY[q.difficulty] ? `${DIFFICULTY[q.difficulty]} (level ${q.difficulty})` : `level ${q.difficulty}`}${bears(p) ? "" : `, beyond what the four can bear: their mean level is ${(p.seats.reduce((x, s) => x + s.hero.level, 0) / p.seats.length).toFixed(1)} (my habit)`}; rewards ${q.rewards.join(", ")}; ${foes}.${rumour}`)}`)
     }
     const leanIdx = chosen ? a.parties.indexOf(chosen) : 0
     // only said of a short road chosen over longer ones that a green party would have taken
