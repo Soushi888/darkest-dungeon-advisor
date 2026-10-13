@@ -68,6 +68,22 @@ describe.skipIf(!has)("C112: one four drives the whole plan", () => {
     expect(p.treatment.cards.length + p.treatment.waiting.length).toBe(a.treat.length)
   })
 
+  test("B10: the heirlooms improve the place of relief leaned this week by its building and activity, never by a name inside a label", async () => {
+    const t = await town(await readSave())
+    const { a } = await prepare(t, {})
+    const prices = await supplyPrices()
+    const first = plan(t, a, { answers: {}, prices })
+    const leaned = first.relief.find((c) => c.why.kind === "cheapest")
+    if (!leaned) return
+    const act = leaned.relief.options[leaned.lean]!.activity
+    const up = (tree: string, label: string) => ({ tree, code: "a", label, cost: [{ type: "crest", amount: 1 }], affordable: true, blockedBy: "" }) as any
+    // a label that only mentions the place, and the place's own upgrade under a label that does not name it
+    const decoy = up("guild.cost", `Guild: lower prices, as cheap as the ${act.name}`), own = up(`${act.building}.${act.activity}`, `${act.buildingName}: improved`)
+    const p = plan(t, { ...a, heirlooms: [decoy, own], blocked: [], coach: [], young: undefined }, { answers: {}, prices })
+    expect(p.heirlooms!.why).toEqual({ kind: "relief", place: act.name })
+    expect(p.heirlooms!.lean).toBe(1)
+  })
+
   test("a plan given advice made for another four refuses it", async () => {
     const t = await town(await readSave())
     const answers = { partyNames: t.heroes.slice(0, 4).map((h) => h.name) }

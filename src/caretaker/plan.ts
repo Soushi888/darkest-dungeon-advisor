@@ -244,7 +244,10 @@ export function plan(t: Town, a: Advice, inp: PlanInputs): Plan {
 
   // relief: each lean takes its seat, so no two cards lean to the same last seat (U11)
   const seatsLeft = new Map(live.activities.map((x) => [x.activity, x.slots - x.used]))
-  const reliefUsed: string[] = [] // C97: the relief activities leaned this week, for the heirlooms to improve
+  // C97: the relief activities leaned this week, for the heirlooms to improve; B10: known by the upgrade tree the game files them
+  // under ("<building>.<activity>"), never by their name inside an upgrade's label
+  const reliefUsed: { tree: string; name: string }[] = []
+  const used = (x: Activity) => reliefUsed.push({ tree: `${x.building}.${x.activity}`, name: x.name })
   const relief: ReliefCard[] = []
   for (const r of a.relief) {
     if (!r.options.length) continue
@@ -255,7 +258,7 @@ export function plan(t: Town, a: Advice, inp: PlanInputs): Plan {
     const paid = placed.get(r.hero.guid)
     if (paid) {
       const at = r.options.findIndex((o) => o.activity.name === paid)
-      if (at >= 0) reliefUsed.push(paid)
+      if (at >= 0) used(r.options[at]!.activity)
       relief.push({ relief: r, lean: at >= 0 ? at : r.options.length, why: { kind: "paid", place: paid }, filedUnder: at >= 0 ? r.options[at]!.activity.buildingName : "", left: now })
       continue
     }
@@ -263,7 +266,7 @@ export function plan(t: Town, a: Advice, inp: PlanInputs): Plan {
     const taken = r.options.filter((o) => o.activity.cost <= left && !((seatsLeft.get(o.activity.activity) ?? 0) > 0))
     if (best) {
       spend("relief", best.activity.cost, r.hero.name)
-      reliefUsed.push(best.activity.name)
+      used(best.activity)
       seatsLeft.set(best.activity.activity, (seatsLeft.get(best.activity.activity) ?? 1) - 1)
       relief.push({ relief: r, lean: r.options.indexOf(best), why: { kind: "cheapest", note: best.note }, filedUnder: best.activity.buildingName, left: now })
     } else if (taken.length) relief.push({ relief: r, lean: r.options.length, why: { kind: "taken", places: taken.map((o) => o.activity.name) }, filedUnder: "", left: now })
@@ -439,12 +442,12 @@ export function plan(t: Town, a: Advice, inp: PlanInputs): Plan {
     const step = onRoad.find((i) => (opens[i]?.length ?? 0) > 0) ?? onRoad[0] ?? -1
     // C97: after the young habit, the doctrine's order: what opens the four's waiting upgrades, the Sanitarium, the relief the
     // heroes use this week (stress), then a lower price where the party's gold goes (the Guild if it trains this week, else the smith)
-    const reliefAt = a.heirlooms.findIndex((u) => reliefUsed.some((n) => u.label.includes(n)))
+    const reliefAt = a.heirlooms.findIndex((u) => reliefUsed.some((x) => x.tree === u.tree))
     const guild = a.buys.some((b) => b.where === "Guild")
     const cut = a.heirlooms.findIndex((u) => u.label === (guild ? "Guild: lower prices" : "Blacksmith: lower prices"))
     const lean = young ? (si >= 0 ? si : step >= 0 ? step : a.heirlooms.length) : most >= 0 ? most : san >= 0 ? san : reliefAt >= 0 ? reliefAt : cut >= 0 ? cut : a.heirlooms.length
     const why: HeirloomWhy = young ? (si >= 0 ? { kind: "young-seasoned" } : step >= 0 ? { kind: "young-step", step } : seasoned!.blockedBy ? { kind: "young-waits" } : { kind: "young-short" })
-      : most >= 0 ? { kind: "opens", most } : san >= 0 ? { kind: "sanitarium" } : reliefAt >= 0 ? { kind: "relief", place: reliefUsed.find((n) => a.heirlooms[reliefAt]!.label.includes(n))! } : cut >= 0 ? { kind: "cut", guild } : { kind: "none" }
+      : most >= 0 ? { kind: "opens", most } : san >= 0 ? { kind: "sanitarium" } : reliefAt >= 0 ? { kind: "relief", place: reliefUsed.find((x) => x.tree === a.heirlooms[reliefAt]!.tree)!.name } : cut >= 0 ? { kind: "cut", guild } : { kind: "none" }
     heirlooms = {
       coachOut, card, opens, lean, why, ...(a.young ? { young: a.young } : {}), ...(seasoned ? { seasoned } : {}),
       // U22: saving is a plan, not a wait
