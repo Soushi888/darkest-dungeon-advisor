@@ -30,7 +30,8 @@ describe.skipIf(!has)("C87, C88: a roster and a road that hold together", () => 
     const md = source(t, a, { foresight: false, answers: {}, newcomers: new Set(t.heroes.map((h) => h.guid)) }).board
     const cards = md.split(/\n- q: /)
     for (const c of cards.filter((c) => c.startsWith('"Dismiss '))) expect(c).not.toContain("at the coach")
-    for (const r of t.recruits.filter((r) => t.heroes.some((h) => h.cls === r.cls))) {
+    const healerRecruit = new Set(a.recruits.filter((r) => r.heal).map((r) => r.hero.guid))
+    for (const r of t.recruits.filter((r) => !healerRecruit.has(r.guid) && t.heroes.some((h) => h.cls === r.cls))) {
       const card = cards.find((c) => c.startsWith(`"Recruit ${r.name},`))
       expect(card).toBeDefined()
       expect(card).toMatch(/\n  lean: 1\n/)

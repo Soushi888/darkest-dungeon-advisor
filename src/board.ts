@@ -549,7 +549,8 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   // C88: a hero who joined this week is never let go for another recruit the same week (Soushi, 2026-10-13: "you just made me recruit him to ask me to dismiss him")
   const weak = t.heroes.filter((h) => h.level === 0 && !h.busy && !sendingNow.has(h.guid) && !named.has(h.guid) && !tended.has(h.guid) && !opts.newcomers?.has(h.guid)).sort((x, z) => worth(x) - worth(z))
   // C88: a recruit of a class the roster already holds is never taken: C85 would set the two against each other
-  const held = (r: { hero: HeroView }) => t.heroes.find((h) => h.cls === r.hero.cls)
+  // except a true healer (C86): two healers are never too alike
+  const held = (r: Advice["recruits"][number]) => r.heal ? undefined : t.heroes.find((h) => h.cls === r.hero.cls)
   let free = Math.max(0, t.rosterCap - t.rosterSize) + a.dismiss.length
   const dismiss = [...a.dismiss]
   for (const r of ranked.filter((r) => !held(r) && (fillOf(r) || worth(r.hero) > 0))) {
