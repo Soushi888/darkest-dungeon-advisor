@@ -39,3 +39,23 @@ describe.skipIf(!has)("C87, C88: a roster and a road that hold together", () => 
     }
   })
 })
+
+describe("C89, C90: a disease that bites only at camp, and a plan that holds while it is applied", () => {
+  test("C89: Bulimic counts as biting only at camp, from the game's own buffs", async () => {
+    const { quirks } = await import("../src/game.ts")
+    expect((await quirks()).get("bulimic")?.campOnly).toBe(true)
+  })
+
+  test("C90: a hero placed in a building since the week began is free to the plan, and their seat open", async () => {
+    const { planView } = await import("../src/board.ts")
+    const t = await town(await readSave())
+    const h = t.heroes[0]!, act = t.activities[0]!
+    const placed = { ...t, heroes: t.heroes.map((x) => (x.guid === h.guid ? { ...x, busy: act.name } : x)), activities: t.activities.map((x) => (x === act ? { ...x, used: x.used + 1 } : x)) }
+    const start = { week: t.week, heroes: t.heroes.map((x) => ({ guid: x.guid, name: x.name, busy: x.guid === h.guid ? "" : x.busy })), bought: [], gold: 0 }
+    const plan = planView(placed, start)
+    expect(plan.heroes.find((x) => x.guid === h.guid)!.busy).toBe("")
+    expect(plan.activities.find((x) => x.name === act.name)!.used).toBe(placed.activities.find((x) => x.name === act.name)!.used - 1)
+    // a hero already placed when the week began stays placed
+    expect(planView(placed, { ...start, heroes: start.heroes.map((x) => (x.guid === h.guid ? { ...x, busy: act.name } : x)) }).heroes.find((x) => x.guid === h.guid)!.busy).toBe(act.name)
+  })
+})
