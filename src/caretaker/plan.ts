@@ -79,7 +79,7 @@ export type WardWhy = "paid" | "going" | "bed" | "green" | "broke" | "worth"
 export interface WardCard { hero: HeroView; lean: number; why: WardWhy; filedUnder: string; left: number }
 export interface WardPlan { ward: Activity; freeBeds: number; cards: WardCard[] }
 
-export type TreatWhy = "paid" | "inParty" | "seat" | "broke" | "worth"
+export type TreatWhy = "paid" | "inParty" | "broke" | "worth"
 export interface TreatCard { treat: Treat; lean: number; why: TreatWhy; filedUnder: string; left: number }
 export interface TreatmentPlan { ward: Activity; freeSeats: number; cards: TreatCard[]; waiting: Treat[]; inWard: string[] }
 
@@ -302,15 +302,14 @@ export function plan(t: Town, a: Advice, inp: PlanInputs): Plan {
     const there = (tr: Treat) => placed.get(tr.hero.guid) === tw.name
     for (const tr of a.treat.filter(there)) cards.push({ treat: tr, lean: 0, why: "paid", filedUnder: tw.buildingName, left })
     for (const tr of a.treat.filter((x) => !there(x))) {
-      // a card only for a seat that is free; the rest wait in line
+      // a card only for a seat that is free, and the card takes it; the rest wait in line (B9: so no card ever lacks a seat)
       if (seats <= 0) { waiting.push(tr); continue }
-      const gets = seats > 0
-      if (gets) seats--
+      seats--
       const purse = tr.cost <= left, now = left
       // a hero in the ward cannot board the coach: never lean on treating one of the four I would send (Soushi, 2026-10-10)
-      const lean = gets && purse && !tr.inParty ? 0 : 1
+      const lean = purse && !tr.inParty ? 0 : 1
       if (lean === 0) spend("treatment", tr.cost, tr.hero.name)
-      const why: TreatWhy = tr.inParty ? "inParty" : !gets ? "seat" : !purse ? "broke" : "worth"
+      const why: TreatWhy = tr.inParty ? "inParty" : !purse ? "broke" : "worth"
       cards.push({ treat: tr, lean, why, filedUnder: lean === 0 ? tw.buildingName : "", left: now })
     }
     treatment = { ward: tw, freeSeats: tw.slots - tw.used, cards, waiting, inWard: live.heroes.filter((h) => h.busy === tw.name).map((h) => h.name) }

@@ -341,7 +341,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     cards.push(`  context: ${y(`${tr.hero.name}, ${tr.hero.clsName} level ${tr.hero.level}${tr.inParty ? ", in the party I would send" : ""}. ${tr.quirk.name}${tr.quirk.description ? `: ${tr.quirk.description}` : "."}${tr.quirk.locked ? " It has set in, and the ward asks more for it." : ""} The ${tw.name} has ${tw.slots} seat${tw.slots === 1 ? "" : "s"}, ${P.treatment!.freeSeats} free this week.`)}`, "  options:")
     cards.push(`    - pick: ${y(tw.name)}`, `      effect: ${y(`${tr.cost ? coin(tr.cost) : "free this week"}; the ward works on ${tr.quirk.name}, and ${tr.hero.name} stays in the Hamlet while it does.`)}`)
     cards.push(`    - pick: "Not this week"`, `      effect: ${y(`${tr.hero.name} keeps it for now.`)}`)
-    cards.push(`  lean: ${lean}`, `  lean_why: ${y({ paid: `already there this week, and paid for: the ${tw.name} keeps them.`, inParty: `${tr.hero.name} rides with the party I would send, and a hero in the ward cannot leave with the coach; treat it in a week they stay home.`, seat: "the seat goes to someone the road needs more.", broke: `${firstRoad(left)}.`, worth: `${tr.why}.` }[why])}`)
+    cards.push(`  lean: ${lean}`, `  lean_why: ${y({ paid: `already there this week, and paid for: the ${tw.name} keeps them.`, inParty: `${tr.hero.name} rides with the party I would send, and a hero in the ward cannot leave with the coach; treat it in a week they stay home.`, broke: `${firstRoad(left)}.`, worth: `${tr.why}.` }[why])}`)
   }
   const stuck = P.stuck
   if (cards.length) {

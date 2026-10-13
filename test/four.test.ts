@@ -55,6 +55,19 @@ describe.skipIf(!has)("C112: one four drives the whole plan", () => {
     expect(up?.item.what).toBe(best ? `${best.k.name} at the Survivalist` : undefined)
   })
 
+  test("B9: a Treatment Ward card exists only for a free seat, so no card says the seat went to someone else", async () => {
+    const { readFileSync } = await import("node:fs")
+    // the reason could never be reached: a card is made only while a seat is free, and the rest wait in line on one note
+    expect(readFileSync(new URL("../src/voice/board.ts", import.meta.url), "utf8")).not.toContain("the seat goes to someone the road needs more")
+    expect(readFileSync(new URL("../src/caretaker/plan.ts", import.meta.url), "utf8")).not.toMatch(/TreatWhy = [^\n]*"seat"/)
+    const t = await town(await readSave())
+    const { a } = await prepare(t, {})
+    const p = plan(t, a, { answers: {}, prices: await supplyPrices() })
+    if (!p.treatment) return
+    expect(p.treatment.cards.filter((c) => c.why !== "paid").length).toBeLessThanOrEqual(Math.max(0, p.treatment.freeSeats))
+    expect(p.treatment.cards.length + p.treatment.waiting.length).toBe(a.treat.length)
+  })
+
   test("a plan given advice made for another four refuses it", async () => {
     const t = await town(await readSave())
     const answers = { partyNames: t.heroes.slice(0, 4).map((h) => h.name) }
