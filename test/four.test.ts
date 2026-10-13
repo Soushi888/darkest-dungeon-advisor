@@ -39,6 +39,22 @@ describe.skipIf(!has)("C112: one four drives the whole plan", () => {
     expect(other).toBeGreaterThan(0)
   })
 
+  test("B7: the upkeep and the Survivalist read what a hero knows at the fire from one source", async () => {
+    const t = await town(await readSave())
+    const a = await advise(t), camp = await campingSkills(), prices = await supplyPrices()
+    const first = plan(t, a, { answers: {}, prices, camp })
+    const seat = first.camp?.best[0]
+    if (!seat) return
+    // a hero whose save lists only the skills taken to the fire: the one I would have taught them is among them
+    seat.hero.campKnown = undefined
+    seat.hero.campEquipped = [...(seat.hero.campEquipped ?? []), seat.k.id]
+    const p = plan(t, a, { answers: {}, prices, camp })
+    const best = p.camp!.best.find((b) => b.hero.guid === seat.hero.guid)
+    expect(best?.k.id).not.toBe(seat.k.id)
+    const up = (p.upkeep?.lines ?? []).find((l) => l.item.hero === seat.hero.name && l.item.kind === "camp")
+    expect(up?.item.what).toBe(best ? `${best.k.name} at the Survivalist` : undefined)
+  })
+
   test("a plan given advice made for another four refuses it", async () => {
     const t = await town(await readSave())
     const answers = { partyNames: t.heroes.slice(0, 4).map((h) => h.name) }

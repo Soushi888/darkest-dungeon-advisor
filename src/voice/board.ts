@@ -435,8 +435,8 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     L.push("## The Survivalist {wide}", "")
     L.push(`The Survivalist teaches the skills a hero uses at the campfire, which only a medium or long road gives them the night for. ${off ? `He knocks ${Math.round(off * 100)}% off his lessons for what the estate has paid him.` : ""} ${camps ? `This week's road camps, so what they carry to the fire matters now.` : `This week's road is short and does not camp: what they learn here waits for a longer road.`}`.replace(/\s+/g, " ").trim(), "")
     L.push("```board-stickies")
-    for (const { hero: h, open, price } of P.camp.seats) {
-      const known = h.campKnown ?? [], taken = h.campEquipped ?? []
+    for (const { hero: h, known, open, price } of P.camp.seats) {
+      const taken = h.campEquipped ?? []
       const line = (id: string) => { const k = camp.get(id); return k ? `${k.name} (${tell(k)})` : id }
       L.push(`- title: ${y(`${h.name}, ${h.clsName}, at the campfire`)}`, "  kind: model",
         `  body: ${y(`Takes to camp: ${taken.map(line).join(", ") || "nothing yet"}.${known.length > taken.length ? ` Also knows: ${known.filter((x) => !taken.includes(x)).map((id) => camp.get(id)?.name ?? id).join(", ")}.` : ""}${open ? ` Worth learning: ${line(open.id)}, ${coin(price)}.` : " Knows every camping skill the Survivalist can teach them."}`)}`)

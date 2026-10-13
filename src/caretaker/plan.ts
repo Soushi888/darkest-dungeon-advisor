@@ -109,7 +109,10 @@ export interface ProvisionsPlan { firewood: boolean; pack?: { slots: number; use
 export interface UpkeepPlan { free: number; lines: UpLine[]; spent: number; left: number }
 export type TrainWhy = "liked" | "heal" | "cheap" | "broke"
 export interface TrainPlan { shown: Upgrade[]; lean: number; why: TrainWhy; liked?: Upgrade; left: number }
-export interface CampSeat { hero: HeroView; open?: CampSkill; price: number }
+export interface CampSeat { hero: HeroView; known: string[]; open?: CampSkill; price: number }
+/** B7: the camping skills a hero knows, for the upkeep and the Survivalist alike: every one learned (which holds the ones taken to
+ *  the fire), else the ones taken to the fire when the save says nothing more */
+const knownAtFire = (h: HeroView) => h.campKnown ?? h.campEquipped ?? []
 export type CampWhy = "worth" | "broke" | "no-camp"
 export interface CampPlan { camps: boolean; seats: CampSeat[]; best: { hero: HeroView; k: CampSkill; price: number }[]; lean: number; why: CampWhy; left: number }
 
@@ -338,7 +341,7 @@ export function plan(t: Town, a: Advice, inp: PlanInputs): Plan {
     })
     // the camping skill most worth learning for each, by the same habit as the Survivalist's card (C47)
     if (inp.camp) for (const s of chosen.seats) {
-      const known = s.hero.campKnown ?? s.hero.campEquipped ?? []
+      const known = knownAtFire(s.hero)
       const k = [...inp.camp.values()].filter((x) => x.classes.includes(s.hero.cls) && !known.includes(x.id) && x.gold > 0).sort((x, z) => campWorth(z, RULE) - campWorth(x, RULE) || x.gold - z.gold)[0]
       if (k) items.push({ hero: s.hero.name, what: `${k.name} at the Survivalist`, kind: "camp", gold: Math.round(k.gold * (1 - t.campDiscount)) })
     }
@@ -374,10 +377,10 @@ export function plan(t: Town, a: Advice, inp: PlanInputs): Plan {
     const camps = chosen.quest.length >= 2
     const seats: CampSeat[] = [], best: CampPlan["best"] = []
     for (const s of chosen.seats) {
-      const h = s.hero, known = h.campKnown ?? []
+      const h = s.hero, known = knownAtFire(h)
       const open = [...lib.values()].filter((k) => k.classes.includes(h.cls) && !known.includes(k.id) && k.gold > 0).sort((x, z) => worth(z) - worth(x) || price(x) - price(z))
       if (open[0]) best.push({ hero: h, k: open[0], price: price(open[0]) })
-      seats.push({ hero: h, ...(open[0] ? { open: open[0] } : {}), price: open[0] ? price(open[0]) : 0 })
+      seats.push({ hero: h, known, ...(open[0] ? { open: open[0] } : {}), price: open[0] ? price(open[0]) : 0 })
     }
     let lean = best.length, why: CampWhy = camps ? "broke" : "no-camp"
     const now = left
