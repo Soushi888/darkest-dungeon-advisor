@@ -3,7 +3,7 @@
 // advisor's own state beside it (the latest road's pages, the lessons, the week's start, the roster ledger, the picks), and the
 // board and the road page that state produced. A refactor step keeps every case byte for byte. Cases hold a personal save, so
 // they live under .dd-runtime/golden/ and are never committed (A4).
-//   bun run golden pin <name>   copy the live profile and state, build, keep the outputs
+//   bun run golden pin <name> [--upto=<page>]   copy the live profile and state (the road cut after that page), build, keep the outputs
 //   bun run golden check        rebuild every case and compare
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs"
 import { dirname, join } from "node:path"
@@ -36,14 +36,19 @@ async function build(profile: string, out: string): Promise<{ board: string; now
   return { board, now: now.stdout.toString() }
 }
 
-export async function pin(name: string, from = profileDir(), state = join(root, ".local", "town")) {
+/** `upto` cuts the road's pages after that page, so a case can freeze the road mid-fight (the live page is the last one kept). */
+export async function pin(name: string, from = profileDir(), state = join(common(), ".local", "town"), upto?: number) {
   const dir = join(goldenDir(), name)
   rmSync(dir, { recursive: true, force: true })
   mkdirSync(join(dir, "profile"), { recursive: true }); mkdirSync(join(dir, "state", "chronicle"), { recursive: true })
   for (const f of readdirSync(from)) if (f.startsWith("persist.")) cpSync(join(from, f), join(dir, "profile", f))
   for (const f of STATE) if (existsSync(join(state, f))) cpSync(join(state, f), join(dir, "state", f), { preserveTimestamps: true })
   const trip = latestTrip(join(state, "chronicle"))
-  if (trip) cpSync(trip, join(dir, "state", "chronicle", trip.split("/").at(-1)!), { recursive: true, preserveTimestamps: true })
+  if (trip) {
+    const to = join(dir, "state", "chronicle", trip.split("/").at(-1)!)
+    cpSync(trip, to, { recursive: true, preserveTimestamps: true })
+    if (upto !== undefined) for (const f of readdirSync(to)) if (Number(f.match(/^(\d+)\./)?.[1] ?? -1) > upto) rmSync(join(to, f))
+  }
   const out = join(dir, "out")
   seed(join(dir, "state"), out)
   const got = await build(join(dir, "profile"), out)
@@ -76,8 +81,8 @@ export async function check(): Promise<{ cases: string[]; drift: Drift[] }> {
 }
 
 if (import.meta.main) {
-  const [cmd, name] = process.argv.slice(2)
-  if (cmd === "pin" && name) console.log(`pinned ${name}: ${await pin(name)}`)
+  const [cmd, name] = process.argv.slice(2), upto = process.argv.find((a) => a.startsWith("--upto="))?.slice(7)
+  if (cmd === "pin" && name) console.log(`pinned ${name}: ${await pin(name, undefined, undefined, upto === undefined ? undefined : Number(upto))}`)
   else if (cmd === "check") {
     const { cases, drift } = await check()
     if (!cases.length) { console.log("no golden case pinned: bun run golden pin <name>"); process.exit(0) }
