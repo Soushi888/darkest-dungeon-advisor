@@ -118,7 +118,10 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   // C111: every decision below is the plan's; this function only words it
   const P = plan(t, a, opts)
   const { chosen, gold, roadItems, reserve } = P, W = P.words
-  const firstRoad = `the road comes first: I keep ${coin(reserve)} for provisions, and ${P.free ? `only ${coin(P.free)} is` : "nothing is"} free`
+  // B3: what a lean short of gold quotes is the gold still free when it was decided, in the order the gold is spent
+  const firstRoad = (left: number) => left >= P.free
+    ? `the road comes first: I keep ${coin(reserve)} for provisions, and ${P.free ? `only ${coin(P.free)} is` : "nothing is"} free`
+    : `the road comes first, then what I would spend before this: I keep ${coin(reserve)} for provisions, and ${left ? `only ${coin(left)} is` : "nothing is"} left`
 
   L.push(`# The *Hamlet*, week ${t.week}`, "")
   // C84: the estate's tally under the headline, from the same figures as the opening line
@@ -299,7 +302,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   // each card is filed under the building I lean it to, so the section reads building by building (Soushi, 2026-10-11:
   // "organise this section by building you suggest"); a card leaned to wait is filed last
   const cards: string[] = [], filed: { at: number; place: string }[] = []
-  for (const { relief: r, lean, why, filedUnder } of P.relief) {
+  for (const { relief: r, lean, why, filedUnder, left } of P.relief) {
     const at = cards.length
     cards.push(`- q: ${y(`Where does ${r.hero.name} go?`)}`, `  image: ${y(portrait(r.hero))}`)
     cards.push(`  context: ${y(`${r.hero.name}, ${r.hero.clsName} level ${r.hero.level}: ${r.why.join(", ")}.`)}`, "  options:")
@@ -309,13 +312,13 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
       : why.kind === "paid" ? `already there this week, and paid for: the ${why.place} keeps them.`
       : why.kind === "cheapest" ? `the cheapest place they accept that has a free seat (${why.note}).`
       : why.kind === "taken" ? `the seats they could take (${why.places.join(", ")}) I have already leaned to someone above.`
-      : `${firstRoad}.`
+      : `${firstRoad(left)}.`
     cards.push(`  lean: ${lean}`, `  lean_why: ${y(lw)}`)
     // each card is filed under the building the plan leans it to (decision 15)
     filed.push({ at, place: filedUnder })
   }
   // a card exists only where the plan found the ward, so each card carries it
-  for (const { hero: h, lean, why, filedUnder } of P.ward?.cards ?? []) {
+  for (const { hero: h, lean, why, filedUnder, left } of P.ward?.cards ?? []) {
     const ward = P.ward!.ward
     const at = cards.length
     const ill = h.quirks.filter((q) => q.disease).map((q) => q.name).join(", ")
@@ -323,20 +326,20 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     cards.push(`  context: ${y(`${h.name}, ${h.clsName} level ${h.level}, carries ${ill}. The Medical Ward has ${ward.slots} bed${ward.slots === 1 ? "" : "s"} as the Sanitarium stands, ${P.ward!.freeBeds} free this week, for ${a.disease.length} ill.`)}`, "  options:")
     cards.push(`    - pick: "Medical Ward"`, `      effect: ${y(`${coin(ward.cost)}; the disease is treated before the next expedition.`)}`)
     cards.push(`    - pick: "Not this week"`, `      effect: ${y("The disease stays; keep them out of the party.")}`)
-    cards.push(`  lean: ${lean}`, `  lean_why: ${y({ paid: `already there this week, and paid for: the ${ward.name} keeps them.`, going: `${h.name} goes on the road this week: ${ill} bites only at the campfire, and this road lights none. The ward can wait for a week at home.`, bed: "the bed goes to a more experienced hero this week.", green: "a level 0 hero is cheaper to replace than to cure.", broke: `${firstRoad}.`, worth: "a hero with experience is worth the bed." }[why])}`)
+    cards.push(`  lean: ${lean}`, `  lean_why: ${y({ paid: `already there this week, and paid for: the ${ward.name} keeps them.`, going: `${h.name} goes on the road this week: ${ill} bites only at the campfire, and this road lights none. The ward can wait for a week at home.`, bed: "the bed goes to a more experienced hero this week.", green: "a level 0 hero is cheaper to replace than to cure.", broke: `${firstRoad(left)}.`, worth: "a hero with experience is worth the bed." }[why])}`)
     filed.push({ at, place: filedUnder })
   }
   // the Treatment Ward (C25)
   const tw = P.treatment?.ward
   const waiting = P.treatment?.waiting ?? []
-  for (const { treat: tr, lean, why, filedUnder } of P.treatment?.cards ?? []) {
+  for (const { treat: tr, lean, why, filedUnder, left } of P.treatment?.cards ?? []) {
     const tw = P.treatment!.ward
     filed.push({ at: cards.length, place: filedUnder })
     cards.push(`- q: ${y(`Treat ${tr.hero.name}'s ${tr.quirk.name}?`)}`, `  image: ${y(portrait(tr.hero))}`)
     cards.push(`  context: ${y(`${tr.hero.name}, ${tr.hero.clsName} level ${tr.hero.level}${tr.inParty ? ", in the party I would send" : ""}. ${tr.quirk.name}${tr.quirk.description ? `: ${tr.quirk.description}` : "."}${tr.quirk.locked ? " It has set in, and the ward asks more for it." : ""} The ${tw.name} has ${tw.slots} seat${tw.slots === 1 ? "" : "s"}, ${P.treatment!.freeSeats} free this week.`)}`, "  options:")
     cards.push(`    - pick: ${y(tw.name)}`, `      effect: ${y(`${tr.cost ? coin(tr.cost) : "free this week"}; the ward works on ${tr.quirk.name}, and ${tr.hero.name} stays in the Hamlet while it does.`)}`)
     cards.push(`    - pick: "Not this week"`, `      effect: ${y(`${tr.hero.name} keeps it for now.`)}`)
-    cards.push(`  lean: ${lean}`, `  lean_why: ${y({ paid: `already there this week, and paid for: the ${tw.name} keeps them.`, inParty: `${tr.hero.name} rides with the party I would send, and a hero in the ward cannot leave with the coach; treat it in a week they stay home.`, seat: "the seat goes to someone the road needs more.", broke: `${firstRoad}.`, worth: `${tr.why}.` }[why])}`)
+    cards.push(`  lean: ${lean}`, `  lean_why: ${y({ paid: `already there this week, and paid for: the ${tw.name} keeps them.`, inParty: `${tr.hero.name} rides with the party I would send, and a hero in the ward cannot leave with the coach; treat it in a week they stay home.`, seat: "the seat goes to someone the road needs more.", broke: `${firstRoad(left)}.`, worth: `${tr.why}.` }[why])}`)
   }
   const stuck = P.stuck
   if (cards.length) {
@@ -410,7 +413,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     const { shown, lean, why, liked } = P.train
     for (const u of shown) L.push(`    - pick: ${y(u.learn ? `${u.hero}: learn ${u.label}` : `${u.hero}: ${u.label} to level ${u.toLevel}`)}`, `      effect: ${y(`${coin(u.cost.find((c) => c.type === "gold")?.amount ?? 0)} at the Guild${u.learn ? `; a new heal, about ${u.learn.heals} hit points a cast, cast from ${u.hero}'s seat` : ""}.`.replace("at the Guild", `at the ${u.where}`))}`)
     L.push(`    - pick: "Keep the gold"`, `      effect: ${y("Spend nothing at the Guild or the Blacksmith this week.")}`)
-    L.push(`  lean: ${lean}`, `  lean_why: ${y({ liked: `you prefer ${liked?.label}, so it comes first (your choice, not my habit).`, heal: "the party's healing is what brings everyone home.", cheap: "the cheapest step for the hero who fights most.", broke: `${firstRoad}.` }[why])}`)
+    L.push(`  lean: ${lean}`, `  lean_why: ${y({ liked: `you prefer ${liked?.label}, so it comes first (your choice, not my habit).`, heal: "the party's healing is what brings everyone home.", cheap: "the cheapest step for the hero who fights most.", broke: `${firstRoad(P.train.left)}.` }[why])}`)
     L.push("```", "")
   }
   if (a.blocked.length) {
@@ -441,7 +444,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
       L.push("```board-decisions", `- q: "What do we teach at the Survivalist?"`, `  context: ${y(`The best lesson for each of the four, by my habit of weighing a camping skill (stress relieved by how many it reaches, health healed, a cure or a guard on the camp, a boon for the next fight). ${camps ? "This road camps." : "This road does not camp."}`)}`, "  options:")
       for (const b of best) L.push(`    - pick: ${y(`${b.hero.name}: ${b.k.name}`)}`, `      effect: ${y(`${coin(b.price)} at the Survivalist; ${tell(b.k)}.`)}`)
       L.push(`    - pick: "Keep the gold"`, `      effect: ${y("Teach nothing at the Survivalist this week.")}`)
-      L.push(`  lean: ${P.camp.lean}`, `  lean_why: ${y({ worth: `the most worth at the fire for this road, within the gold left.`, broke: `${firstRoad}.`, "no-camp": "this road does not camp; the gold serves better elsewhere this week." }[P.camp.why])}`, "```", "")
+      L.push(`  lean: ${P.camp.lean}`, `  lean_why: ${y({ worth: `the most worth at the fire for this road, within the gold left.`, broke: `${firstRoad(P.camp.left)}.`, "no-camp": "this road does not camp; the gold serves better elsewhere this week." }[P.camp.why])}`, "```", "")
     }
   }
 

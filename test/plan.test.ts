@@ -4,7 +4,8 @@
 import { describe, expect, test } from "bun:test"
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs"
 import { join } from "node:path"
-import { savingPlan } from "../src/voice/board.ts"
+import { savingPlan, source } from "../src/voice/board.ts"
+import { coin } from "../src/voice/words.ts"
 import { questLabel } from "../src/world/town.ts"
 import { ownParty, plan } from "../src/caretaker/plan.ts"
 import { advise } from "../src/caretaker/advise.ts"
@@ -83,7 +84,7 @@ describe("C111: the board renders one plan", () => {
     rmSync(copy, { recursive: true, force: true }); mkdirSync(copy, { recursive: true })
     for (const f of readdirSync(profile)) if (f.startsWith("persist.") && f !== "persist.raid.json") cpSync(join(profile, f), join(copy, f))
     const t0 = await readTown(await readSave(copy)), prices = await supplyPrices(), camp = await campingSkills()
-    let checked = 0, owned = 0, camped = 0
+    let checked = 0, owned = 0, camped = 0, broke = 0
     for (const gold of [t0.wallet.gold ?? 0, 0, 600, 2500, 12000]) {
       const t = { ...t0, wallet: { ...t0.wallet, gold } }
       const a = await advise(t)
@@ -134,6 +135,23 @@ describe("C111: the board renders one plan", () => {
           + (cb && !upBuys.has(`${cb.hero.name}|${cb.k.name} at the Survivalist`) ? cb.price : 0)
         expect(promised).toBeLessThanOrEqual(p.free)
         expect(promised).toBe(spent)
+        // B3: a lean short of gold quotes the gold still free at that point in the spending order, never the gold the road left
+        // before any other lean
+        const short = [
+          ...p.relief.filter((c) => c.why.kind === "broke").map((c) => ({ q: `Where does ${c.relief.hero.name} go?`, left: c.left })),
+          ...(p.ward?.cards ?? []).filter((c) => c.why === "broke").map((c) => ({ q: `Treat ${c.hero.name}'s `, left: c.left })),
+          ...(p.treatment?.cards ?? []).filter((c) => c.why === "broke").map((c) => ({ q: `Treat ${c.treat.hero.name}'s ${c.treat.quirk.name}?`, left: c.left })),
+          ...(p.train?.why === "broke" ? [{ q: "What do we train first?", left: p.train.left }] : []),
+          ...(p.camp?.why === "broke" && p.camp.best.length ? [{ q: "What do we teach at the Survivalist?", left: p.camp.left }] : []),
+        ]
+        if (short.some((s) => s.left < p.free)) {
+          const md = source(t, a, { foresight: false, answers, prices, camp, ...(own ? { own, placed, newcomers } : {}) }).board
+          for (const s of short) {
+            const card = md.split(/\n- q: /).find((x) => x.startsWith(JSON.stringify(s.q).slice(0, -1)))!
+            expect(card.match(/lean_why: (".*")/)![1]).toContain(s.left ? `only ${coin(s.left)} is` : "nothing is")
+            broke++
+          }
+        }
         // decision 15: a relief card is filed under the building of the place it leans to, and with the waiting when it leans to none
         for (const c of p.relief) expect(c.filedUnder).toBe(c.relief.options[c.lean]?.activity.buildingName ?? "")
         // the Survivalist spends exactly when its lean names a lesson, and last
@@ -143,6 +161,7 @@ describe("C111: the board renders one plan", () => {
       }
     }
     expect(checked).toBeGreaterThan(5)
+    expect(broke).toBeGreaterThan(0)
     expect(owned).toBeGreaterThan(0)
     // at 12,000 gold some road camps and the Survivalist teaches on it, or no road camps this week
     if (t0.quests.some((q) => q.length >= 2 && !q.plot)) expect(camped).toBeGreaterThan(0)
