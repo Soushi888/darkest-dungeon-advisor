@@ -55,13 +55,31 @@ src/chronicle.ts the expedition's chronicle, the survivors' tale, what went well
 src/coherence.ts reads every built board back for advice that contradicts itself
 src/board.ts    the board source in his voice (Hamlet, farewell, return), compiled with the Niceboard compiler and the skin; sources.md beside it
 src/skin.ts     the in-game panel theme, with art read from your install
-src/live.ts     the live session's event stream
 src/cli.ts      town, watch, the answers endpoint and the send shortcut
+src/live.ts     the live session's event stream
+src/livemark.ts where a restarted live stream resumes
+src/words.ts    the live stream's effects in the game's own words
+src/notable.ts  which chronicle page changes the story
+src/now.ts      bun run now: the latest chronicle page, read whole
+src/road.ts     the road zone: the conversation with the Caretaker while the party is out (bun run say)
+src/recap.ts    the Caretaker's recap, its numbers built from the page
+src/caretaker.ts bun run caretaker: he comments the road and answers ASKs by himself
+src/camp.ts     the campfire council: camping skills in the Hamlet's words, and what the four carry to the fire
+src/map.ts      the dungeon's map as the party knows it
+src/quest.ts    what the road's quest asks and how far along it is
+src/turns.ts    what a turn did: a hit, a dodge, a move, a buff or a heal
+src/slain.ts    the foes slain in the fight under way
+src/talecheck.ts the tale checked against the pages before it is told
+src/pack.ts     the pack's slots and stacks, from the game's files
+src/upkeep.ts   the upkeep plan for the four who leave: skills, weapon, armour, camping skill
+src/roles.ts    the roster's balance: what each hero does, and pairs too alike
+src/drafts.ts   a rebuild never reloads the page under his hands
+src/ship.ts     bun run ship: a PR merges only through a green suite
 ```
 
 ## References
 
-- [Darkest Dungeon wiki](https://darkestdungeon.wiki.gg/): mechanics, vocabulary and lore, player-maintained, CC BY-NC-SA 4.0. A reference for understanding, never a source for a figure, and never copied into this repository.
+- [Darkest Dungeon wiki](https://darkestdungeon.wiki.gg/): mechanics, vocabulary and lore, player-maintained, CC BY-NC-SA 4.0. A reference for understanding; a figure is taken from it only for a rule of the game no file holds, cited with its page in the sources, and its text is never copied into this repository.
 - [robojumper/DarkestDungeonSaveEditor](https://github.com/robojumper/DarkestDungeonSaveEditor), `docs/dson.md`: the save format.
 
 ## What it will not do

@@ -33,6 +33,8 @@ Environment: `DD_INFERENCE` (the PAI Inference tool `bun run caretaker` calls, d
 
 `paths.ts` → `read.ts` → `town.ts` → `advise.ts` (+ `reconcile.ts`, `chronicle.ts`) → `board.ts` (+ `coherence.ts`) → `cli.ts`; `live.ts` streams events for a live session
 
+The road zone and live-session modules (`road.ts`, `now.ts`, `caretaker.ts`, `recap.ts`, `map.ts`, `quest.ts`, `turns.ts` and the rest) are listed one line each in `README.md` § How it is put together, the canonical module list.
+
 - `read.ts` copies every `persist.*.json` into `.dd-runtime/profile/` and decodes the copy with `dson.ts` (DSON, ported from robojumper's spec). The original profile is only ever read.
 
 - `names.ts` resolves DSON string hashes by hashing every identifier token in the install's data plus every `<class>.<skill>` pair, cached in `data/names.json`. Delete that file to rebuild it. Integers under 100 000 are never unhashed (a 4500 gold reward once decoded as "Se").
@@ -57,7 +59,7 @@ Environment: `DD_INFERENCE` (the PAI Inference tool `bun run caretaker` calls, d
 
 - **Knowledge boundary (C5, C6, A3).** A monster may be named only if it lives in a dungeon level the campaign log records as walked *and* one of its attacks is in `persist.game_knowledge.json`. Attack ids are shared across tiers, so the walked level is what tells variants apart. A dungeon never walked gets no foe named. Curio interactions are never shown. The `--foresight` flag is the only exception, and it names kinds, never monsters.
 
-- **No figure from memory or the wiki (A2, C14).** Every number comes from the save or a game file and is listed with its source in `.local/town/sources.md`, never on the board. The advisor's own thresholds (`RULE` and `RULE_FOOD` in `advise.ts`, `CHRONICLE_RULE` in `chronicle.ts`) are labelled "my habit" on the board.
+- **No figure from memory (A2, C14).** Every number comes from the save or a game file, or, for a rule of the game no file holds, from the wiki with its page cited; each is listed with its source in `.local/town/sources.md`, never on the board. The advisor's own thresholds (`RULE` and `RULE_FOOD` in `advise.ts`, `CHRONICLE_RULE` in `chronicle.ts`) are labelled "my habit" on the board.
 
 - **The board stays in the fiction (C13).** Everything on it is the Caretaker speaking in the Hamlet's words: no save, file, field, upgrade code or tool named. Name upgrade trees through `TREE_WORDS` in `town.ts` and prerequisites through `inWords()` in `board.ts`. The C13 test greps the board for meta vocabulary.
 

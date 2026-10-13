@@ -23,7 +23,7 @@ Soushi comes back from an expedition, saves, and opens the town board. A village
 - Advice inside a dungeon, for now. Once the party leaves the Hamlet, Soushi is on his own (Soushi, 2026-10-10); a later opt-in in-dungeon call is under Not yet specified.
 - Writing to a save, a game file, or the Steam cloud directory. Saves are read from a copy.
 - Darkest Dungeon II and the DLCs (The Crimson Court, The Color of Madness, The Shieldbreaker): the install carries the base game only (15 hero classes, no `dlc/` directory, read 2026-10-10).
-- Copying wiki text into the repository. The wiki ([darkestdungeon.wiki.gg](https://darkestdungeon.wiki.gg/)) is CC BY-NC-SA 4.0 and player-maintained; it is a reference for understanding, never a source for a figure.
+- Copying wiki text into the repository. The wiki ([darkestdungeon.wiki.gg](https://darkestdungeon.wiki.gg/)) is CC BY-NC-SA 4.0 and player-maintained; it is a reference for understanding, and a source for a figure only under A2 (a rule no game file holds, its page cited), never copied in.
 - Curio advice without foresight: the save records no curio knowledge, so the curio table (`curios/curio_type_library.csv`) would reveal interactions he has not discovered.
 
 ## Claims
@@ -117,7 +117,7 @@ Soushi comes back from an expedition, saves, and opens the town board. A village
 ## Anti-claims
 
 - [x] **A1: The advisor never writes to the game's directories or the Steam cloud folder.** *Evidence: test "A1": profile mtimes identical before and after `bun run town`; all tests write to `.dd-runtime/test-profile`. Test builds land in `DD_TOWN_OUT` and never under `.local/town`: the output folder is read at call time, since the test file sets it after its imports (an import-time value sent portraits into the live board folder until 2026-10-11); test "A1: a test build lands in DD_TOWN_OUT".* Its probe builds on a copy of the profile since 2026-10-11, so the game saving mid-test while Soushi plays cannot read as a write.
-- [x] **A2: No figure from memory.** Every game figure is read from a file, or, for a rule of the game no file holds, from the Darkest Dungeon wiki with its page cited in the sources (Soushi, 2026-10-11: "don't hesitate to look at the wiki for reference about game mechanics and lore"; first use: the stress gauge's 100 and 200, `darkestdungeon.wiki.gg/wiki/Stress`); the advisor's own thresholds (rest at 45 stress, send under 45, food and torches by length) are labelled "my habit" on the board and named RULE in the code. *Evidence: `RULE` in `src/advise.ts` and `RULE_FOOD` in `src/board.ts`, each printed with its label.*
+- [x] **A2: No figure from memory.** Every game figure is read from a file, or, for a rule of the game no file holds, from the Darkest Dungeon wiki with its page cited in the sources (Soushi, 2026-10-11: "don't hesitate to look at the wiki for reference about game mechanics and lore"; first use: the stress gauge's 100 and 200, `darkestdungeon.wiki.gg/wiki/Stress`); the advisor's own thresholds (rest at 45 stress, send under 45, food and torches by length) are labelled "my habit" on the board and named RULE in the code. *Evidence: `RULE` and `RULE_FOOD` in `src/advise.ts`, each printed with its label.*
 - [x] **A3: No spoiler leaks through a default.** *Evidence: test "C6, A3".*
 - [x] **A4: No game art or wiki text committed.** *Evidence: `git ls-files` lists no image; portraits are copied from the install into `.local/town/img/` at build time.*
 
