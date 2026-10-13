@@ -5,7 +5,7 @@ import { existsSync, readdirSync } from "node:fs"
 import { join } from "node:path"
 import { check, goldenDir } from "../src/golden.ts"
 
-const has = existsSync(goldenDir()) && readdirSync(goldenDir()).some((d) => existsSync(join(goldenDir(), d, "town.md")))
+const has = existsSync(goldenDir()) && readdirSync(goldenDir()).some((d) => existsSync(join(goldenDir(), d, "expect", "town.md")))
 
 describe.skipIf(!has)("C108: the golden boards hold", () => {
   test("every pinned case rebuilds byte for byte", async () => {
