@@ -10,7 +10,7 @@ import { checkTale } from "./talecheck.ts"
 import { copyFileSync, existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { homedir } from "node:os"
-import { advise, DOCTRINE, fills, readiness, road, seatParty, RULE, RULE_FOOD, type Advice, type Party } from "./advise.ts"
+import { advise, DOCTRINE, fills, learners, readiness, road, seatParty, RULE, RULE_FOOD, type Advice, type Party } from "./advise.ts"
 export { road, type RoadItem } from "./advise.ts"
 import { campingSkills, supplyPrices, type CampSkill, type Cost, nameOf } from "./game.ts"
 import { install, root } from "./paths.ts"
@@ -333,7 +333,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     const leanIdx = chosen ? a.parties.indexOf(chosen) : 0
     // only said of a short road chosen over longer ones that a green party would have taken
     const longer = chosen?.quest.length === 1 ? a.parties.filter((p) => p !== chosen && p.quest.length > 1 && p.green).length : 0
-    L.push(`  lean: ${Math.max(0, leanIdx)}`, `  lean_why: ${y(`the four I would send fit it best: ${chosen ? chosen.seats.flatMap((s) => s.notes).join(", ") || "ranks and skills line up" : ""}${chosen?.left !== undefined ? `; it leaves ${coin(Math.max(0, chosen.left))} in the coffers after the road` : ""}${longer ? "; with so many of them untried, I keep them to shorter roads" : ""} (my habits).`)}`)
+    L.push(`  lean: ${Math.max(0, leanIdx)}`, `  lean_why: ${y(`the four I would send fit it best: ${chosen ? chosen.seats.flatMap((s) => s.notes).join(", ") || "ranks and skills line up" : ""}${chosen && learners(chosen) ? `; it takes ${chosen.seats.filter((x) => x.hero.level === 0).slice(0, RULE.learners).map((x) => x.hero.name).join(" and ")} along to learn (my order: newcomers ride on short roads)` : ""}${chosen?.left !== undefined ? `; it leaves ${coin(Math.max(0, chosen.left))} in the coffers after the road` : ""}${longer ? "; with so many of them untried, I keep them to shorter roads" : ""} (my habits).`)}`)
     if (chosen) {
       L.push(`- q: ${y(`Take this party to the ${chosen.quest.dungeonName}?`)}`)
       L.push(`  context: ${y(`${opts.own ? "The four you named, seated as you gave them. " : ""}Front to back: ${chosen.seats.map((s) => `${s.rank}. ${s.hero.name} (${s.hero.clsName}, ${s.hero.stress} stress)`).join("; ")}. ${chosen.healer ? `A healer is in it: ${chosen.heal!.by}'s ${chosen.heal!.skill}, about ${chosen.heal!.avg} hit points a cast.` : chosen.heal ? `No true healer: only ${chosen.heal.by}'s ${chosen.heal.skill}, about ${chosen.heal.avg} hit points a cast.` : "No healer in it."} ${chosen.stunner ? "So is a stun." : "No stun."}${chosen.reach ? ` From these seats they can strike ${chosen.reach.length === 4 ? "every rank of the enemy line" : `enemy rank${chosen.reach.length === 1 ? "" : "s"} ${chosen.reach.join(", ")}, and none of them the ${[1, 2, 3, 4].filter((e) => !chosen.reach!.includes(e)).join(" or ")}`}.` : ""}${chosen.pair ? ` ${chosen.pair.marker === chosen.pair.striker ? `${chosen.pair.marker} marks a foe with ${chosen.pair.mark} and strikes the marked harder with ${chosen.pair.strike}.` : `${chosen.pair.marker} marks a foe with ${chosen.pair.mark}, and ${chosen.pair.striker}'s ${chosen.pair.strike} strikes the marked harder.`}` : ""}${mixWords(chosen, t)}`)}`, "  options:")
