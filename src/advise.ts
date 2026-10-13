@@ -262,9 +262,13 @@ export async function advise(t: Town): Promise<Advice> {
 
   // who can go: free, not afflicted, under my stress line, not diseased
   const ready = free.filter((h) => !h.affliction && h.stress < RULE.sendBelow && !diseases(h).length)
+  // C89: on a road with no campfire, a disease that bites only at camp keeps nobody home (Soushi, 2026-10-13: Gomboult, the
+  // one Vestal fit to heal, went to the Medical Ward for Bulimic, which only cuts healing in camp, while the four left with none)
+  const lib = await quirks()
+  const campIll = free.filter((h) => !h.affliction && h.stress < RULE.sendBelow && diseases(h).length && diseases(h).every((q) => lib.get(q.id)?.campOnly))
   const parties: Party[] = []
   for (const q of t.quests.filter((q) => !q.plot)) {
-    const p = await bestParty(ready, q)
+    const p = await bestParty(q.length === 1 ? [...ready, ...campIll] : ready, q)
     if (p) parties.push(p)
   }
   // RULE: while the roster is young, a walked dungeon and a short expedition break ties

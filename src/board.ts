@@ -92,7 +92,22 @@ export function questLabel(p: Party): string {
 }
 
 /** The Hamlet as the week found it, kept on the first board of each week, so later boards can say what was done since (C26). */
-export interface WeekStart { week: number; heroes: { guid: number; name: string }[]; bought: string[]; gold: number | null; purchases?: string[] }
+export interface WeekStart { week: number; heroes: { guid: number; name: string; busy?: string }[]; bought: string[]; gold: number | null; purchases?: string[] }
+
+/** The Hamlet as the week found it (C90): heroes placed in a building since the week began are free again, and their seats open.
+ *  A week-start record without places (written before C90) counts nobody as placed when the week began. */
+export function planView(t: Town, start: WeekStart | undefined): Town {
+  if (!start || start.week !== t.week) return t
+  const atStart = new Map(start.heroes.map((h) => [h.guid, h.busy ?? ""]))
+  const placed = t.heroes.filter((h) => h.busy && atStart.has(h.guid) && !atStart.get(h.guid))
+  if (!placed.length) return t
+  const freed = new Set(placed.map((h) => h.guid))
+  return {
+    ...t,
+    heroes: t.heroes.map((h) => (freed.has(h.guid) ? { ...h, busy: "" } : h)),
+    activities: t.activities.map((x) => ({ ...x, used: x.used - placed.filter((h) => h.busy === x.name).length })),
+  }
+}
 
 /** What the saves show was done this week, whether or not it was ever sent from the board (C26). */
 export function weekSoFar(t: Town, start: WeekStart | undefined): string[] {
@@ -362,7 +377,9 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   for (const h of [...a.disease].sort((x, z) => Number(a.trueHealer.has(z.guid)) - Number(a.trueHealer.has(x.guid)) || z.level - x.level || z.xp - x.xp)) {
     if (!ward) continue
     const at = cards.length
-    const gets = beds > 0
+    // C89: a hero I seat in this week's four goes on the road, not to the ward
+    const going = !!chosen?.seats.some((x) => x.hero.guid === h.guid)
+    const gets = !going && beds > 0
     if (gets) beds--
     const ill = h.quirks.filter((q) => q.disease).map((q) => q.name).join(", ")
     cards.push(`- q: ${y(`Treat ${h.name}'s ${ill}?`)}`, `  image: ${y(portrait(h))}`)
@@ -370,9 +387,9 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     cards.push(`    - pick: "Medical Ward"`, `      effect: ${y(`${coin(ward.cost)}; the disease is treated before the next expedition.`)}`)
     cards.push(`    - pick: "Not this week"`, `      effect: ${y("The disease stays; keep them out of the party.")}`)
     const purse = ward.cost <= left
-    const lean = gets && h.level >= 1 && purse ? 0 : 1
+    const lean = !going && gets && h.level >= 1 && purse ? 0 : 1
     if (lean === 0) left -= ward.cost
-    cards.push(`  lean: ${lean}`, `  lean_why: ${y(!gets ? "the bed goes to a more experienced hero this week." : h.level < 1 ? "a level 0 hero is cheaper to replace than to cure." : !purse ? `${firstRoad}.` : "a hero with experience is worth the bed.")}`)
+    cards.push(`  lean: ${lean}`, `  lean_why: ${y(going ? `${h.name} goes on the road this week: ${ill} bites only at the campfire, and this road lights none. The ward can wait for a week at home.` : !gets ? "the bed goes to a more experienced hero this week." : h.level < 1 ? "a level 0 hero is cheaper to replace than to cure." : !purse ? `${firstRoad}.` : "a hero with experience is worth the bed.")}`)
     filed.push({ at, place: lean === 0 ? ward.buildingName : "" })
   }
   // the Treatment Ward (C25): one quirk per hero, by my habit; seats to the party first, then the most experienced
@@ -769,6 +786,18 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
     tale = { snaps: snaps.length, beats: bs, ...j, debrief: db, issues: check.issues }
   }
   t.ledger = await loadLedger()
+  // the week's first board keeps the Hamlet as it found it (C26)
+  const wsFile = Bun.file(join(outDir(), "week-start.json"))
+  let start = (await wsFile.exists()) ? ((await wsFile.json()) as WeekStart) : undefined
+  if (!start || start.week !== t.week) {
+    start = { week: t.week, heroes: t.heroes.map((h) => ({ guid: h.guid, name: h.name, busy: h.busy })), bought: [...t.bought], gold: t.wallet.gold ?? 0, purchases: t.purchases.map((p) => `${p.guid}|${p.key}`) }
+    await Bun.write(wsFile, JSON.stringify(start, null, 1))
+  }
+  // C90: the week is advised from the Hamlet as the week found it, so following a pick never moves the others. A hero placed in a
+  // building since the week began still counts as free to the plan, and their seat as open (Soushi, 2026-10-13: "ensure the
+  // proposed strategies are coherent and while I apply it it doesn't break the recommendations")
+  const t0 = t
+  t = planView(t, start)
   const a = await advise(t)
   // a party Soushi named in a note, seated for the expedition he picked
   let own: Party | undefined
@@ -779,13 +808,6 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
     if (heroes.length === 4) own = await seatParty(heroes, quest)
   }
   const checks = reconcile(await loadPicks(outDir()), t)
-  // the week's first board keeps the Hamlet as it found it (C26)
-  const wsFile = Bun.file(join(outDir(), "week-start.json"))
-  let start = (await wsFile.exists()) ? ((await wsFile.json()) as WeekStart) : undefined
-  if (!start || start.week !== t.week) {
-    start = { week: t.week, heroes: t.heroes.map((h) => ({ guid: h.guid, name: h.name })), bought: [...t.bought], gold: t.wallet.gold ?? 0, purchases: t.purchases.map((p) => `${p.guid}|${p.key}`) }
-    await Bun.write(wsFile, JSON.stringify(start, null, 1))
-  }
   // what was proposed the week they left: kept per week, else the last proposal when it is that week's (#3)
   let sent: Proposal | undefined
   if (t.back) for (const f of [join(outDir(), "proposals", `week-${t.week - 1}.json`), join(outDir(), "proposal.json")]) {
