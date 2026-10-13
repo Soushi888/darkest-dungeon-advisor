@@ -201,6 +201,7 @@ Soushi comes back from an expedition, saves, and opens the town board. A village
 - The town board's own layout, beyond the skin: which in-game screens it echoes (the roster column, the building panels, the estate map) and whether that needs a Niceboard compiler extension or a template of its own.
 - The in-dungeon call (Soushi's note on card 4): a later, opt-in way to ask the Caretaker mid-expedition. It reverses the current Out of Scope line, so it needs its own design pass, including how it treats the knowledge boundary.
 - A shuffle that breaks a seat (a hero pushed where their carried skills cannot launch) is not yet told apart from a harmless one (C44): it needs the class files in `beats()`, and it would feed the shuffle weight of C33.
+- C106 leaves two cases open: the Darkest Dungeon's final boss line names `ancestor_small_D` where its kill goal names `ancestor_heart_D`, so the last fight may go unnoted until the mash files the quests use are read; and a fight with two different special foes is filed under the first only.
 - Quirks beyond C25's three habits (thief, barred from relief, against the next road) are not ranked: the quirk library's buffs would ground a fuller ranking.
 
 ## Test Strategy
