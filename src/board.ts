@@ -10,7 +10,7 @@ import { checkTale } from "./talecheck.ts"
 import { copyFileSync, existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { homedir } from "node:os"
-import { advise, fills, readiness, road, seatParty, RULE, RULE_FOOD, type Advice, type Party } from "./advise.ts"
+import { advise, DOCTRINE, fills, readiness, road, seatParty, RULE, RULE_FOOD, type Advice, type Party } from "./advise.ts"
 export { road, type RoadItem } from "./advise.ts"
 import { campingSkills, supplyPrices, type CampSkill, type Cost, nameOf } from "./game.ts"
 import { install, root } from "./paths.ts"
@@ -93,6 +93,17 @@ export function questLabel(p: Party): string {
 
 /** The Hamlet as the week found it, kept on the first board of each week, so later boards can say what was done since (C26). */
 export interface WeekStart { week: number; heroes: { guid: number; name: string; busy?: string }[]; bought: string[]; gold: number | null; purchases?: string[] }
+
+/** C92: the roster ledger, the week each hero joined, kept across weeks so a recruit is not let go while they settle. A hero first
+ *  seen this week who was not on the roster when the week began joined this week; anyone else first seen counts as long settled. */
+export interface RosterLedger { joined: Record<string, number> }
+export function rosterLedger(prev: RosterLedger | undefined, t: Town, start: WeekStart | undefined): RosterLedger {
+  const joined = { ...(prev?.joined ?? {}) }
+  const atStart = start && start.week === t.week ? new Set(start.heroes.map((h) => h.guid)) : undefined
+  for (const h of t.heroes) if (!(String(h.guid) in joined)) joined[String(h.guid)] = atStart && !atStart.has(h.guid) ? t.week : 0
+  return { joined }
+}
+export const settling = (l: RosterLedger, week: number, weeks: number) => new Set(Object.entries(l.joined).filter(([, w]) => w > 0 && week - w < weeks).map(([g]) => Number(g)))
 
 /** The Hamlet as the week found it (C90): heroes placed in a building since the week began are free again, and their seats open.
  *  A week-start record without places (written before C90) counts nobody as placed when the week began. */
@@ -296,6 +307,8 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   // the expedition: built here, shown after the roster and the rest by inActingOrder (C31); picks follow their question,
   // not their card number, so moving the cards no longer slides a pick (C18)
   L.push("## The next expedition {wide}", "")
+  // C91: the order I choose by, so every lean below can be read against it
+  L.push(`**My order (my habit), highest first; a lower one never outweighs a higher:** ${DOCTRINE.map((d, i) => `${i + 1}. ${d}`).join("; ")}.`, "")
   L.push(`The roads the estate can send you down this week. I name only the foes your heroes have fought, in places they have walked; of the rest I say nothing. ${opts.foresight ? "Travellers' tales do reach me, though, and where I repeat one I say so." : ""}`.trim(), "")
   if (a.parties.length) {
     L.push("```board-decisions")
@@ -564,7 +577,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   // a hero this board sends to the Abbey, the Tavern or the Sanitarium is not one it lets go
   const tended = new Set([...a.relief.map((r) => r.hero.guid), ...a.treat.map((x) => x.hero.guid), ...a.disease.map((h) => h.guid)])
   // C88: a hero who joined this week is never let go for another recruit the same week (Soushi, 2026-10-13: "you just made me recruit him to ask me to dismiss him")
-  const weak = t.heroes.filter((h) => h.level === 0 && !h.busy && !sendingNow.has(h.guid) && !named.has(h.guid) && !tended.has(h.guid) && !opts.newcomers?.has(h.guid)).sort((x, z) => worth(x) - worth(z))
+  const weak = t.heroes.filter((h) => h.level === 0 && !h.busy && !sendingNow.has(h.guid) && !named.has(h.guid) && !tended.has(h.guid) && !opts.newcomers?.has(h.guid) && !t.settling?.has(h.guid)).sort((x, z) => worth(x) - worth(z))
   // C88: a recruit of a class the roster already holds is never taken: C85 would set the two against each other
   // except a true healer (C86): two healers are never too alike
   const held = (r: Advice["recruits"][number]) => r.heal ? undefined : t.heroes.find((h) => h.cls === r.hero.cls)
@@ -796,7 +809,10 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
   // C90: the week is advised from the Hamlet as the week found it, so following a pick never moves the others. A hero placed in a
   // building since the week began still counts as free to the plan, and their seat as open (Soushi, 2026-10-13: "ensure the
   // proposed strategies are coherent and while I apply it it doesn't break the recommendations")
-  const t0 = t
+  const ledgerFile = Bun.file(join(outDir(), "roster-ledger.json"))
+  const rl = rosterLedger((await ledgerFile.exists()) ? ((await ledgerFile.json()) as RosterLedger) : undefined, t, start)
+  await Bun.write(ledgerFile, JSON.stringify(rl, null, 1))
+  t.settling = settling(rl, t.week, RULE.settleWeeks)
   t = planView(t, start)
   const a = await advise(t)
   // a party Soushi named in a note, seated for the expedition he picked
