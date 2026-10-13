@@ -2,6 +2,7 @@
 // compiled page. One fixed file name, so the picks a reader makes survive every rebuild of the board.
 // The board speaks only as the Caretaker, in the Hamlet's own words (C13): no file, field or save is named on it.
 // Where each figure comes from goes to sources.md beside it (C14).
+import { teachings } from "./teach.ts"
 import { campTell, campWorth } from "./camp.ts"
 import { ROLE_WORDS } from "./roles.ts"
 import { asPack, packRules, slotsOf, trims, type PackRules } from "./pack.ts"
@@ -148,7 +149,7 @@ export function weekSoFar(t: Town, start: WeekStart | undefined): string[] {
   return out
 }
 
-export interface Tale { snaps: number; beats: Beat[]; well: string[]; wrong: string[]; lessons: Lesson[]; debrief?: Debrief; issues?: string[] }
+export interface Tale { snaps: number; beats: Beat[]; well: string[]; wrong: string[]; lessons: Lesson[]; debrief?: Debrief; issues?: string[]; taught?: string[] }
 export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: Answers; own?: Party; checks?: Check[]; prices?: Map<string, number>; soFar?: string[]; newcomers?: Set<number>; placed?: Map<number, string>; tale?: Tale; camp?: Map<string, CampSkill>; sent?: Proposal; rates?: Record<string, { trips: number; got: number }>; pack?: PackRules }): { board: string; sources: string } {
   const L: string[] = []
   const picked = (opts.answers.expedition && a.parties.find((p) => questLabel(p) === opts.answers.expedition)) || a.best
@@ -189,39 +190,21 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     // C40: the survivors' tale, from the chronicle kept on the road; C41: what went well, what went wrong
     const tale = opts.tale
     if (tale && tale.snaps > 1) {
-      const told = tale.beats.map((x) => x.text)
-      const turn = tale.beats.findIndex((x) => x.bad && x.kind !== "ambush" && x.kind !== "spike")
-      const start = turn < 0 ? told : told.slice(0, turn), rest = turn < 0 ? [] : told.slice(turn)
-      // a long road is told step by step, the turn marked, so the story reads as it happened
-      if (told.length > 6) {
-        L.push(`**What the survivors told me.** ${start.length ? `It began well${rest.length ? `, then it turned at step ${start.length + 1}` : ""}.` : "It went badly from the start."}`, "")
-        told.forEach((x, k) => L.push(`${k + 1}. ${k === start.length && rest.length ? "**" : ""}${x[0]!.toUpperCase()}${x.slice(1)}.${k === start.length && rest.length ? "**" : ""}`))
-        L.push("")
-      } else L.push(`**What the survivors told me.** ${start.length ? `It began well: ${start.join(", ")}.` : "It went badly from the start."}${rest.length ? ` Then it turned: ${rest.join(", then ")}.` : " Nothing turned against them."}`, "")
-      if (tale.well.length || tale.wrong.length) {
-        L.push("```board-stickies")
-        for (const w of tale.well) L.push(`- title: ${y(w)}`, "  kind: works")
-        for (const w of tale.wrong) L.push(`- title: ${y(w)}`, "  kind: gotcha")
+      // C102: the road in a few lines, then what it taught; the step-by-step stays in the chronicle (Soushi, 2026-10-13: "This whole
+      // section is too verbose. Should be less mechanical.")
+      const battles = tale.beats.filter((x) => x.kind === "battle").length
+      const worst = tale.beats.filter((x) => x.kind === "deathsdoor" || x.kind === "fell" || x.kind === "affliction").map((x) => x.text)
+      const close = tale.beats.find((x) => x.kind === "close")?.text
+      const said = [`${battles} battle${battles === 1 ? "" : "s"} won`, worst.length ? `at the worst, ${[...new Set(worst)].slice(0, 3).join("; ")}` : "", close ?? ""].filter(Boolean)
+      L.push(`**What happened.** ${said.join("; ").replace(/^./, (c) => c.toUpperCase())}.`, "")
+      const notes = [...(tale.taught ?? []).map((x) => ({ x, kind: "idea" })), ...tale.wrong.map((x) => ({ x, kind: "gotcha" })), ...tale.well.map((x) => ({ x, kind: "works" }))]
+      if (notes.length) {
+        L.push(`**What the road taught me.** I keep it for the next road to the ${b.dungeonName}, at this danger or worse.`, "", "```board-stickies")
+        for (const n of notes) L.push(`- title: ${y(n.x)}`, `  kind: ${n.kind}`)
         L.push("```", "")
       }
-      // C45: what struck them, foe by foe, and what came home
-      const foes = tale.debrief?.foes.filter((f) => f.hp + f.blight + f.bleed > 0) ?? []
-      if (foes.length) {
-        L.push("**What struck them.** Every wound I could lay at a foe's feet, with the attacks that fit it among those your heroes have already suffered.", "")
-        L.push("| Foe | Wounds | Health taken | Criticals | Attacks that fit | Blight and bleed | Hardest on |", "|---|---|---|---|---|---|---|")
-        for (const f of foes) {
-          const atk = Object.entries(f.attacks).sort((x, y) => y[1] - x[1]).map(([k, n]) => `${k} (${n})`).join("; ") || "too few to tell"
-          const dot = [f.blight ? `${f.blight} by blight` : "", f.bleed ? `${f.bleed} by bleeding` : ""].filter(Boolean).join(", ") || "none"
-          const most = Object.entries(f.victims).sort((x, y) => y[1] - x[1])[0]
-          L.push(`| ${f.name} | ${f.blows} | ${f.hp} | ${f.crits || "none"} | ${atk} | ${dot} | ${most ? `${most[0]} (${most[1]})` : ""} |`)
-        }
-        L.push("")
-      }
-      // a hero's own skill that wounded an ally is its cost, told apart from the foes (U7)
-      for (const c of tale.debrief?.costs ?? []) L.push(`**What the healing cost.** ${c.by}'s skill left ${c.to} ${c.kind === "bleed" ? "bleeding" : "blighted"}, ${c.hp} health in all.`, "")
       const loot = Object.entries(tale.debrief?.loot ?? {})
       if (loot.length) L.push(`**What came home.** ${loot.map(([k, n]) => `${n.toLocaleString("en-US")} ${k}`).join(", ")}.`, "")
-      if (tale.lessons.length) L.push(`**What I will remember.** ${tale.lessons.map((l) => `In the ${b.dungeonName}: ${l.text}.`).join(" ")} I keep it for the next road there, at this level of danger or worse.`, "")
     } else L.push("Nobody kept the story of this road as it happened: I only know how it ended.", "")
     L.push("```board-stickies")
     for (const h of fell) L.push(`- title: ${y(`${h.name} fell in the ${b.dungeonName}`)}`, "  kind: gotcha", `  body: ${y(`${t.fallen.find((x) => x.guid === h.guid)?.clsName ?? "One of yours"}. The roster is one name shorter.`)}`)
@@ -806,14 +789,19 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
     // C55: the tale checks itself against the pages, and a step that does not match is dropped and reported
     const classes = await Promise.all([...new Set(snaps.flatMap((s) => s.heroes.map((h) => h.cls)))].map((c) => nameOf("class", c)))
     const check = checkTale(snaps, all, db, classes), bs = check.beats
-    const healer = (await Promise.all(t.back.heroes.map(async (bh) => {
+    const healers = (await Promise.all(t.back.heroes.map(async (bh) => {
       const h = [...t.heroes, ...t.fallen].find((x) => x.guid === bh.guid), sk = h ? (await heroClass(h.cls)).skills : undefined
-      return !!h && h.skills.some((s) => sk?.get(s.id)?.targetsAllies && sk.get(s.id)!.healAvg >= RULE.realHeal)
-    }))).some(Boolean)
+      return !!h && h.skills.some((s) => sk?.get(s.id)?.targetsAllies && sk.get(s.id)!.healAvg >= RULE.realHeal) ? h.name : ""
+    }))).filter(Boolean)
+    const healer = healers.length > 0
     const first = snaps[0]
-    const j = judge(snaps, bs, { dungeon: t.back.dungeon, dungeonName: t.back.dungeonName, difficulty: first?.difficulty ?? 0, length: t.back.length, week: t.week - 1, success: t.back.success, healer })
+    const base = { dungeon: t.back.dungeon, difficulty: first?.difficulty ?? 0, length: t.back.length, week: t.week - 1, trip: `${t.back.dungeonName}, week ${t.week - 1}` }
+    const j = judge(snaps, bs, { ...base, dungeonName: t.back.dungeonName, success: t.back.success, healer })
+    // C102: what the road taught about the foes and the four, kept beside what it used
+    const taught = teachings(snaps, bs, db, base, healers)
+    j.lessons.push(...taught.lessons)
     if (snaps.length > 1) await remember(j.lessons)
-    tale = { snaps: snaps.length, beats: bs, ...j, debrief: db, issues: check.issues }
+    tale = { snaps: snaps.length, beats: bs, ...j, debrief: db, issues: check.issues, taught: taught.lines }
   }
   t.ledger = await loadLedger()
   // the week's first board keeps the Hamlet as it found it (C26)

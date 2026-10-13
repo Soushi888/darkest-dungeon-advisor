@@ -250,7 +250,7 @@ export function beats(snaps: Snap[], fell: string[] = []): Beat[] {
   return out
 }
 
-export interface Lesson { kind: "light" | "food" | "healing" | "retreat" | "worked"; text: string; dungeon: string; difficulty: number; length: number; week: number; trip: string }
+export interface Lesson { kind: "light" | "food" | "healing" | "retreat" | "worked" | "foe" | "line" | "cost" | "four"; text: string; dungeon: string; difficulty: number; length: number; week: number; trip: string }
 
 /** What went well and what went wrong, tied to what the Hamlet controls (C41). */
 export function judge(snaps: Snap[], bs: Beat[], trip: { dungeon: string; dungeonName: string; difficulty: number; length: number; week: number; success: boolean; healer: boolean }): { well: string[]; wrong: string[]; lessons: Lesson[] } {
@@ -280,7 +280,7 @@ export function judge(snaps: Snap[], bs: Beat[], trip: { dungeon: string; dungeo
     const close = brink.map(([n, v]) => `${n} at ${v.hp} of ${v.max}`).join(", ")
     wrong.push(trip.healer ? `Healing did not keep up: ${doors ? `${doors} at Death's Door` : "nobody at Death's Door"}${falls ? `, ${falls} fell` : ""}${close ? `; brought to the brink: ${close}` : ""}.` : `There was no true healer${doors ? `, and ${doors} stood at Death's Door` : ""}${falls ? `, ${falls} fell` : ""}${close ? `; brought to the brink: ${close}` : ""}.`)
     lessons.push({ ...base, kind: "healing", text: trip.healer ? `send a stronger heal, or a second one${close ? ` (${close})` : ""}` : `never go without a true healer${close ? ` (${close})` : ""}` })
-  } else if (mended.length && trip.healer) well.push(`The heal earned its seat: ${mended.map((b) => b.text).join("; ")}.`)
+  } else if (mended.length && trip.healer) well.push(`The heal earned its seat: it brought ${[...new Set(mended.map((b) => b.who))].join(" and ")} back from the brink.`)
   // C96: what the road used, against what they carried: running short on the way home is a lesson before it is a hunger or the dark
   const first = snaps[0]?.supplies ?? {}, last = snaps.at(-1)?.supplies ?? {}
   const short: string[] = []
