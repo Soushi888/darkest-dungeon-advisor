@@ -282,7 +282,8 @@ export function judge(snaps: Snap[], bs: Beat[], trip: { dungeon: string; dungeo
   const first = snaps[0]?.supplies ?? {}, last = snaps.at(-1)?.supplies ?? {}
   const short: string[] = []
   if ((first.torch ?? 0) > 0 && (last.torch ?? 0) <= CHRONICLE_RULE.lowLeft && !brokeInDark) { short.push(`torches: ${last.torch ?? 0} of ${first.torch} left`); lessons.push({ ...base, kind: "light", text: `carry more torches (${last.torch ?? 0} of ${first.torch} left on the way home)` }) }
-  if ((first.food ?? 0) > 0 && (last.food ?? 0) <= CHRONICLE_RULE.lowLeft && !bs.some((b) => b.kind === "hunger")) { short.push(`food: ${last.food ?? 0} of ${first.food} left`); lessons.push({ ...base, kind: "food", text: `carry more food (${last.food ?? 0} of ${first.food} left on the way home)` }) }
+  // C99: food runs short when half or less of it comes home (the Cove, week 20: 4 of 8, and Soushi felt it)
+  if ((first.food ?? 0) > 0 && (last.food ?? 0) <= Math.max(CHRONICLE_RULE.lowLeft, (first.food ?? 0) / 2) && !bs.some((b) => b.kind === "hunger")) { short.push(`food: ${last.food ?? 0} of ${first.food} left`); lessons.push({ ...base, kind: "food", text: `carry more food (${last.food ?? 0} of ${first.food} left on the way home)` }) }
   if (short.length) wrong.push(`They came home short: ${short.join(", ")}.`)
   // turning back: a fall that came after two had broken
   const broken = (s: Snap) => s.heroes.filter((h) => h.affliction).length
