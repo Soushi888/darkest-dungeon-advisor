@@ -16,6 +16,8 @@ export const CHRONICLE_RULE = {
   lessonTorches: 2, // RULE: torches a light lesson adds on its dungeon
   lessonFood: 2, // RULE: food a hunger lesson adds on its dungeon
   untriedMargin: 1, // RULE: one more torch and food on a road harder than any in the ledger
+  closeCall: 0.2, // RULE: a hero brought to this share of their health or less was a close call, whatever came after (C96)
+  lowLeft: 2, // RULE: torches or food left at this or fewer on the way home ran short (C96)
   woundShare: 0.25, // RULE: this share of a hero's health lost or regained between two pages is a wound or a mending worth telling (#12)
 }
 
@@ -266,15 +268,31 @@ export function judge(snaps: Snap[], bs: Beat[], trip: { dungeon: string; dungeo
   else if (darkAt < 0 && snaps.length) well.push("The light held the whole way.")
   if (bs.some((b) => b.kind === "hunger")) { wrong.push("The food ran out before the road did."); lessons.push({ ...base, kind: "food", text: "carry more food" }) }
   const doors = bs.filter((b) => b.kind === "deathsdoor").length, falls = bs.filter((b) => b.kind === "fell").length
-  if (doors + falls >= 2 || falls) {
-    wrong.push(trip.healer ? `Healing did not keep up: ${doors} at Death's Door${falls ? `, ${falls} fell` : ""}.` : `There was no true healer, and ${doors} stood at Death's Door${falls ? `, ${falls} fell` : ""}.`)
-    lessons.push({ ...base, kind: "healing", text: trip.healer ? "send a stronger heal, or a second one" : "never go without a true healer" })
-  }
+  // C96: a hero brought to the brink is a lesson about healing, even when no one stood at Death's Door (week 19: Furnival at 4 of 22)
+  const lowest = new Map<string, { hp: number; max: number }>()
+  for (const s of snaps) for (const h of s.heroes) if (h.maxHp && (!lowest.has(h.name) || h.hp < lowest.get(h.name)!.hp)) lowest.set(h.name, { hp: Math.round(h.hp), max: Math.round(h.maxHp) })
+  const brink = [...lowest].filter(([, v]) => v.hp > 0 && v.hp <= v.max * CHRONICLE_RULE.closeCall)
+  const mended = bs.filter((b) => b.kind === "mend" && brink.some(([n]) => n === b.who))
+  if (doors + falls >= 2 || falls || (brink.length && !trip.healer)) {
+    const close = brink.map(([n, v]) => `${n} at ${v.hp} of ${v.max}`).join(", ")
+    wrong.push(trip.healer ? `Healing did not keep up: ${doors} at Death's Door${falls ? `, ${falls} fell` : ""}.` : `There was no true healer${doors ? `, and ${doors} stood at Death's Door` : ""}${falls ? `, ${falls} fell` : ""}${close ? `; brought to the brink: ${close}` : ""}.`)
+    lessons.push({ ...base, kind: "healing", text: trip.healer ? "send a stronger heal, or a second one" : `never go without a true healer${close ? ` (${close})` : ""}` })
+  } else if (mended.length && trip.healer) well.push(`The heal earned its seat: ${mended.map((b) => b.text).join("; ")}.`)
+  // C96: what the road used, against what they carried: running short on the way home is a lesson before it is a hunger or the dark
+  const first = snaps[0]?.supplies ?? {}, last = snaps.at(-1)?.supplies ?? {}
+  const short: string[] = []
+  if ((first.torch ?? 0) > 0 && (last.torch ?? 0) <= CHRONICLE_RULE.lowLeft && !brokeInDark) { short.push(`torches: ${last.torch ?? 0} of ${first.torch} left`); lessons.push({ ...base, kind: "light", text: `carry more torches (${last.torch ?? 0} of ${first.torch} left on the way home)` }) }
+  if ((first.food ?? 0) > 0 && (last.food ?? 0) <= CHRONICLE_RULE.lowLeft && !bs.some((b) => b.kind === "hunger")) { short.push(`food: ${last.food ?? 0} of ${first.food} left`); lessons.push({ ...base, kind: "food", text: `carry more food (${last.food ?? 0} of ${first.food} left on the way home)` }) }
+  if (short.length) wrong.push(`They came home short: ${short.join(", ")}.`)
   // turning back: a fall that came after two had broken
   const broken = (s: Snap) => s.heroes.filter((h) => h.affliction).length
   const brokeTwo = snaps.findIndex((s) => broken(s) >= 2)
   if (brokeTwo >= 0 && bs.some((b) => b.kind === "fell" && b.i >= brokeTwo)) { wrong.push("Two had broken before the fall, and they pressed on."); lessons.push({ ...base, kind: "retreat", text: "turn back once two have broken" }) }
-  if (trip.success && !wrong.length) lessons.push({ ...base, kind: "worked", text: "this preparation brought them home with the work done" })
+  // C96: what held, named, so a lesson that worked can be repeated rather than merely remembered
+  if (trip.success && !wrong.length) {
+    const held = [trip.healer ? `a true healer${mended.length ? `, who brought ${mended.map((b) => b.who).join(" and ")} back from the brink` : ""}` : "no true healer, and nobody brought to the brink", darkAt < 0 ? "the light held" : "", (first.torch ?? 0) ? `${(first.torch ?? 0) - (last.torch ?? 0)} of ${first.torch} torches burnt` : "", (first.food ?? 0) ? `${(first.food ?? 0) - (last.food ?? 0)} of ${first.food} food eaten` : ""].filter(Boolean)
+    lessons.push({ ...base, kind: "worked", text: `this held: ${held.join("; ")}` })
+  }
   return { well, wrong, lessons }
 }
 
@@ -284,9 +302,10 @@ export async function loadLedger(): Promise<Lesson[]> {
   const f = Bun.file(ledgerFile())
   return (await f.exists()) ? ((await f.json()) as Lesson[]) : []
 }
-/** Adds a trip's lessons once (a trip is never counted twice). */
+/** Keeps a trip's lessons, once: a trip judged again replaces what was kept for it, so a sharper judgement (C96) reaches the ledger. */
 export async function remember(lessons: Lesson[]): Promise<Lesson[]> {
-  const all = await loadLedger()
+  const trips = new Set(lessons.map((l) => l.trip))
+  const all = (await loadLedger()).filter((x) => !trips.has(x.trip))
   for (const l of lessons) if (!all.some((x) => x.trip === l.trip && x.kind === l.kind)) all.push(l)
   await Bun.write(ledgerFile(), JSON.stringify(all, null, 1))
   return all
