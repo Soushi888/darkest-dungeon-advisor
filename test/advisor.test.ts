@@ -560,6 +560,8 @@ describe.skipIf(!has)("on the local save", () => {
       if ((h.learned ?? h.skills).some((s) => sk.get(s.id)?.heal && sk.get(s.id)!.targetsAllies && sk.get(s.id)!.healAvg >= RULE.realHeal)) healers.push(h.name)
     }
     expect(a.parties.length).toBeGreaterThan(0)
+    // two true healers are never called too alike
+    for (const p of a.alike) expect(a.trueHealer.has(p.keep.guid) && a.trueHealer.has(p.drop.guid)).toBe(false)
     // relief and the Medical Ward reach a true healer before anyone else
     const relief = a.relief.map((r) => a.trueHealer.has(r.hero.guid))
     expect(relief).toEqual([...relief].sort((x, y) => Number(y) - Number(x)))
