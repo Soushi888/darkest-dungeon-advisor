@@ -40,6 +40,7 @@ export interface Town {
   // the expedition the coach just brought back, as the campaign log's latest chapter records it (C37)
   trips: { dungeon: string; difficulty: number }[] // every expedition the campaign log records
   ledger?: Lesson[] // the lessons kept from past expeditions (C42), loaded by the board before it advises
+  settling?: Set<number> // C92: heroes who joined within RULE.settleWeeks, never let go while they settle; set by the board from its roster ledger
   back?: { dungeon: string; dungeonName: string; quest: string; goal?: string; length: number; success: boolean; heroes: { guid: number; name: string; cls: string; died: boolean }[] }
   skillDiscount: number; gearDiscount: number; campDiscount: number; visited: string[]; knownVariants: string[]
   heroUpgrades: Upgrade[]; buildingUpgrades: Upgrade[]; estateTrinkets: { id: string; name: string; classes: string[]; rank: number }[]

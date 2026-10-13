@@ -59,3 +59,38 @@ describe("C89, C90: a disease that bites only at camp, and a plan that holds whi
     expect(planView(placed, { ...start, heroes: start.heroes.map((x) => (x.guid === h.guid ? { ...x, busy: act.name } : x)) }).heroes.find((x) => x.guid === h.guid)!.busy).toBe(act.name)
   })
 })
+
+describe("C91, C92: an order of priorities, and a roster that remembers who joined", () => {
+  test("C91: a lower rung never outweighs a higher one", async () => {
+    const { byDoctrine, DOCTRINE } = await import("../src/advise.ts")
+    const road = (healer: boolean, left: number, length: number, score: number) => ({ healer, left, score, quest: { length } as any })
+    // a healer beats any score without one
+    expect([road(false, 5000, 1, 999), road(true, 100, 2, 1)].sort(byDoctrine)[0]!.healer).toBe(true)
+    // among healers, a road the coffers pay beats a better-scored one they cannot
+    expect([road(true, -10, 1, 999), road(true, 10, 1, 1)].sort(byDoctrine)[0]!.left).toBe(10)
+    // without a healer, the shortest road whatever the score
+    expect([road(false, 10, 2, 999), road(false, 10, 1, 1)].sort(byDoctrine)[0]!.quest.length).toBe(1)
+    // with a healer, length is left to the weighing
+    expect([road(true, 10, 1, 1), road(true, 10, 2, 9)].sort(byDoctrine)[0]!.score).toBe(9)
+    expect(DOCTRINE[0]).toContain("true healer")
+  })
+
+  test("C92: a hero who joined within the settling weeks is kept from every dismissal", async () => {
+    const { rosterLedger, settling } = await import("../src/board.ts")
+    const t = await town(await readSave())
+    const [a, b] = t.heroes
+    const start = { week: t.week, heroes: t.heroes.filter((h) => h.guid !== b!.guid).map((h) => ({ guid: h.guid, name: h.name })), bought: [], gold: 0 }
+    const l = rosterLedger(undefined, t, start)
+    expect(l.joined[String(a!.guid)]).toBe(0)
+    expect(l.joined[String(b!.guid)]).toBe(t.week)
+    expect(settling(l, t.week + 2, 3).has(b!.guid)).toBe(true)
+    expect(settling(l, t.week + 3, 3).has(b!.guid)).toBe(false)
+    // kept across weeks: a later build does not reset the week they joined
+    expect(rosterLedger(l, { ...t, week: t.week + 1 }, undefined).joined[String(b!.guid)]).toBe(t.week)
+    // the advice never names a settling hero for dismissal or as the one of a pair to let go
+    const settle = new Set(t.heroes.map((h) => h.guid))
+    const adv = await advise({ ...t, settling: settle })
+    expect(adv.dismiss).toEqual([])
+    for (const p of adv.alike) expect(settle.has(p.drop.guid)).toBe(false)
+  })
+})

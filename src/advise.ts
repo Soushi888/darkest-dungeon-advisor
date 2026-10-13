@@ -10,6 +10,24 @@ export const RULE_FOOD = [0, 8, 12, 16] // RULE: food and torches by expedition 
 
 export interface RoadItem { id: string; label: string; count: number; price: number; why?: string }
 /** What the road to a quest asks of the Provisioner (counts are RULE), priced from the game's list with this week's event applied (C22). */
+/** C91: the Caretaker's order of priorities, highest first. A lower one never outweighs a higher one: the road is chosen by the
+ *  first rung that tells two candidates apart, and only then by the weighing of everything else (Soushi, 2026-10-13: "I need
+ *  you to be coherent"). Printed on the board in these words. */
+export const DOCTRINE = [
+  "a true healer goes with the four",
+  "the road is paid for from the coffers",
+  "with no true healer, the shortest road",
+  "then everything else I weigh: seats, skills, quirks, stress, the gold left",
+] as const
+
+/** C91: compare two roads by DOCTRINE, rung by rung. */
+export function byDoctrine(a: Pick<Party, "healer" | "left" | "score" | "quest">, b: Pick<Party, "healer" | "left" | "score" | "quest">): number {
+  return Number(b.healer) - Number(a.healer)
+    || Number((b.left ?? 0) >= 0) - Number((a.left ?? 0) >= 0)
+    || (!a.healer && !b.healer ? a.quest.length - b.quest.length : 0)
+    || b.score - a.score
+}
+
 export function road(t: Town, p: Party | undefined, prices: Map<string, number>): RoadItem[] {
   if (!p) return []
   const q = p.quest, len = Math.max(1, Math.min(3, q.length))
@@ -52,6 +70,7 @@ export const RULE = {
   campStress: 1, campHealth: 10, campCure: 4, campGuard: 6, campBoon: 2,
   frontHp: 1.5, // RULE: per hit point above the four's average, at the front; rank 1 counts twice, rank 4 twice against (Soushi, 2026-10-11: "an occultist on front line? he is not really resistant")
   lessonHeal: 4, // RULE: a true healer's extra weight on a road where healing failed before (C42)
+  settleWeeks: 3, // RULE: a hero who joined within this many weeks is never named for dismissal or as the one of a pair to let go (C92)
   noHealerPerStep: 50, // RULE: a four without a true healer takes the shortest road; this much against each step longer (C87, Soushi, 2026-10-13)
   youngRoster: 0.6, // RULE: when this share of the roster is level 1 or lower, the heirlooms go to the Stage Coach's seasoned recruits first (Soushi, 2026-10-11)
   healerWorth: 8, lightHealWorth: 0, stunWorth: 3, sameClass: 2, levelWorth: 3, stressWeight: 0.1, // RULE: a party's healer, a heal too small to count, stun, a doubled class against, each level, each point of stress against
@@ -290,12 +309,12 @@ export async function advise(t: Town): Promise<Advice> {
   }
   // C87: with no true healer in the four, the shortest road; the usual weighing returns once one can go
   for (const p of parties) if (!p.healer && p.quest.length > 1) { p.score -= RULE.noHealerPerStep * (p.quest.length - 1); p.notes.push("no true healer can go, so I keep to the shortest roads") }
-  parties.sort((a, b) => b.score - a.score)
+  parties.sort(byDoctrine)
   const best = parties[0]
 
   // roster: level 0 heroes heavy with negative quirks and outside the best party
   const inParty = new Set(best?.seats.map((s) => s.hero.guid))
-  const dismiss = free.filter((h) => h.level === 0 && !inParty.has(h.guid) && negatives(h).length >= RULE.dismissNegatives)
+  const dismiss = free.filter((h) => h.level === 0 && !inParty.has(h.guid) && !t.settling?.has(h.guid) && negatives(h).length >= RULE.dismissNegatives)
     .map((h) => ({ hero: h, why: `level 0 with ${negatives(h).length} negative quirks: ${negatives(h).map((q) => q.name).join(", ")}` }))
   const room = t.rosterCap - t.rosterSize
   const recruits: Recruit[] = []
@@ -320,7 +339,7 @@ export async function advise(t: Town): Promise<Advice> {
   }
   const roster = await Promise.all(t.heroes.map(member)), newcomers = await Promise.all(t.recruits.map(member))
   const taken = new Set<number>()
-  const alike = alikePairs(roster, inParty).map((p) => {
+  const alike = alikePairs(roster, new Set([...inParty, ...(t.settling ?? [])])).map((p) => {
     const gap = gaps(roster, new Set([p.drop.guid])), classes = new Set(roster.filter((m) => m.guid !== p.drop.guid).map((m) => m.cls))
     // the recruit who brings most of what is missing, or a class the roster has none of; lower level is no bar (Soushi, 07:15)
     const r = newcomers.filter((c) => !taken.has(c.guid)).map((c) => ({ c, brings: c.roles.filter((x) => gap.includes(x)), fresh: !classes.has(c.cls) }))
