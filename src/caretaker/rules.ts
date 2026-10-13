@@ -4,6 +4,7 @@
 // so a habit added to those objects without a decision (a row, or a place on that list) fails test/rules.test.ts.
 import { RULE, RULE_FOOD, RULE_PROVISION } from "./advise.ts"
 import { CHRONICLE_RULE } from "../road/chronicle.ts"
+import { coin } from "../voice/words.ts"
 
 const TABLES = { RULE, CHRONICLE_RULE }
 type Scalar = keyof typeof TABLES
@@ -29,8 +30,6 @@ export interface Habit {
   value: () => string
 }
 
-// the board's gold writing (the same as board.ts's own `coin`, which cannot be imported without a cycle)
-const coin = (n: number) => `${n.toLocaleString("en-US")} gold`
 
 /** The one place a number becomes a cell. */
 export function cell(fmt: Fmt, n: number): string {

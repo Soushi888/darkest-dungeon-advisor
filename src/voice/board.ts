@@ -2,6 +2,7 @@
 // compiled page. One fixed file name, so the picks a reader makes survive every rebuild of the board.
 // The board speaks only as the Caretaker, in the Hamlet's own words (C13): no file, field or save is named on it.
 // Where each figure comes from goes to sources.md beside it (C14).
+import { coin } from "./words.ts"
 import { teachings } from "../road/teach.ts"
 import { campTell, campWorth } from "../caretaker/camp.ts"
 import { ROLE_WORDS } from "../caretaker/roles.ts"
@@ -27,7 +28,6 @@ import { habitGroups } from "../caretaker/rules.ts"
 const BOARD = process.env.NICEBOARD ?? join(homedir(), ".claude/skills/Niceboard/Tools/Board.ts")
 const y = (s: string) => JSON.stringify(s) // a JSON string is a valid YAML scalar, quotes and colons included
 const HABIT = "(my habit)" // how a RULE number is labelled on the board, in his voice (A2)
-const coin = (n: number) => `${n.toLocaleString("en-US")} gold`
 // C46: stress drawn as a bar on the hero's own gauge, 0 to 200: resolve is tested at 100 and the heart gives out at 200
 // (the game's rule as the Darkest Dungeon wiki states it, darkestdungeon.wiki.gg/wiki/Stress; Soushi allowed the wiki 2026-10-11)
 const STRESS = { test: 100, max: 200 }
