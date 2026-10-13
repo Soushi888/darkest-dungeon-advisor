@@ -41,4 +41,10 @@ describe("C96: a lesson says what happened", () => {
     const slot = (await packRules()).stack.get("food")!
     for (const n of RULE_PROVISION.slice(1)) expect(n % slot).toBe(0)
   })
+
+  test("C100: a close call with a healer aboard is a healing lesson too", () => {
+    const snaps = [snap(8, 12, [hero("Addinell", 19, 19)]), snap(6, 10, [hero("Addinell", 2, 19)]), snap(5, 8, [hero("Addinell", 8, 19)])]
+    const j = judge(snaps, beats(snaps), { ...trip(true), success: false })
+    expect(j.lessons.find((l) => l.kind === "healing")?.text).toBe("send a stronger heal, or a second one (Addinell at 2 of 19)")
+  })
 })
