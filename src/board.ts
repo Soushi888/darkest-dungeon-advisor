@@ -207,7 +207,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     const bridge = [
       resting.length ? `${resting.join(", ")} ${resting.length === 1 ? "needs" : "need"} the Abbey, the Tavern or the Sanitarium before the dark again, so they stay out of this week's four.` : "Nobody who went needs to sit out this week.",
       lostHeal.length ? `With ${lostHeal.map((h) => h.name).join(" and ")} gone, ${a.healers.length ? `the healers left on the roster are ${a.healers.map((x) => { const h = t.heroes.find((z) => z.name === x.name), going = chosen?.seats.some((s) => s.hero.name === x.name), why = !h || going ? "" : h.busy ? `in the ${h.busy} this week` : h.affliction ? `afflicted` : h.quirks.some((q) => q.disease) ? "ill" : h.stress >= RULE.sendBelow ? `${h.stress} stress, too worn to send` : ""; return `${x.name} (${x.skill}, about ${x.avg} a cast${going ? ", and going" : why ? `; ${why}` : ""})` }).join(", ")}.` : "nobody left on the roster has a true heal: I would look to the coach for one."}` : "",
-      chosen ? `So this week I would send ${chosen.seats.map((s) => s.hero.name).join(", ")} to the ${chosen.quest.dungeonName}${chosen.healer ? `, with ${chosen.heal!.by} to heal` : chosen.heal ? `, with only ${chosen.heal.by}'s light heal` : ", without a healer"}; the reasons are below, in the order the week is played.` : "So this week nobody is fit for the road: rest them first.",
+      chosen ? `So this week I would send ${chosen.seats.map((s) => s.hero.name).join(", ")} to the ${chosen.quest.dungeonName}${chosen.healer ? `, with ${chosen.heal!.by} to heal` : chosen.heal ? `, without a healer (${chosen.heal.by}'s ${chosen.heal.skill} mends too little to count)` : ", without a healer"}; the reasons are below, in the order the week is played.` : "So this week nobody is fit for the road: rest them first.",
     ].filter(Boolean)
     L.push(bridge.join(" "), "")
   }
@@ -674,7 +674,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     ["I only send heroes under this much stress", RULE.sendBelow],
     ["A level 0 hero with this many bad quirks is one I would let go", RULE.dismissNegatives],
     ["When this share of the roster is level 1 or lower, the heirlooms go to the Stage Coach's seasoned recruits first", `${Math.round(RULE.youngRoster * 100)}%`],
-    ["A heal restoring this many hit points a cast, at its first level, makes a healer; less is a light heal", RULE.realHeal],
+    ["A heal restoring this many hit points a cast, at its first level, makes a healer; less is no heal at all", RULE.realHeal],
   ])
   H("Choosing the road", [
     ["When this many of the four are level 0, a longer road counts against itself", RULE.greenParty],
@@ -684,7 +684,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     ["A road the coffers cannot provision counts this much against itself", RULE.brokeRoad],
   ])
   H("Seating the four", [
-    ["A true healer in the four", `+${RULE.healerWorth}`], ["Only a light heal", `+${RULE.lightHealWorth}`], ["A stun in the four", `+${RULE.stunWorth}`],
+    ["A true healer in the four", `+${RULE.healerWorth}`], ["A stun in the four", `+${RULE.stunWorth}`],
     ["Two of the same calling in the four", `−${RULE.sameClass}`], ["Each level of a hero", `+${RULE.levelWorth}`], ["Each point of stress a hero carries", `−${RULE.stressWeight}`],
     ["Each enemy rank the four can strike from their seats", `+${RULE.reachPerRank}`],
     ["Each neighbouring rank a hero can still strike from, if knocked out of their seat", `+${RULE.shufflePerSide}`],

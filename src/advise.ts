@@ -33,7 +33,7 @@ export const RULE = {
   restAbove: 45, // RULE: stress at which I want a hero relieved before going out again
   sendBelow: 45, // RULE: I only send heroes below this stress
   dismissNegatives: 3, // RULE: a level 0 hero with this many negative quirks is a candidate to let go
-  realHeal: 4, // RULE: a heal restoring this many hit points on average, at its first level, makes a healer; less is a light heal (Soushi, 2026-10-10)
+  realHeal: 4, // RULE: a heal restoring this many hit points on average, at its first level, makes a healer; less is no heal at all and counts for nothing (Soushi, 2026-10-10; 2026-10-13: "1 hp heal is totally useless")
   greenParty: 3, // RULE: when this many of the four are level 0, a longer road counts against itself
   greenPerStep: 6, // RULE: how much, per step beyond a short road
   goldPerPoint: 500, // RULE: every 500 gold the road leaves in the coffers counts for one point, up to goldCap
@@ -53,7 +53,7 @@ export const RULE = {
   frontHp: 1.5, // RULE: per hit point above the four's average, at the front; rank 1 counts twice, rank 4 twice against (Soushi, 2026-10-11: "an occultist on front line? he is not really resistant")
   lessonHeal: 4, // RULE: a true healer's extra weight on a road where healing failed before (C42)
   youngRoster: 0.6, // RULE: when this share of the roster is level 1 or lower, the heirlooms go to the Stage Coach's seasoned recruits first (Soushi, 2026-10-11)
-  healerWorth: 8, lightHealWorth: 2, stunWorth: 3, sameClass: 2, levelWorth: 3, stressWeight: 0.1, // RULE: a party's healer, light heal, stun, a doubled class against, each level, each point of stress against
+  healerWorth: 8, lightHealWorth: 0, stunWorth: 3, sameClass: 2, levelWorth: 3, stressWeight: 0.1, // RULE: a party's healer, a heal too small to count, stun, a doubled class against, each level, each point of stress against
 }
 
 /** What a skill is worth from rank r on road q, by my habits: an attack by how many ranks it reaches, a heal by what it
@@ -195,7 +195,7 @@ async function bestParty(pool: HeroView[], q: Quest): Promise<Party | undefined>
       })
       score += RULE.reachPerRank * reach.size
       if (marker && striker) { score += RULE.markPair; pair = { marker: marker.h.name, mark: marker.name, striker: striker.h.name, strike: striker.name } }
-      // a true healer is what brings a party home; a light heal helps, but does not stand in for one
+      // a true healer is what brings a party home; a heal under realHeal is worth nothing (Soushi, 2026-10-13)
       if (healer) score += RULE.healerWorth
       else if (heal) score += RULE.lightHealWorth
       if (stunner) score += RULE.stunWorth
@@ -223,7 +223,7 @@ async function bestParty(pool: HeroView[], q: Quest): Promise<Party | undefined>
     }
     const blind = [1, 2, 3, 4].filter((e) => !best!.reach!.includes(e))
     if (blind.length) best.notes.push(`none of them can strike enemy rank${blind.length > 1 ? "s" : ""} ${blind.join(" and ")} from these seats`)
-    if (!best.healer) best.notes.push(best.heal ? `only a light heal in this four: ${best.heal.by}'s ${best.heal.skill}` : "no healer in this four")
+    if (!best.healer) best.notes.push(best.heal ? `no healer in this four: ${best.heal.by}'s ${best.heal.skill} mends about ${best.heal.avg} hit points, too little to count` : "no healer in this four")
     if (!best.stunner) best.notes.push("no stun in this four")
   }
   return best
@@ -414,7 +414,7 @@ export async function seatParty(order: HeroView[], q: Quest): Promise<Party> {
     seats.push({ hero: h, rank: r, skills: usable.map((s) => s.name), notes: fit.notes })
   }
   const healer = !!heal && heal.avg >= RULE.realHeal
-  if (!healer) notes.push(heal ? `only a light heal in this four: ${heal.by}'s ${heal.skill}` : "no healer in this four")
+  if (!healer) notes.push(heal ? `no healer in this four: ${heal.by}'s ${heal.skill} mends about ${heal.avg} hit points, too little to count` : "no healer in this four")
   if (!stunner) notes.push("no stun in this four")
   return { quest: q, seats, score: 0, healer, heal, stunner, notes }
 }
@@ -436,7 +436,7 @@ export function readiness(t: Town, p: Party, reserve: number): Readiness {
     { label: "The road is paid for", met: gold >= reserve, why: gold >= reserve ? `the provisions cost ${n(reserve)} of your ${n(gold)} gold` : `the provisions cost ${n(reserve)} and you have ${n(gold)}` },
     { label: "Rested", met: !tired.length, why: tired.length ? `${tired.join(", ")} at ${RULE.sendBelow} stress or more` : `all four under ${RULE.sendBelow} stress` },
     { label: "Sound in mind and body", met: !unfit.length, why: unfit.length ? `${unfit.join(", ")} afflicted, ill or still in a building` : "nobody afflicted, ill or held in town" },
-    { label: "A healer goes with them", met: p.healer, why: p.healer ? `${p.heal!.by}'s ${p.heal!.skill}, about ${p.heal!.avg} hit points a cast` : p.heal ? `only ${p.heal.by}'s ${p.heal.skill}, about ${p.heal.avg} hit points a cast: a light heal, not a healer` : "nobody in the four heals another from where they stand" },
+    { label: "A healer goes with them", met: p.healer, why: p.healer ? `${p.heal!.by}'s ${p.heal!.skill}, about ${p.heal!.avg} hit points a cast` : p.heal ? `only ${p.heal.by}'s ${p.heal.skill}, about ${p.heal.avg} hit points a cast: too little to count as a heal` : "nobody in the four heals another from where they stand" },
     { label: "A stun goes with them", met: p.stunner, why: p.stunner ? "someone can stop a foe's turn" : "nobody can stun from the seat I gave them" },
     { label: "Every rank can fight", met: !short.length, why: short.length ? `${short.join(", ")} with fewer than two skills that reach from their rank` : "each has at least two skills that reach from their rank" },
     { label: "A road you have walked", met: p.quest.walked, why: p.quest.walked ? `${p.quest.known.length} foes there you know` : "you have never walked it" },
