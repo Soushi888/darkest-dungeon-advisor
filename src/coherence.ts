@@ -30,7 +30,9 @@ export function contradictions(md: string): string[] {
   const all = cards(md), found: string[] = []
   for (const w of rawNames(md)) found.push(`a raw name is on the board: ${w}`)
   // no hero is offered the same trinket twice (U23)
-  const offered = [...md.matchAll(/- title: "(.+?) to ([^"]+)"\n {2}kind: idea/g)].map((m) => `${m[1]} to ${m[2]}`)
+  // a trinket sticky is "<trinket> to <hero>", and only in the trinkets' own zone: a road lesson ("called ... to its side") is not one
+  const trinketZone = md.match(/\n## Heirlooms and trinkets[^\n]*\n([\s\S]*?)(?=\n## |$)/)?.[1] ?? ""
+  const offered = [...trinketZone.matchAll(/- title: "(.+?) to ([^"]+)"\n {2}kind: idea/g)].map((m) => `${m[1]} to ${m[2]}`)
   for (const o of new Set(offered.filter((x, i) => offered.indexOf(x) !== i))) found.push(`the same trinket is offered twice: ${o}`)
   const party = all.find((c) => c.q.startsWith("Take this party"))
   const four = party ? [...party.context.matchAll(/\d\. ([^(;]+?) \(/g)].map((m) => m[1]!.trim()) : []
@@ -55,7 +57,7 @@ export function contradictions(md: string): string[] {
   }
 
   // trinkets and training are for the four
-  for (const m of md.matchAll(/title: "(.+?) to ([^"]+)"\n {2}kind: idea/g)) if (four.length && !going(m[2]!)) found.push(`${m[1]} goes to ${m[2]}, who is not in the four`)
+  for (const m of trinketZone.matchAll(/title: "(.+?) to ([^"]+)"\n {2}kind: idea/g)) if (four.length && !going(m[2]!)) found.push(`${m[1]} goes to ${m[2]}, who is not in the four`)
   const train = all.find((c) => c.q === "What do we train first?"), tp = train && leaned(train)
   if (tp && tp !== "Keep the gold") { const who = tp.split(":")[0]!; if (four.length && !going(who)) found.push(`training leans on ${who}, who is not in the four`) }
 

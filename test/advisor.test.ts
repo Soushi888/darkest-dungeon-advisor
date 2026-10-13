@@ -723,7 +723,9 @@ describe.skipIf(!has)("on the local save", () => {
     // plants its own: one of the four leaned into the Abbey
     const relief = /- q: "Where does (.+?) go\?"/.test(md) ? md.replace(/- q: "Where does (.+?) go\?"([\s\S]*?)\n  lean: \d+/, `- q: "Where does ${four[0]} go?"$2\n  lean: 0`)
       : `${md}\n\n\`\`\`board-decisions\n- q: "Where does ${four[0]} go?"\n  context: "planted"\n  options:\n    - pick: "The Abbey"\n      effect: "planted"\n    - pick: "Leave them be"\n      effect: "planted"\n  lean: 0\n  lean_why: "planted"\n\`\`\`\n`
-    const bad = relief + `\n\n\`\`\`board-stickies\n- title: "Bleed Stone to Nobody"\n  kind: idea\n\`\`\`\n`
+    // a trinket sticky is read in the trinkets' own zone (C109), so the planted one goes there
+    const planted = `\n\`\`\`board-stickies\n- title: "Bleed Stone to Nobody"\n  kind: idea\n\`\`\`\n`
+    const bad = /\n## Heirlooms and trinkets/.test(relief) ? relief.replace(/(\n## Heirlooms and trinkets[^\n]*\n)/, `$1${planted}`) : `${relief}\n\n## Heirlooms and trinkets {wide}\n${planted}`
     const found = contradictions(bad)
     expect(found.some((f) => f.includes(`${four[0]} is in the four`))).toBe(true)
     expect(found.some((f) => f.includes("Nobody, who is not in the four"))).toBe(true)
