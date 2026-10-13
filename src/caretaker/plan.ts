@@ -64,7 +64,7 @@ export async function taleHealers(t: Town): Promise<string[]> {
 }
 
 /** One spending step and the gold left after it, in the order the gold goes (the reserve first). */
-export interface Spend { step: "reserve" | "heal-held" | "relief" | "ward" | "treatment" | "heal-back" | "train" | "survivalist"; gold: number; left: number; who?: string }
+export interface Spend { step: "reserve" | "heal-held" | "relief" | "ward" | "treatment" | "upkeep" | "heal-back" | "train" | "survivalist"; gold: number; left: number; who?: string }
 
 export type ReliefWhy = { kind: "dismiss" } | { kind: "paid"; place: string } | { kind: "cheapest"; note: string } | { kind: "taken"; places: string[] } | { kind: "broke" }
 export interface ReliefCard { relief: Relief; lean: number; why: ReliefWhy; filedUnder: string }
@@ -311,8 +311,10 @@ export function plan(t: Town, a: Advice, inp: PlanInputs): Plan {
     }
   }
 
-  // C78: the upkeep of the four who leave, from the gold free at this point (it reads `left`, and spends none of it)
+  // C78: the upkeep of the four who leave, from the gold free at this point: after the road, the rest and the wards, with the
+  // heal lesson still held (the healer first), and before the Guild's and the Survivalist's leans, which draw on what it leaves
   let up: UpkeepPlan | undefined
+  const upBuys = new Set<string>()
   if (chosen) {
     const seated = new Map(chosen.seats.map((s) => [s.hero.name, s]))
     const items: UpItem[] = t.heroUpgrades.filter((u) => seated.has(u.hero ?? "")).map((u) => {
@@ -329,7 +331,11 @@ export function plan(t: Town, a: Advice, inp: PlanInputs): Plan {
     }
     const p = upkeep(items, left, { camps: chosen.quest.length >= 2, dismiss: new Map(a.dismiss.map((d) => [d.hero.name, d.why])) })
     up = { free: left, ...p }
+    if (p.spent) spend("upkeep", p.spent)
+    for (const l of p.lines) if (l.status === "buy") upBuys.add(`${l.item.hero}|${l.item.what}`)
   }
+  // what the Guild or the Survivalist leans to that the upkeep already buys is paid once, by the upkeep
+  const extra = (hero: string | undefined, what: string, gold: number) => (upBuys.has(`${hero}|${what}`) ? 0 : gold)
 
   // the Guild and the Blacksmith: a skill you named comes first, then healing, then the cheapest step (#4)
   let train: TrainPlan | undefined
@@ -338,12 +344,13 @@ export function plan(t: Town, a: Advice, inp: PlanInputs): Plan {
     const named = (u: Upgrade) => u.where === "Guild" && preferred.some((n) => n.toLowerCase() === u.label.toLowerCase())
     // the five cheapest lessons, and every piece of the smith's work the coffers can pay for, and every lesson you named
     const shown = [...a.buys.filter(named), ...a.buys.filter((u) => u.where !== "Blacksmith" && !named(u)).slice(0, 5), ...a.buys.filter((u) => u.where === "Blacksmith")]
-    const liked = shown.findIndex((u) => u.where === "Guild" && goldOf(u) <= left && preferred.some((n) => n.toLowerCase() === u.label.toLowerCase()))
+    const price = (u: Upgrade) => (u.learn ? goldOf(u) : extra(u.hero, `${u.label} to level ${u.toLevel}`, goldOf(u)))
+    const liked = shown.findIndex((u) => u.where === "Guild" && price(u) <= left && preferred.some((n) => n.toLowerCase() === u.label.toLowerCase()))
     if (healHeld) spend("heal-back", -healHeld, healLesson!.hero)
-    const heal = [shown.findIndex((u) => !!u.learn && goldOf(u) <= left), shown.findIndex((u) => HEAL.test(u.label) && goldOf(u) <= left)].find((i) => i >= 0) ?? -1
-    const cheap = shown.findIndex((u) => goldOf(u) <= left)
+    const heal = [shown.findIndex((u) => !!u.learn && price(u) <= left), shown.findIndex((u) => HEAL.test(u.label) && price(u) <= left)].find((i) => i >= 0) ?? -1
+    const cheap = shown.findIndex((u) => price(u) <= left)
     const pick = liked >= 0 ? liked : heal >= 0 ? heal : cheap
-    if (pick >= 0) spend("train", goldOf(shown[pick]!), shown[pick]!.hero)
+    if (pick >= 0) spend("train", price(shown[pick]!), shown[pick]!.hero)
     train = { shown, lean: pick >= 0 ? pick : shown.length, why: liked >= 0 ? "liked" : heal >= 0 ? "heal" : cheap >= 0 ? "cheap" : "broke", ...(liked >= 0 ? { liked: shown[liked]! } : {}) }
   }
 
@@ -361,8 +368,9 @@ export function plan(t: Town, a: Advice, inp: PlanInputs): Plan {
     }
     let lean = best.length, why: CampWhy = camps ? "broke" : "no-camp"
     if (best.length) {
-      const pick = camps ? best.map((b, i) => ({ b, i })).filter(({ b }) => b.price <= left).sort((x, z) => worth(z.b.k) - worth(x.b.k))[0] : undefined
-      if (pick) { spend("survivalist", pick.b.price, pick.b.hero.name); lean = pick.i; why = "worth" }
+      const cost = (b: CampPlan["best"][number]) => extra(b.hero.name, `${b.k.name} at the Survivalist`, b.price)
+      const pick = camps ? best.map((b, i) => ({ b, i })).filter(({ b }) => cost(b) <= left).sort((x, z) => worth(z.b.k) - worth(x.b.k))[0] : undefined
+      if (pick) { spend("survivalist", cost(pick.b), pick.b.hero.name); lean = pick.i; why = "worth" }
     }
     camp = { camps, seats, best, lean, why }
   }

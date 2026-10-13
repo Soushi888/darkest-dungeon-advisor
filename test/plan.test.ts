@@ -110,13 +110,30 @@ describe("C111: the board renders one plan", () => {
         expect(spent).toBeLessThanOrEqual(p.free)
         for (const s of leans) expect(s.left).toBeGreaterThanOrEqual(0)
         expect(leans.at(-1)?.left ?? p.free).toBe(p.free - spent)
-        // the spending order is the source order (relief, the wards, the Guild, the Survivalist), never the board's display order
-        const order = ["heal-held", "relief", "ward", "treatment", "heal-back", "train", "survivalist"]
+        // the spending order is the source order (relief, the wards, the four's upkeep, the Guild, the Survivalist), never the
+        // board's display order
+        const order = ["heal-held", "relief", "ward", "treatment", "upkeep", "heal-back", "train", "survivalist"]
         const at = leans.map((s) => order.indexOf(s.step))
         expect(at).toEqual([...at].sort((x, z) => x - z))
-        // a held heal lesson is given back before the Guild's lean, and the four's upkeep spends none of the gold it reads
+        // a held heal lesson is given back before the Guild's lean; the four's upkeep reads the gold left after the wards, with
+        // the heal lesson still held, and spends what it buys from it
         expect(leans.filter((s) => s.step === "heal-held").length).toBe(leans.filter((s) => s.step === "heal-back").length)
         if (p.upkeep) expect(p.upkeep.free).toBe(p.free - leans.filter((s) => ["heal-held", "relief", "ward", "treatment"].includes(s.step)).reduce((x, s) => x + s.gold, 0))
+        expect(leans.filter((s) => s.step === "upkeep").reduce((x, s) => x + s.gold, 0)).toBe(p.upkeep?.spent ?? 0)
+        // B2: everything the board promises to buy, counted from its leans and not from the spends, fits in the free gold. An
+        // upgrade the upkeep buys and the Guild also leans to is paid once
+        const upBuys = new Set((p.upkeep?.lines ?? []).filter((l) => l.status === "buy").map((l) => `${l.item.hero}|${l.item.what}`))
+        const goldOf = (u: { cost: { type: string; amount: number }[] }) => u.cost.find((c) => c.type === "gold")?.amount ?? 0
+        const tu = p.train && p.train.lean < p.train.shown.length ? p.train.shown[p.train.lean]! : undefined
+        const cb = p.camp?.why === "worth" ? p.camp.best[p.camp.lean]! : undefined
+        const promised = p.relief.filter((c) => c.why.kind === "cheapest").reduce((x, c) => x + c.relief.options[c.lean]!.activity.cost, 0)
+          + (p.ward?.cards ?? []).filter((c) => c.lean === 0 && c.why === "worth").length * (p.ward?.ward.cost ?? 0)
+          + (p.treatment?.cards ?? []).filter((c) => c.lean === 0 && c.why === "worth").reduce((x, c) => x + c.treat.cost, 0)
+          + (p.upkeep?.spent ?? 0)
+          + (tu && !upBuys.has(`${tu.hero}|${tu.label} to level ${tu.toLevel}`) ? goldOf(tu) : 0)
+          + (cb && !upBuys.has(`${cb.hero.name}|${cb.k.name} at the Survivalist`) ? cb.price : 0)
+        expect(promised).toBeLessThanOrEqual(p.free)
+        expect(promised).toBe(spent)
         // decision 15: a relief card is filed under the building of the place it leans to, and with the waiting when it leans to none
         for (const c of p.relief) expect(c.filedUnder).toBe(c.relief.options[c.lean]?.activity.buildingName ?? "")
         // the Survivalist spends exactly when its lean names a lesson, and last
