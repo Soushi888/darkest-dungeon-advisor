@@ -84,7 +84,7 @@ describe.skipIf(!has)("C112: one four drives the whole plan", () => {
     expect(p.heirlooms!.lean).toBe(1)
   })
 
-  test("B11: the Caretaker's judgement imports nothing from the voice, and the README lists every module of it", async () => {
+  test("B11: no module of the Caretaker's judgement imports directly from the voice, and the README lists every module of it", async () => {
     const { readdirSync, readFileSync } = await import("node:fs")
     const dir = new URL("../src/caretaker/", import.meta.url)
     const files = readdirSync(dir).filter((f) => f.endsWith(".ts"))
