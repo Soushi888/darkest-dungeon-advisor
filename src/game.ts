@@ -15,6 +15,8 @@ export const P = {
   buildingUpgrades: (b: string) => `upgrades/building/${b}.upgrades.json`,
   building: (b: string) => `campaign/town/buildings/${b}/${b}.building.json`,
   mash: (d: string, level: number) => `dungeons/${d}/${d}.${level}.mash.darkest`,
+  // the wanderers a dungeon may field beside its usual foes (the Collector, the Shambler): its own and the shared ones (C106)
+  conditionalMash: (d: string, level: number) => [`dungeons/${d}/${d}.conditional.${level}.mash.darkest`, `dungeons/_shared/conditional.${level}.mash.darkest`],
   // a hero's own look (U30): actor.colour_variation 0 to 3 picks the class's art folder _A to _D
   portrait: (c: string, look = 0) => `heroes/${c}/${c}_${"ABCD"[look] ?? "A"}/${c}_portrait_roster.png`,
   townEvents: "campaign/town_events/base.town_events.events.json",
@@ -56,7 +58,10 @@ export async function nameOf(kind: "quirk" | "class" | "trinket" | "dungeon" | "
   return s.get(key) ?? s.get(`upgrade_tree_name_${cls}.${id}`) ?? titleCase(id)
 }
 /** A road's goal as the quest card names it ("Cleanse", "Detoxify the Corpses"), from town_quest_name_<type>+<length>+<dungeon>+<goal>. */
-export async function questGoal(type: string, dungeon: string, length: number): Promise<string> {
+export async function questGoal(type: string, dungeon: string, length: number, id = ""): Promise<string> {
+  // a quest of the story names its own goal ("Defeat the Swine Prince"); its type alone gave another boss's name (C107)
+  const own = id ? (await strings()).get(`str_caretaker_goal_${id}`) : undefined
+  if (own) return own
   const s = await strings(), keys = [...s.keys()].filter((k) => k.startsWith(`town_quest_name_${type}+`))
   const hit = keys.find((k) => k.startsWith(`town_quest_name_${type}+${length}+${dungeon}+`)) ?? keys.find((k) => k.includes(`+${dungeon}+`)) ?? keys[0]
   return hit ? s.get(hit)! : titleCase(type)
@@ -238,6 +243,18 @@ export async function dungeonMonsters(d: string, level: number, kinds?: string[]
     for (const t of m[2]!.trim().split(/\s+/)) out.add(t)
   }
   return [...out]
+}
+
+/** C106: the foes that are not of a dungeon's usual halls and rooms at a quest level: the wanderers of its conditional lines,
+ *  and its boss and named lines. Each variant maps to what it is. */
+export async function specialFoes(d: string, level: number): Promise<Map<string, "wanderer" | "boss">> {
+  const out = new Map<string, "wanderer" | "boss">()
+  for (const rel of P.conditionalMash(d, level)) {
+    if (!existsSync(join(install, rel))) continue
+    for (const m of (await text(rel)).matchAll(/^\w+:[^\n]*?\.types ([^\n.]+)/gm)) for (const t of m[1]!.trim().split(/\s+/)) out.set(t, "wanderer")
+  }
+  for (const t of await dungeonMonsters(d, level, ["boss", "named"])) if (!out.has(t)) out.set(t, "boss")
+  return out
 }
 
 // ---------- town events ----------

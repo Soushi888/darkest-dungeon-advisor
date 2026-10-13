@@ -117,6 +117,9 @@ describe.skipIf(!has)("on the local save", () => {
     const t = await town(await readSave(dir))
     const knownNames = new Set<string>(), unknownNames = new Set<string>()
     for (const v of t.knownVariants) knownNames.add(await nameOf("monster", v))
+    // C107: a story quest's goal names its boss as the game's own quest card does ("Defeat the Swine Prince"); a name read there is
+    // what the game told the player, not a foe the board revealed
+    const goals = [...t.quests.map((q) => q.goal), t.back?.goal ?? ""].join(" ")
     for (const d of ["cove", "weald", "warrens", "crypts", "darkestdungeon"]) {
       for (const level of [1, 3, 5, 6]) {
         for (const v of await dungeonMonsters(d, level)) {
@@ -137,7 +140,7 @@ describe.skipIf(!has)("on the local save", () => {
     expect(t.knownVariants.filter((v) => !reachable.has(v))).toEqual([])
     let text = md
     for (const n of [...knownNames].sort((a, b) => b.length - a.length)) text = text.replaceAll(n, "")
-    const leaks = [...unknownNames].filter((n) => !knownNames.has(n) && text.includes(n))
+    const leaks = [...unknownNames].filter((n) => !knownNames.has(n) && !goals.includes(n) && text.includes(n))
     expect(leaks).toEqual([])
   })
 

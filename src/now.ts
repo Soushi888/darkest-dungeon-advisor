@@ -6,7 +6,8 @@ import { slainAt, slainLine } from "./slain.ts"
 import { dropFirst, packRules, slotsOf } from "./pack.ts"
 import { statSync } from "node:fs"
 import type { Snap } from "./chronicle.ts"
-import { monster } from "./game.ts"
+import { monster, specialFoes } from "./game.ts"
+import { loadLedger } from "./chronicle.ts"
 import { whereLine } from "./map.ts"
 import { questLine, questStatus } from "./quest.ts"
 import { current } from "./road.ts"
@@ -38,11 +39,15 @@ export async function nowText(p: Snap, raw: any, page: string, savedAt: number, 
     out.push("FOES front to back:")
     // the fight keeps its foes by slot, front first ("0" is the front rank); a slain foe leaves a corpse in its slot
     const slots = Object.entries<any>(b.enemies ?? {}).filter(([, e]) => !e.is_hero).sort(([x], [y]) => Number(x) - Number(y))
+    // C106: a foe not of these halls is named as such, with what an earlier road learned of it
+    const special = p.dungeon ? await specialFoes(p.dungeon, p.difficulty) : new Map<string, "wanderer" | "boss">()
+    const before = special.size ? (await loadLedger()).filter((l) => l.kind === "special" && l.foe) : []
     for (const [k, e] of slots) {
       const d = e.data ?? {}, a = d.actor ?? {}, cls = String(d.monster_class ?? ""), f = p.battle?.foes.find((x) => x.guid === Number(d.battle_guid))
       const name = f?.name ?? plain(cls), max = cls ? (await monster(cls))?.hp : undefined, hp = f?.hp ?? Math.round(Number(a.current_hp ?? 0))
       const fx = await effects(f?.effects)
-      const tags = [/^corpse/.test(cls) ? "a corpse" : hp <= 0 ? "dead" : "", f?.stunned || a.stunned ? "stunned" : "", (f?.effects ?? []).some((x) => /guard/i.test(x)) ? "guarded" : "", foeDone.has(Number(d.battle_guid)) ? "has acted" : "has not acted"].filter(Boolean)
+      const tags = [/^corpse/.test(cls) ? "a corpse" : hp <= 0 ? "dead" : "", f?.stunned || a.stunned ? "stunned" : "", (f?.effects ?? []).some((x) => /guard/i.test(x)) ? "guarded" : "", foeDone.has(Number(d.battle_guid)) ? "has acted" : "has not acted",
+        special.has(cls) ? `${special.get(cls) === "boss" ? "the boss" : "a wanderer, not of these halls"}${before.some((l) => l.foe === cls) ? `; met before: ${before.filter((l) => l.foe === cls).map((l) => `${l.trip}, ${l.text.split(": ").slice(1).join(": ")}`).join(" / ")}` : ""}` : ""].filter(Boolean)
       out.push(`  slot ${Number(k) + 1}. ${name} ${hp}${max ? `/${max}` : ""} health, ${tags.join(", ")}${fx.length ? `; ${fx.join("; ")}` : ""}`)
     }
     // C80: the foes this fight has already slain, which the game no longer keeps
