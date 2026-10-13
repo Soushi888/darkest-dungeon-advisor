@@ -23,10 +23,11 @@ export async function placedTown(): Promise<{ t: Town; real: Town; hero: Town["h
 }
 
 /** Builds the town board into a fresh folder, with the week's start and the picks given. */
-export async function buildIn(dir: string, t: Town, start: unknown, picks?: unknown): Promise<string> {
+export async function buildIn(dir: string, t: Town, start: unknown, picks?: unknown, files: Record<string, string> = {}): Promise<string> {
   const saved = process.env.DD_TOWN_OUT
   rmSync(dir, { recursive: true, force: true }); mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, "week-start.json"), JSON.stringify(start))
+  for (const [f, text] of Object.entries(files)) writeFileSync(join(dir, f), text)
   if (picks) writeFileSync(join(dir, "picks.json"), JSON.stringify(picks))
   process.env.DD_TOWN_OUT = dir
   try { await buildBoard(t) } finally { if (saved === undefined) delete process.env.DD_TOWN_OUT; else process.env.DD_TOWN_OUT = saved }
@@ -61,6 +62,35 @@ describe.skipIf(!has)("C42, C91: the lessons ledger is part of the Town", () => 
     } finally { if (saved === undefined) delete process.env.DD_TOWN_OUT; else process.env.DD_TOWN_OUT = saved }
     expect(readFileSync(new URL("../src/voice/board.ts", import.meta.url), "utf8")).not.toContain("t.ledger = await loadLedger()")
   })
+})
+
+describe.skipIf(!has)("C18: answers sent in another week do not steer this one", () => {
+  test("answers.md is stamped with its week when sent, and last week's road and four are dropped on reading", async () => {
+    const { stampAnswers, readAnswers } = await import("../src/voice/board.ts")
+    const { advise } = await import("../src/caretaker/advise.ts")
+    const { questLabel } = await import("../src/world/town.ts")
+    const t = await town(await readSave()), a = await advise(t)
+    const other = a.parties.find((p) => p !== a.best)
+    if (!other) return
+    const names = t.heroes.slice(-4).map((h) => h.name)
+    const body = [`## My answers: The Hamlet, week ${t.week}`, "", `- **1. Which expedition next?** ${questLabel(other)}`, `- **2. Take this party to the ${other.quest.dungeonName}?** No, I choose my own`, `  - Note (refines or overrides the pick): ${names.join(", ")}`, ""].join("\n")
+    const start = { week: t.week, heroes: t.heroes.map((h) => ({ guid: h.guid, name: h.name, busy: h.busy })), bought: [...t.bought], gold: t.wallet.gold ?? 0 }
+    const dir = join(root, ".dd-runtime", "test-week-answers")
+    // this week's answers steer the road and the four
+    await buildIn(dir, t, start, undefined, { "answers.md": stampAnswers(body, t.week) })
+    const now = await Bun.file(join(dir, "proposal.json")).json()
+    expect(now.picked).toBe(true)
+    expect(now.label).toBe(questLabel(other))
+    // the same answers, sent last week, steer nothing
+    await buildIn(dir, t, start, undefined, { "answers.md": stampAnswers(body.replace(`week ${t.week}`, `week ${t.week - 1}`), t.week - 1) })
+    const was = await Bun.file(join(dir, "proposal.json")).json()
+    expect(was.picked).toBe(false)
+    expect(was.own).toBe(false)
+    expect(was.label).toBe(questLabel(a.best!))
+    const saved = process.env.DD_TOWN_OUT
+    process.env.DD_TOWN_OUT = dir
+    try { const r = await readAnswers(t.week); expect(r.expedition).toBeUndefined(); expect(r.partyNames).toBeUndefined() } finally { if (saved === undefined) delete process.env.DD_TOWN_OUT; else process.env.DD_TOWN_OUT = saved }
+  }, 60_000)
 })
 
 /** A card of the built board by its question: its options in order, the option it leans to, and why. */

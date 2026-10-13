@@ -55,10 +55,21 @@ function partyLine(p: Party): string {
 }
 
 export interface Answers { expedition?: string; partyOwn?: boolean; partyNames?: string[]; preferred?: string[] }
-export async function readAnswers(): Promise<Answers> {
+/** C18: answers.md carries the week it was sent in, as picks.json does, so a road or four picked last week never steers this one. */
+export const stampAnswers = (body: string, week: number) => `<!-- week: ${week} -->\n${body}`
+/** The week an answers file was sent in: its stamp, else the week its own heading names ("The Hamlet, week 25"). */
+export const answersWeek = (text: string): number | undefined => {
+  const m = text.match(/^<!-- week: (\d+) -->/) ?? text.match(/^##[^\n]*\bweek (\d+)\b/m)
+  return m ? Number(m[1]) : undefined
+}
+
+/** The reader's answers. Given the week, answers sent in another week (or in no week it can tell) are dropped, all but the Guild
+ *  preferences already kept across weeks. */
+export async function readAnswers(week?: number): Promise<Answers> {
   const f = Bun.file(join(outDir(), "answers.md"))
   if (!(await f.exists())) return {}
-  const text = await f.text()
+  let text = await f.text()
+  if (week !== undefined && answersWeek(text) !== week) text = ""
   const a: Answers = {}
   const exp = text.match(/\*\*\d+\. Which expedition[^*]*\*\*\s*(.+)/)
   if (exp) a.expedition = exp[1]!.trim()
@@ -594,7 +605,7 @@ export function inActingOrder(md: string): string {
 
 export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): Promise<string> {
   mkdirSync(join(outDir(), "img"), { recursive: true })
-  const answers = await readAnswers()
+  const answers = await readAnswers(t.week)
   // C40 to C42: the survivors' tale of the road just walked, and its lessons kept before this week is advised
   let tale: Tale | undefined
   if (t.back) {
