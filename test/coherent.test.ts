@@ -47,7 +47,7 @@ describe("C89, C90: a disease that bites only at camp, and a plan that holds whi
   })
 
   test("C90: a hero placed in a building since the week began is free to the plan, and their seat open", async () => {
-    const { planView } = await import("../src/voice/board.ts")
+    const { planView } = await import("../src/world/week.ts")
     const t = await town(await readSave())
     const h = t.heroes[0]!, act = t.activities[0]!
     const placed = { ...t, heroes: t.heroes.map((x) => (x.guid === h.guid ? { ...x, busy: act.name } : x)), activities: t.activities.map((x) => (x === act ? { ...x, used: x.used + 1 } : x)) }
@@ -85,7 +85,7 @@ describe("C91, C92: an order of priorities, and a roster that remembers who join
   })
 
   test("C92: a hero who joined within the settling weeks is kept from every dismissal", async () => {
-    const { rosterLedger } = await import("../src/voice/board.ts")
+    const { rosterLedger } = await import("../src/world/week.ts")
     const { settling } = await import("../src/caretaker/plan.ts")
     const t = await town(await readSave())
     const [a, b] = t.heroes

@@ -4,10 +4,11 @@
 import { describe, expect, test } from "bun:test"
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs"
 import { join } from "node:path"
-import { savingPlan } from "../src/voice/board.ts"
+import { savingPlan, source } from "../src/voice/board.ts"
+import { coin } from "../src/world/town.ts"
 import { questLabel } from "../src/world/town.ts"
-import { ownParty, plan } from "../src/caretaker/plan.ts"
-import { advise } from "../src/caretaker/advise.ts"
+import { plan, prepare } from "../src/caretaker/plan.ts"
+import { advise, bears } from "../src/caretaker/advise.ts"
 import { campingSkills, supplyPrices } from "../src/sources/game.ts"
 import { profileDir, root } from "../src/sources/paths.ts"
 import { readSave } from "../src/sources/read.ts"
@@ -47,7 +48,7 @@ describe("C111: the board renders one plan", () => {
   // readiness, road, campWorth...) taken from caretaker/ directly fails here; types are always allowed
   const ALLOWED: Record<string, string[]> = {
     "advise.ts": ["DOCTRINE"], // the words of my order
-    "plan.ts": ["plan", "farewellPlan", "prepare", "saving", "settling", "placedThisWeek", "newcomersThisWeek", "taleHealers"],
+    "plan.ts": ["plan", "farewellPlan", "prepare", "saving", "theWeek", "taleHealers"],
     "camp.ts": ["campTell"], // a camping skill in words
     "roles.ts": ["ROLE_WORDS"],
     "upkeep.ts": ["upkeepWords"],
@@ -83,25 +84,43 @@ describe("C111: the board renders one plan", () => {
     rmSync(copy, { recursive: true, force: true }); mkdirSync(copy, { recursive: true })
     for (const f of readdirSync(profile)) if (f.startsWith("persist.") && f !== "persist.raid.json") cpSync(join(profile, f), join(copy, f))
     const t0 = await readTown(await readSave(copy)), prices = await supplyPrices(), camp = await campingSkills()
-    let checked = 0, owned = 0, camped = 0
+    let checked = 0, owned = 0, camped = 0, broke = 0, leanNo = 0
     for (const gold of [t0.wallet.gold ?? 0, 0, 600, 2500, 12000]) {
       const t = { ...t0, wallet: { ...t0.wallet, gold } }
-      const a = await advise(t)
+      const base = await advise(t)
       // a hero already placed this week (C90): the first relief card a dismissal does not claim, at its first place
-      const r0 = a.relief.find((r) => r.options.length && !a.dismiss.some((d) => d.hero.guid === r.hero.guid))
+      const r0 = base.relief.find((r) => r.options.length && !base.dismiss.some((d) => d.hero.guid === r.hero.guid))
       const placed = r0 ? new Map([[r0.hero.guid, r0.options[0]!.activity.name]]) : undefined
       // the reader's own four: the first four heroes on the roster, named in a note
       const names = t.heroes.slice(0, 4).map((h) => h.name)
       const newcomers = new Set(t.heroes.slice(-1).map((h) => h.guid))
-      const runs: { expedition?: string; own: boolean }[] = [{ own: false }, { own: true }, ...a.parties.map((p) => ({ expedition: questLabel(p), own: false }))]
+      const runs: { expedition?: string; own: boolean }[] = [{ own: false }, { own: true }, ...base.parties.map((p) => ({ expedition: questLabel(p), own: false }))]
       for (const { expedition, own: mine } of runs) {
         const answers = { ...(expedition ? { expedition } : {}), ...(mine ? { partyNames: names } : {}) }
-        const own = mine ? await ownParty(t, a, answers) : undefined
+        // C112: the advice is made for the four the board sends
+        const { a, own } = await prepare(t, answers)
         if (mine && !own) continue
         const p = plan(t, a, { answers, prices, camp, ...(own ? { own, placed, newcomers } : {}) })
         checked++
         if (own) { owned++; expect(p.chosen).toBe(own) }
         if (own && r0) { const c = p.relief.find((x) => x.relief.hero.guid === r0.hero.guid)!; expect(c.why.kind).toBe("paid"); expect(p.spends.some((s) => s.step === "relief" && s.who === r0.hero.name)).toBe(false) }
+        // B6: "Take this party?" leans yes only when the coffers pay for the road and the four can bear it, and says why not
+        if (p.chosen) {
+          // review 2 (Soushi): any unmet readiness condition turns it, and each is named
+          const unmet = p.readiness!.checks.filter((c) => !c.met && c.label !== "The road is paid for")
+          const no = !p.roadPaid || !bears(p.chosen) || unmet.length > 0 || p.expedition.partyWhy.busy.length > 0
+          expect(p.expedition.partyLean).toBe(no ? 1 : 0)
+          if (no) {
+            leanNo++
+            const md = source(t, a, { foresight: false, answers, prices, camp, ...(own ? { own, placed, newcomers } : {}) }).board
+            const card = md.split(/\n- q: /).find((x) => x.startsWith('"Take this party'))!
+            expect(card).toMatch(/\n {2}lean: 1\n/)
+            const why = JSON.parse(card.match(/lean_why: (".*")/)![1]!) as string
+            if (!p.roadPaid) expect(why).toContain(`${coin(p.short)} short`)
+            if (!bears(p.chosen)) expect(why).toContain("beyond what they can bear")
+            for (const c of unmet) expect(why).toContain(`${c.label.toLowerCase()}: not yet (${c.why})`)
+          }
+        }
         // the reserve comes first and leaves the rest free; every lean after it spends from what is left, never below nothing
         expect(p.spends[0]!.step).toBe("reserve")
         expect(p.free).toBe(Math.max(0, gold - p.reserve))
@@ -110,13 +129,47 @@ describe("C111: the board renders one plan", () => {
         expect(spent).toBeLessThanOrEqual(p.free)
         for (const s of leans) expect(s.left).toBeGreaterThanOrEqual(0)
         expect(leans.at(-1)?.left ?? p.free).toBe(p.free - spent)
-        // the spending order is the source order (relief, the wards, the Guild, the Survivalist), never the board's display order
-        const order = ["heal-held", "relief", "ward", "treatment", "heal-back", "train", "survivalist"]
+        // the spending order is the source order (relief, the wards, the four's upkeep, the Guild, the Survivalist), never the
+        // board's display order
+        const order = ["heal-held", "relief", "ward", "treatment", "upkeep", "heal-back", "train", "survivalist"]
         const at = leans.map((s) => order.indexOf(s.step))
         expect(at).toEqual([...at].sort((x, z) => x - z))
-        // a held heal lesson is given back before the Guild's lean, and the four's upkeep spends none of the gold it reads
+        // a held heal lesson is given back before the Guild's lean; the four's upkeep reads the gold left after the wards, with
+        // the heal lesson still held, and spends what it buys from it
         expect(leans.filter((s) => s.step === "heal-held").length).toBe(leans.filter((s) => s.step === "heal-back").length)
         if (p.upkeep) expect(p.upkeep.free).toBe(p.free - leans.filter((s) => ["heal-held", "relief", "ward", "treatment"].includes(s.step)).reduce((x, s) => x + s.gold, 0))
+        expect(leans.filter((s) => s.step === "upkeep").reduce((x, s) => x + s.gold, 0)).toBe(p.upkeep?.spent ?? 0)
+        // B2: everything the board promises to buy, counted from its leans and not from the spends, fits in the free gold. An
+        // upgrade the upkeep buys and the Guild also leans to is paid once
+        const upBuys = new Set((p.upkeep?.lines ?? []).filter((l) => l.status === "buy").map((l) => `${l.item.hero}|${l.item.what}`))
+        const goldOf = (u: { cost: { type: string; amount: number }[] }) => u.cost.find((c) => c.type === "gold")?.amount ?? 0
+        const tu = p.train && p.train.lean < p.train.shown.length ? p.train.shown[p.train.lean]! : undefined
+        const cb = p.camp?.why === "worth" ? p.camp.best[p.camp.lean]! : undefined
+        const promised = p.relief.filter((c) => c.why.kind === "cheapest").reduce((x, c) => x + c.relief.options[c.lean]!.activity.cost, 0)
+          + (p.ward?.cards ?? []).filter((c) => c.lean === 0 && c.why === "worth").length * (p.ward?.ward.cost ?? 0)
+          + (p.treatment?.cards ?? []).filter((c) => c.lean === 0 && c.why === "worth").reduce((x, c) => x + c.treat.cost, 0)
+          + (p.upkeep?.spent ?? 0)
+          + (tu && !upBuys.has(`${tu.hero}|${tu.label} to level ${tu.toLevel}`) ? goldOf(tu) : 0)
+          + (cb && !upBuys.has(`${cb.hero.name}|${cb.k.name} at the Survivalist`) ? cb.price : 0)
+        expect(promised).toBeLessThanOrEqual(p.free)
+        expect(promised).toBe(spent)
+        // B3: a lean short of gold quotes the gold still free at that point in the spending order, never the gold the road left
+        // before any other lean
+        const short = [
+          ...p.relief.filter((c) => c.why.kind === "broke").map((c) => ({ q: `Where does ${c.relief.hero.name} go?`, left: c.left })),
+          ...(p.ward?.cards ?? []).filter((c) => c.why === "broke").map((c) => ({ q: `Treat ${c.hero.name}'s `, left: c.left })),
+          ...(p.treatment?.cards ?? []).filter((c) => c.why === "broke").map((c) => ({ q: `Treat ${c.treat.hero.name}'s ${c.treat.quirk.name}?`, left: c.left })),
+          ...(p.train?.why === "broke" ? [{ q: "What do we train first?", left: p.train.left }] : []),
+          ...(p.camp?.why === "broke" && p.camp.best.length ? [{ q: "What do we teach at the Survivalist?", left: p.camp.left }] : []),
+        ]
+        if (short.some((s) => s.left < p.free)) {
+          const md = source(t, a, { foresight: false, answers, prices, camp, ...(own ? { own, placed, newcomers } : {}) }).board
+          for (const s of short) {
+            const card = md.split(/\n- q: /).find((x) => x.startsWith(JSON.stringify(s.q).slice(0, -1)))!
+            expect(card.match(/lean_why: (".*")/)![1]).toContain(s.left ? `only ${coin(s.left)} is` : "nothing is")
+            broke++
+          }
+        }
         // decision 15: a relief card is filed under the building of the place it leans to, and with the waiting when it leans to none
         for (const c of p.relief) expect(c.filedUnder).toBe(c.relief.options[c.lean]?.activity.buildingName ?? "")
         // the Survivalist spends exactly when its lean names a lesson, and last
@@ -126,6 +179,8 @@ describe("C111: the board renders one plan", () => {
       }
     }
     expect(checked).toBeGreaterThan(5)
+    expect(broke).toBeGreaterThan(0)
+    expect(leanNo).toBeGreaterThan(0)
     expect(owned).toBeGreaterThan(0)
     // at 12,000 gold some road camps and the Survivalist teaches on it, or no road camps this week
     if (t0.quests.some((q) => q.length >= 2 && !q.plot)) expect(camped).toBeGreaterThan(0)

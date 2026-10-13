@@ -127,6 +127,8 @@ export interface Advice {
   relief: Relief[]; disease: HeroView[]; afflicted: HeroView[]
   trueHealer: Set<number> // guids of heroes whose learned skills hold a true heal (C86)
   ready: HeroView[]; parties: Party[]; best?: Party
+  /** C112: the four every decision below is made for: the four the reader named, else the road he picked, else `best` */
+  four?: Party
   dismiss: { hero: HeroView; why: string }[]; recruits: Recruit[]
   // C85: pairs too alike to keep both, what the roster would then lack, and the coach's recruit who brings it
   alike: (Alike & { gap: Role[]; recruit?: { hero: HeroView; brings: Role[] } })[]
@@ -279,7 +281,11 @@ function* permutations<T>(xs: T[]): Generator<T[]> {
   for (let i = 0; i < xs.length; i++) for (const p of permutations([...xs.slice(0, i), ...xs.slice(i + 1)])) yield [xs[i]!, ...p]
 }
 
-export async function advise(t: Town): Promise<Advice> {
+/** C112: the four everything after the ranking is decided for: given the roads ranked and my best, the four the board sends (the
+ *  four the reader named, else the road he picked, else my best). */
+export type ChooseFour = (parties: Party[], best: Party | undefined) => Promise<Party | undefined>
+
+export async function advise(t: Town, choose?: ChooseFour): Promise<Advice> {
   const free = t.heroes.filter((h) => !h.busy)
   const afflicted = free.filter((h) => h.affliction)
   const disease = free.filter((h) => diseases(h).length)
@@ -333,9 +339,11 @@ export async function advise(t: Town): Promise<Advice> {
   for (const p of parties) if (!p.healer && p.quest.length > 1) { p.score -= RULE.noHealerPerStep * (p.quest.length - 1); p.notes.push("no true healer can go, so I keep to the shortest roads") }
   parties.sort(byDoctrine)
   const best = parties[0]
+  // C112: one four drives the whole plan; without a chooser it is my best
+  const four = choose ? await choose(parties, best) : best
 
-  // roster: level 0 heroes heavy with negative quirks and outside the best party
-  const inParty = new Set(best?.seats.map((s) => s.hero.guid))
+  // roster: level 0 heroes heavy with negative quirks and outside the four
+  const inParty = new Set(four?.seats.map((s) => s.hero.guid))
   const dismiss = free.filter((h) => h.level === 0 && !inParty.has(h.guid) && !t.settling?.has(h.guid) && negatives(h).length >= RULE.dismissNegatives)
     .map((h) => ({ hero: h, why: `level 0 with ${negatives(h).length} negative quirks: ${negatives(h).map((q) => q.name).join(", ")}` }))
   const room = t.rosterCap - t.rosterSize
@@ -371,13 +379,13 @@ export async function advise(t: Town): Promise<Advice> {
   })
 
   // what to buy for the party first: affordable, unblocked, cheapest first
-  const partyNames = new Set(best?.seats.map((s) => s.hero.name))
+  const partyNames = new Set(four?.seats.map((s) => s.hero.name))
   const forParty = t.heroUpgrades.filter((u) => partyNames.has(u.hero ?? ""))
   const gold = (u: Upgrade) => u.cost.find((c) => c.type === "gold")?.amount ?? 0
   const buys = forParty.filter((u) => u.affordable && !u.blockedBy).sort((a, b) => gold(a) - gold(b))
   // C93: a heal the four's healers have not learned yet, taught at the Guild, comes before every other lesson (Soushi,
   // 2026-10-13: "Boosting Gomboult heal should have been the priority"; God's Comfort, 1,000 gold, was never offered)
-  for (const s of best?.seats ?? []) {
+  for (const s of four?.seats ?? []) {
     const h = s.hero, sk = (await heroClass(h.cls)).skills, trees = await heroTrees(h.cls), mine = new Set((h.learned ?? h.skills).map((x) => x.id))
     for (const k of sk.values()) {
       if (mine.has(k.id) || !k.heal || !k.targetsAllies || !k.launch.includes(s.rank) || k.healAvg < RULE.learnHealMin) continue
@@ -397,11 +405,11 @@ export async function advise(t: Town): Promise<Advice> {
   // trinkets in the estate that a party member may wear
   // a trinket goes to an open slot, or replaces a worn one only when it is rarer by the game's own list; class trinkets
   // first, rarest first; listed by hero, back rank first like the party (Soushi, 2026-10-10: "propose only if it is worth the switch")
-  const wear = new Map((best?.seats ?? []).map((s) => [s.hero.guid, [...(t.worn[s.hero.guid] ?? [])]]))
+  const wear = new Map((four?.seats ?? []).map((s) => [s.hero.guid, [...(t.worn[s.hero.guid] ?? [])]]))
   const placed = [...t.estateTrinkets].sort((x, z) => z.classes.length - x.classes.length || x.rank - z.rank).flatMap((tr) => {
     // a hero already wearing this very trinket is not offered a second: nothing in the game's files says one hero may wear two
     // of the same (a trinket's `limit` follows its rarity, not who wears it), so I do not lean on it (U23, the second Stalwart Buckle)
-    const could = (best?.seats ?? []).filter((s) => !tr.classes.length || tr.classes.includes(s.hero.cls))
+    const could = (four?.seats ?? []).filter((s) => !tr.classes.length || tr.classes.includes(s.hero.cls))
     const fit = could.filter((s) => !wear.get(s.hero.guid)!.some((w) => w.id === tr.id))
     const open = fit.filter((s) => wear.get(s.hero.guid)!.length < t.trinketSlots).sort((x, z) => wear.get(x.hero.guid)!.length - wear.get(z.hero.guid)!.length)[0]
     const who = open ?? fit.map((s) => ({ s, worst: [...wear.get(s.hero.guid)!].sort((x, z) => z.rank - x.rank)[0] })).filter((c) => c.worst && c.worst.rank > tr.rank).sort((x, z) => z.worst!.rank - x.worst!.rank)[0]?.s
@@ -429,11 +437,11 @@ export async function advise(t: Town): Promise<Advice> {
     const inPartyNow = inParty.has(h.guid)
     if (!ward || (h.level === 0 && !inPartyNow)) continue
     const bad = h.quirks.filter((q) => !q.positive && !q.disease && q.treatable)
-    const road = best ? (await quirkFit(h, best.quest)).notes.filter((n) => n.startsWith("−")).map((n) => n.slice(2)) : []
+    const road = four ? (await quirkFit(h, four.quest)).notes.filter((n) => n.startsWith("−")).map((n) => n.slice(2)) : []
     const pick: [QuirkView | undefined, string][] = [
       [bad.find((q) => q.thief), "they keep for themselves what the party finds"],
       [bad.find((q) => barring.has(q.id)), "it shuts them out of a place of relief"],
-      [bad.find((q) => road.includes(q.name)), `it turns against them on the road to the ${best?.quest.dungeonName}`],
+      [bad.find((q) => road.includes(q.name)), `it turns against them on the road to the ${four?.quest.dungeonName}`],
     ]
     const at = pick.findIndex(([q]) => q)
     if (at < 0) continue
@@ -460,7 +468,7 @@ export async function advise(t: Town): Promise<Advice> {
     const top = (h.learned ?? h.skills).map((s) => ({ name: h.name, skill: s.name, avg: sk.get(s.id)?.targetsAllies ? sk.get(s.id)!.healAvg : 0 })).sort((x, y) => y.avg - x.avg)[0]
     if (top && top.avg >= RULE.realHeal) healers.push(top)
   }
-  return { trueHealer, relief, disease, afflicted, ready, parties, best, dismiss, recruits, alike, buys, blocked, heirlooms, coach, young, trinkets, treat, healers, lostHealers, spend: t.wallet.gold ?? 0 }
+  return { trueHealer, relief, disease, afflicted, ready, parties, best, four, dismiss, recruits, alike, buys, blocked, heirlooms, coach, young, trinkets, treat, healers, lostHealers, spend: t.wallet.gold ?? 0 }
 }
 
 /** Seats a party Soushi named, front to back, and says what is wrong with it rather than refusing it. */

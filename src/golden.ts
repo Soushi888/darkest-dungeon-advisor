@@ -6,6 +6,9 @@
 // .dd-runtime/golden/ and are never committed (A4).
 //   bun run golden pin <name> [--upto=<page>]   copy the live profile and state (the newest road cut after that page), build, keep
 //   bun run golden check                        rebuild every case and compare
+//   bun run golden accept [<name>]              rebuild a case (or every case) from its own stored profile and state, and keep
+//                                               what the current code writes as its new expectation (a step that changes the
+//                                               board on purpose); never reads the live profile or the live state
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, utimesSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { profileDir, root } from "./sources/paths.ts"
@@ -82,13 +85,42 @@ export async function pin(name: string, from = profileDir(), state = join(common
   return dir
 }
 
+/** Why accept must not run here: a worktree defaults to the main checkout's cases, which only the merge may rewrite, so outside the
+ *  main checkout accept asks for DD_GOLDEN to name the copy it writes. Undefined when it may run. */
+export function acceptRefusal(checkout: string, main: string, golden: string | undefined): string | undefined {
+  return checkout !== main && !golden ? `golden accept would rewrite the main checkout's cases from a worktree (${checkout}): set DD_GOLDEN to the copy to accept into` : undefined
+}
+
+/** The pinned cases, by name: a folder holding an expected board. */
+const caseNames = (base: string) => existsSync(base) ? readdirSync(base).filter((d) => existsSync(join(base, d, "expect", "town.md"))).sort() : []
+
+/** Rebuilds a case (or every case) from its own stored profile and state with the current code, and replaces its expectation with
+ *  what that build wrote: a file the build no longer writes leaves the expectation too. The live profile and the live state are
+ *  never read; a case's profile and state are never written. */
+export async function accept(name?: string): Promise<string[]> {
+  const no = acceptRefusal(root, common(), process.env.DD_GOLDEN)
+  if (no) throw new Error(no)
+  const base = goldenDir(), names = caseNames(base)
+  if (name && !names.includes(name)) throw new Error(`no golden case named ${name} in ${base}`)
+  const done: string[] = []
+  for (const n of name ? [name] : names) {
+    const dir = join(base, n), out = join(root, ".dd-runtime", "golden-run", n)
+    seed(join(dir, "state"), out)
+    const got = await build(join(dir, "profile"), out)
+    rmSync(join(dir, "expect"), { recursive: true, force: true })
+    for (const [f, text] of Object.entries(got)) { mkdirSync(dirname(join(dir, "expect", f)), { recursive: true }); await Bun.write(join(dir, "expect", f), text) }
+    rmSync(out, { recursive: true, force: true })
+    done.push(n)
+  }
+  return done
+}
+
 export interface Drift { name: string; file: string; line: number; want: string; got: string }
 
 /** Rebuilds every pinned case and lists where its outputs moved, file by file; an empty list is a step that changed nothing. */
 export async function check(): Promise<{ cases: string[]; drift: Drift[] }> {
   const base = goldenDir()
-  if (!existsSync(base)) return { cases: [], drift: [] }
-  const cases = readdirSync(base).filter((d) => existsSync(join(base, d, "expect", "town.md"))).sort(), drift: Drift[] = []
+  const cases = caseNames(base), drift: Drift[] = []
   for (const name of cases) {
     const dir = join(base, name), out = join(root, ".dd-runtime", "golden-run", name)
     seed(join(dir, "state"), out)
@@ -117,5 +149,10 @@ if (import.meta.main) {
     for (const d of drift) console.log(`DRIFT ${d.name} ${d.file}:${d.line}\n  want ${d.want}\n  got  ${d.got}`)
     console.log(`${cases.length} case${cases.length > 1 ? "s" : ""}, ${drift.length ? `${drift.length} drifted` : "all identical"}`)
     process.exit(drift.length ? 1 : 0)
-  } else console.log("bun run golden pin <name> [--upto=<page>] | bun run golden check")
+  } else if (cmd === "accept") {
+    const no = acceptRefusal(root, common(), process.env.DD_GOLDEN)
+    if (no) { console.error(no); process.exit(2) }
+    const done = await accept(name)
+    console.log(done.length ? `accepted ${done.join(", ")} in ${goldenDir()}` : "no golden case pinned: bun run golden pin <name>")
+  } else console.log("bun run golden pin <name> [--upto=<page>] | bun run golden check | bun run golden accept [<name>]")
 }

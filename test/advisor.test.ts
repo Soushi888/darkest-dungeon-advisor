@@ -404,7 +404,7 @@ describe.skipIf(!has)("on the local save", () => {
     expect([/persist/i, /\.json/, /`/, /\bRULE\b/, /\bsav(e|ed|es)\b/i, /\bgame\b/i].filter((re) => re.test(seen)).map(String)).toEqual([])
   })
 
-  test("C25: the Treatment Ward is offered only by my habit, priced by whether the quirk has set in, one card per free seat", async () => {
+  test("C25: the Treatment Ward is offered only by my habit, priced by whether the quirk has set in, one seat per card leaning to it", async () => {
     const t = await town(await readSave(copyProfile()))
     const a = await advise(t)
     const ward = t.activities.find((x) => x.activity === "treatment")!
@@ -417,7 +417,9 @@ describe.skipIf(!has)("on the local save", () => {
     }
     const md = source(t, a, { foresight: false, answers: {}, prices: await supplyPrices() }).board
     const cards = a.treat.filter((tr) => md.includes(`Treat ${tr.hero.name}'s ${tr.quirk.name}?`)).length
-    expect(cards).toBeLessThanOrEqual(Math.max(0, ward.slots - ward.used))
+    // only a card that leans to the ward takes a seat; one leaned Not this week passes it on (Soushi, 2026-10-13)
+    const toWard = md.split(/\n- q: /).filter((c) => c.startsWith('"Treat ') && /\n {4}- pick: "Treatment Ward"/.test(c) && /\n {2}lean: 0\n/.test(c)).length
+    expect(toWard).toBeLessThanOrEqual(Math.max(0, ward.slots - ward.used))
     if (a.treat.length > cards) expect(md).toContain(`The ${ward.name} is full this week`)
     // C103: a thief is first in line, before every other habit, in the four or not
     const thief = a.treat.map((tr) => tr.quirk.thief)
@@ -507,7 +509,8 @@ describe.skipIf(!has)("on the local save", () => {
       // the same spare, made the worst on the roster and sent to the Sanitarium this week, so the swap has to look past them
       const bad = t.heroes.flatMap((h) => h.quirks).find((q) => !q.positive && !q.disease)
       if (tendSpare && bad) { spare.quirks = [bad, bad, bad, bad, bad]; a.disease.push(spare) }
-      return { t, a, md: source(t, a, { foresight: false, answers: {}, prices: await supplyPrices() }).board, spare }
+      const out = source(t, a, { foresight: false, answers: {}, prices: await supplyPrices() })
+      return { t, a, md: out.board, sources: out.sources, spare }
     }
     // a place free: the Vestal leans Recruit, and the reason names the missing healer and her heal
     const open = await build(true, (t) => t.rosterSize + 1)
@@ -523,6 +526,9 @@ describe.skipIf(!has)("on the local save", () => {
     const freed = (md: string) => [...md.matchAll(/- q: "Dismiss (.+?)\?"\n[\s\S]*?context: "[^"]*Aldith at the coach brings the true healer the four lack/g)].map((m) => m[1])
     expect(card(full.md, "Recruit Aldith, Vestal\\?")![1]).toBe("0")
     expect(freed(full.md)).toHaveLength(1)
+    // B8 (C14): the figures of a dismissal made for a recruit are sourced like every other
+    const who = freed(full.md)[0]!
+    for (const what of [`${who}'s level`, `${who}'s stress`, `${who}'s bad quirks`, `${who}'s good quirks`]) expect(full.sources).toContain(`| ${what} |`)
     expect(contradictions(full.md)).toEqual([])
     const tended = await build(true, (t) => t.rosterSize, true)
     expect(freed(tended.md)).not.toContain("Osric")

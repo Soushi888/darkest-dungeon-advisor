@@ -59,9 +59,10 @@ src/sources/paths.ts     where the install, the profile and the board live (DD_I
 src/sources/game.ts      the game's own data: quirks, class skills (reach, moves, marks, bleed, blight, heals), upgrade trees, buildings, monsters, trinkets, effects, English names
 
 # src/world/: the Hamlet as a value, and the picks checked against it
-src/world/town.ts        the Hamlet as the save describes it, the knowledge boundary, the expedition just brought back
+src/world/town.ts        the Hamlet as the save describes it, the knowledge boundary, the expedition just brought back, and the lessons ledger read with it
 src/world/reconcile.ts   the week's picks against the next Hamlet save: done, not yet, not as chosen
 src/world/quest.ts       what the road's quest asks and how far along it is
+src/world/week.ts        the week as it began: the week-start record, the roster ledger, who was placed or joined since, the view the four are chosen on
 
 # src/caretaker/: the Caretaker's judgement
 src/caretaker/advise.ts  the Caretaker's reading: relief, wards, party and its fighting shape, roster, purchases, trinkets, readiness, the road's provisions
@@ -70,6 +71,7 @@ src/caretaker/pack.ts    the pack's slots and stacks, from the game's files
 src/caretaker/upkeep.ts  the upkeep plan for the four who leave: skills, weapon, armour, camping skill
 src/caretaker/roles.ts   the roster's balance: what each hero does, and pairs too alike
 src/caretaker/plan.ts    the week's plan: every decision the board shows (the road, the gold each lean spends in turn, who rests, who is treated, who stays), and the farewell's, as one value
+src/caretaker/rules.ts   the Caretaker's habits, one registry: each row of the board's habits section with the constant it reads (C110)
 
 # src/voice/: the board and the words in his voice
 src/voice/coherence.ts   reads every built board back for advice that contradicts itself

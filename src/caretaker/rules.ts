@@ -4,7 +4,7 @@
 // so a habit added to those objects without a decision (a row, or a place on that list) fails test/rules.test.ts.
 import { RULE, RULE_FOOD, RULE_PROVISION } from "./advise.ts"
 import { CHRONICLE_RULE } from "../road/chronicle.ts"
-import { coin } from "../voice/words.ts"
+import { coin } from "../world/town.ts"
 
 const TABLES = { RULE, CHRONICLE_RULE }
 type Scalar = keyof typeof TABLES

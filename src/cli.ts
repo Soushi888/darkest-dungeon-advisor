@@ -3,7 +3,7 @@
 // flags: --foresight (experimental, C7), --port=<n> for watch (default 4317)
 import { existsSync, statSync, watch as fsWatch } from "node:fs"
 import { join } from "node:path"
-import { buildBoard, buildFarewell } from "./voice/board.ts"
+import { buildBoard, buildFarewell, stampAnswers } from "./voice/board.ts"
 import { capture } from "./road/chronicle.ts"
 import { outDir, profileDir } from "./sources/paths.ts"
 import { readSave } from "./sources/read.ts"
@@ -88,7 +88,8 @@ if (cmd === "town") {
       }
       if (path === "/answers" && req.method === "POST") {
         const body = await req.text()
-        await Bun.write(join(outDir(), "answers.md"), body)
+        // C18: stamped with the week it was sent in, so it never steers another week's board
+        await Bun.write(join(outDir(), "answers.md"), last ? stampAnswers(body, last.week) : body)
         const log = Bun.file(join(outDir(), "answers-log.md"))
         await Bun.write(log, `${(await log.exists()) ? await log.text() : ""}\n\n<!-- ${new Date().toISOString()} -->\n${body}`)
         // the week's picks, merged, so a card that leaves the board once done keeps its pick (C18)
