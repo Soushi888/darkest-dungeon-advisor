@@ -73,6 +73,15 @@ describe("C91, C92: an order of priorities, and a roster that remembers who join
     // with a healer, length is left to the weighing
     expect([road(true, 10, 1, 1), road(true, 10, 2, 9)].sort(byDoctrine)[0]!.score).toBe(9)
     expect(DOCTRINE[0]).toContain("true healer")
+    // C104: a road beyond the four's level never outranks one they can bear, whatever its score
+    const four = (lv: number) => [lv, lv, lv, lv].map((level) => ({ hero: { level } }))
+    const hard = { ...road(true, 10, 1, 99), quest: { length: 1, difficulty: 3 }, seats: four(1) }, easy = { ...road(true, 10, 1, 1), quest: { length: 1, difficulty: 1 }, seats: four(1) }
+    expect([hard, easy].sort(byDoctrine as any)[0]!.score).toBe(1)
+    expect([{ ...hard, seats: four(2) }, easy].sort(byDoctrine as any)[0]!.score).toBe(99)
+    // a newcomer at level 0 learns on the lowest danger only (Soushi, 2026-10-13: "A hero level 0 to a mission level 3...")
+    const { learners } = await import("../src/advise.ts")
+    expect(learners({ quest: { length: 1, difficulty: 3 }, seats: [...four(2), { hero: { level: 0 } }] })).toBe(0)
+    expect(learners({ quest: { length: 1, difficulty: 1 }, seats: [...four(2), { hero: { level: 0 } }] })).toBe(1)
   })
 
   test("C92: a hero who joined within the settling weeks is kept from every dismissal", async () => {

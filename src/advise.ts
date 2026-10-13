@@ -19,19 +19,26 @@ export interface RoadItem { id: string; label: string; count: number; price: num
 export const DOCTRINE = [
   "a true healer goes with the four",
   "the road is paid for from the coffers",
+  "the road is no more dangerous than the four can bear: their mean level at least its danger level less one",
   "with no true healer, the shortest road",
-  "on a short road, up to two newcomers at level 0 ride along to learn",
+  "on a short road at the lowest danger, up to two newcomers at level 0 ride along to learn",
   "then everything else I weigh: seats, skills, quirks, stress, the gold left",
 ] as const
 
 /** C98: the newcomers a four takes along to learn: level 0 heroes, at most RULE.learners, and only on a short road (Soushi, 2026-10-13:
  *  "We should choose an expedition that will level up the level 0 of our roster"). */
-export const learners = (p: { quest: { length: number }; seats?: { hero: { level: number } }[] }) => p.quest.length === 1 ? Math.min(RULE.learners, (p.seats ?? []).filter((s) => s.hero.level === 0).length) : 0
+export const learners = (p: { quest: { length: number; difficulty?: number }; seats?: { hero: { level: number } }[] }) => p.quest.length === 1 && (p.quest.difficulty ?? 1) <= 1 ? Math.min(RULE.learners, (p.seats ?? []).filter((s) => s.hero.level === 0).length) : 0
+
+/** C104: a road the four can bear, by my habit (RULE.levelUnder): their mean level is at least the road's danger level less one
+ *  (Soushi, 2026-10-13: "Are you sure we are okay for lvl.3 missions... we never did a level 2 or a medium one yet!"). */
+export const bears = (p: { quest: { difficulty?: number }; seats?: { hero: { level: number } }[] }) =>
+  !p.seats?.length || !p.quest.difficulty || p.seats.reduce((x, s) => x + s.hero.level, 0) / p.seats.length >= p.quest.difficulty - RULE.levelUnder
 
 /** C91: compare two roads by DOCTRINE, rung by rung. */
 export function byDoctrine(a: Pick<Party, "healer" | "left" | "score" | "quest"> & Partial<Pick<Party, "seats">>, b: Pick<Party, "healer" | "left" | "score" | "quest"> & Partial<Pick<Party, "seats">>): number {
   return Number(b.healer) - Number(a.healer)
     || Number((b.left ?? 0) >= 0) - Number((a.left ?? 0) >= 0)
+    || Number(bears(b)) - Number(bears(a))
     || (!a.healer && !b.healer ? a.quest.length - b.quest.length : 0)
     || learners(b) - learners(a)
     || b.score - a.score
@@ -59,6 +66,7 @@ export function road(t: Town, p: Party | undefined, prices: Map<string, number>)
 export const RULE = {
   restAbove: 45, // RULE: stress at which I want a hero relieved before going out again
   sendBelow: 45, // RULE: I only send heroes below this stress
+  levelUnder: 1, // RULE: a road's danger level may exceed the four's mean level by this much and no more (C104)
   dismissNegatives: 3, // RULE: a level 0 hero with this many negative quirks is a candidate to let go
   realHeal: 4, // RULE: a heal restoring this many hit points on average, at its first level, makes a healer; less is no heal at all and counts for nothing (Soushi, 2026-10-10; 2026-10-13: "1 hp heal is totally useless")
   greenParty: 3, // RULE: when this many of the four are level 0, a longer road counts against itself
@@ -235,7 +243,7 @@ async function bestParty(pool: HeroView[], q: Quest): Promise<Party | undefined>
       // C86: a four with a true healer always beats a four without, whatever else either is worth (Soushi, 2026-10-13, from the
       // road with Furnival at 4 health: "we need heal, our recruiting and seating strategy should not overlook that")
       // C98: among fours alike in healing, the one that takes newcomers along on a short road
-      const learn = q.length === 1 ? Math.min(RULE.learners, order.filter((h) => h.level === 0).length) : 0
+      const learn = learners({ quest: q, seats: order.map((hero) => ({ hero })) })
       const bestLearn = best ? learners(best) : 0
       if (!best || (healer && !best.healer) || (healer === best.healer && (learn > bestLearn || (learn === bestLearn && score > best.score)))) {
         best = {
