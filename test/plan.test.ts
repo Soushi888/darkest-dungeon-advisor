@@ -106,7 +106,9 @@ describe("C111: the board renders one plan", () => {
         if (own && r0) { const c = p.relief.find((x) => x.relief.hero.guid === r0.hero.guid)!; expect(c.why.kind).toBe("paid"); expect(p.spends.some((s) => s.step === "relief" && s.who === r0.hero.name)).toBe(false) }
         // B6: "Take this party?" leans yes only when the coffers pay for the road and the four can bear it, and says why not
         if (p.chosen) {
-          const no = !p.roadPaid || !bears(p.chosen)
+          // review 2 (Soushi): any unmet readiness condition turns it, and each is named
+          const unmet = p.readiness!.checks.filter((c) => !c.met && c.label !== "The road is paid for")
+          const no = !p.roadPaid || !bears(p.chosen) || unmet.length > 0 || p.expedition.partyWhy.busy.length > 0
           expect(p.expedition.partyLean).toBe(no ? 1 : 0)
           if (no) {
             leanNo++
@@ -116,6 +118,7 @@ describe("C111: the board renders one plan", () => {
             const why = JSON.parse(card.match(/lean_why: (".*")/)![1]!) as string
             if (!p.roadPaid) expect(why).toContain(`${coin(p.short)} short`)
             if (!bears(p.chosen)) expect(why).toContain("beyond what they can bear")
+            for (const c of unmet) expect(why).toContain(`${c.label.toLowerCase()}: not yet (${c.why})`)
           }
         }
         // the reserve comes first and leaves the rest free; every lean after it spends from what is left, never below nothing

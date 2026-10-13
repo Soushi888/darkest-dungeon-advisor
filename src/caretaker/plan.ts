@@ -100,7 +100,7 @@ export interface ExpeditionPlan {
   greenKeptShort: boolean
   /** B6: card 2 leans to the four only when the coffers pay for the road and the four can bear it (doctrine rungs 2 and 3) */
   partyLean: number
-  partyWhy: { unpaid: boolean; beyond: boolean; meanLevel: number; danger: number; busy: { name: string; where: string }[] }
+  partyWhy: { unpaid: boolean; beyond: boolean; meanLevel: number; danger: number; busy: { name: string; where: string }[]; unmet: { label: string; why: string }[] }
   mix: Mix
   learnPrice: Map<string, number>
 }
@@ -226,6 +226,8 @@ export function plan(t: Town, a: Advice, inp: PlanInputs): Plan {
   // board the coach until they are out
   const busyFour = (chosen?.seats ?? []).map((s) => ({ name: s.hero.name, where: (inp.real ?? t).heroes.find((h) => h.guid === s.hero.guid)?.busy ?? "" })).filter((x) => x.where)
 
+  const unmet = (ready?.checks ?? []).filter((c) => !c.met && c.label !== "The road is paid for").map((c) => ({ label: c.label, why: c.why }))
+
   // the expedition
   const leanIdx = chosen ? a.parties.indexOf(chosen) : 0
   const expedition: ExpeditionPlan = {
@@ -235,8 +237,10 @@ export function plan(t: Town, a: Advice, inp: PlanInputs): Plan {
     learners: chosen && learners(chosen) ? chosen.seats.filter((x) => x.hero.level === 0).slice(0, RULE.learners).map((x) => x.hero.name) : [],
     // only said of a short road chosen over longer ones that a green party would have taken
     greenKeptShort: (chosen?.quest.length === 1 ? a.parties.filter((p) => p !== chosen && p.quest.length > 1 && p.green).length : 0) > 0,
-    partyLean: chosen && (gold < reserve || !bears(chosen) || busyFour.length) ? 1 : 0,
-    partyWhy: { unpaid: !!chosen && gold < reserve, beyond: !!chosen && !bears(chosen), meanLevel: chosen ? chosen.seats.reduce((x, s) => x + s.hero.level, 0) / chosen.seats.length : 0, danger: chosen?.quest.difficulty ?? 0, busy: busyFour },
+    // review 2 (Soushi, 2026-10-13): any of my readiness conditions unmet turns it to No, as well as a road beyond them or one of
+    // them in a building; the road's purse is said as how short it is
+    partyLean: chosen && (gold < reserve || !bears(chosen) || busyFour.length || unmet.length) ? 1 : 0,
+    partyWhy: { unpaid: !!chosen && gold < reserve, beyond: !!chosen && !bears(chosen), meanLevel: chosen ? chosen.seats.reduce((x, s) => x + s.hero.level, 0) / chosen.seats.length : 0, danger: chosen?.quest.difficulty ?? 0, busy: busyFour, unmet },
     mix: chosen ? mix(chosen, t) : undefined,
     learnPrice: new Map((chosen?.seats ?? []).filter((s) => s.learn).map((s) => [s.hero.name, Math.round(s.learn!.gold * (1 - t.skillDiscount))])),
   }
