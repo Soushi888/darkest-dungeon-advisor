@@ -2,7 +2,7 @@
 // game's files (`inventory/base.inventory.system_configs.darkest`, `.type "raid" .max_slots`; each item's `.base_stack_limit`
 // and `.sell_gold_value`). Soushi, 2026-10-11 06:48, on the farewell's packs: "There is only 6 remaining places. It is to take
 // into consideration."
-import { P, text } from "./game.ts"
+import { P, text } from "../sources/game.ts"
 
 export interface PackRules { slots: number; stack: Map<string, number>; value: Map<string, number>; quest: Set<string> }
 

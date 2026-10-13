@@ -2,14 +2,14 @@
 // is a save field or a game-file value, and every piece of advice carries the paths it came from (C14).
 import { existsSync } from "node:fs"
 import { join } from "node:path"
-import { install } from "./paths.ts"
-import type { Dson } from "./dson.ts"
-import type { Save } from "./read.ts"
-import type { Lesson } from "./chronicle.ts"
+import { install } from "../sources/paths.ts"
+import type { Dson } from "../sources/dson.ts"
+import type { Save } from "../sources/read.ts"
+import type { Lesson } from "../road/chronicle.ts"
 import {
   P, applied, buildingData, buildingTrees, describeQuirk, dungeonMonsters, heroClass, heroTrees, levelOf, levelThresholds,
   monster, nameOf, quirks, strings, townEvents, trinkets, type Cost, type Monster,
-  campingSkills, questGoal } from "./game.ts"
+  campingSkills, questGoal } from "../sources/game.ts"
 
 const raw = (h: any) => h.hero_file_data?.raw_data ?? h
 

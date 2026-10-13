@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdirSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import { chronBlock, nowText } from "../src/now.ts"
-import { root } from "../src/paths.ts"
+import { root } from "../src/sources/paths.ts"
 
 const hero = (name: string, guid: number) => ({ guid, name, cls: "crusader", hp: 18, maxHp: 26, stress: 40, affliction: "", virtue: "", deathsDoor: false, lastBlow: "", effects: ["speed_rating 1 (2)"] })
 const page = (tally: Record<string, number>) => ({ at: "", dungeon: "cove", difficulty: 1, length: 1, quest: "cleanse", key: "k", torch: 70, inBattle: false, supplies: { food: 4, torch: 3 }, tally, heroes: [hero("Reynauld", 1), hero("Dismas", 2)] }) as any

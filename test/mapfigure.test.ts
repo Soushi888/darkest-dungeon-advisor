@@ -2,8 +2,8 @@
 import { describe, expect, test } from "bun:test"
 import { rmSync } from "node:fs"
 import { join } from "node:path"
-import { mapIcons, mapLegend, mapSvg, type MapView } from "../src/map.ts"
-import { root } from "../src/paths.ts"
+import { mapIcons, mapLegend, mapSvg, type MapView } from "../src/road/map.ts"
+import { root } from "../src/sources/paths.ts"
 import { roadPanel } from "../src/road.ts"
 
 const view: MapView = { bounds: [0, 4, 0, 0], here: { area: "c1", tile: 1 }, areas: [

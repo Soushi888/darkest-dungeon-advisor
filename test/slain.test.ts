@@ -2,8 +2,8 @@
 import { describe, expect, test } from "bun:test"
 import { mkdirSync, rmSync } from "node:fs"
 import { join } from "node:path"
-import { root } from "../src/paths.ts"
-import { fightOf, slainIn, slainLine } from "../src/slain.ts"
+import { root } from "../src/sources/paths.ts"
+import { fightOf, slainIn, slainLine } from "../src/road/slain.ts"
 
 const hero = (name: string, guid: number, turns: number) => ({ name, guid, turns })
 const page = (round: number, foes: [string, number, string?][], heroes: ReturnType<typeof hero>[]) =>

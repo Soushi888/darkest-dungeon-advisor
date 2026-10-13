@@ -2,16 +2,16 @@
 // every comment, so a claim about who acted, the ranks or anyone's health comes from the page and never from memory of the
 // stream (Soushi, 2026-10-11 04:17: "ensure you are always well synced with the pages and game state"). Only what the page
 // holds is said, nothing inferred. It only reads the chronicle (ISA A1).
-import { slainAt, slainLine } from "./slain.ts"
-import { dropFirst, packRules, slotsOf } from "./pack.ts"
+import { slainAt, slainLine } from "./road/slain.ts"
+import { dropFirst, packRules, slotsOf } from "./caretaker/pack.ts"
 import { statSync } from "node:fs"
-import type { Snap } from "./chronicle.ts"
-import { monster, specialFoes } from "./game.ts"
-import { loadLedger } from "./chronicle.ts"
-import { whereLine } from "./map.ts"
-import { questLine, questStatus } from "./quest.ts"
+import type { Snap } from "./road/chronicle.ts"
+import { monster, specialFoes } from "./sources/game.ts"
+import { loadLedger } from "./road/chronicle.ts"
+import { whereLine } from "./road/map.ts"
+import { questLine, questStatus } from "./world/quest.ts"
 import { current } from "./road.ts"
-import { effectWords, plain, wrap, journalPage, pageTitle } from "./words.ts"
+import { effectWords, plain, wrap, journalPage, pageTitle } from "./voice/words.ts"
 
 const time = (ms: number) => new Date(ms).toLocaleTimeString("en-GB", { hour12: false })
 

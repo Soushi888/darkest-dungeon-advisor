@@ -1,8 +1,8 @@
 // The campfire (#8, C74): what a camping skill does in the Hamlet's words, whether a page shows the party camping, and what the
 // four carry to the fire. Soushi, 2026-10-11 06:09: "Only at the camp. Like invoking the presence of the town advisor during the
 // camp for bilan of the situation and advices."
-import type { Snap } from "./chronicle.ts"
-import { campingSkills, type CampEffect, type CampSkill } from "./game.ts"
+import type { Snap } from "../road/chronicle.ts"
+import { campingSkills, type CampEffect, type CampSkill } from "../sources/game.ts"
 
 const who = (sel: string) => ({ self: "the one who uses it", individual: "one hero", party_other: "each companion", party: "the whole party" })[sel] ?? sel.replace(/_/g, " ")
 
@@ -59,7 +59,7 @@ export async function campBrief(p: Snap, raw: any): Promise<string> {
   return [`CAMPING SKILLS THEY TOOK TO THE FIRE${pts ? ` (${pts} camp points to spend)` : ""}`, ...lines].join("\n")
 }
 
-/** How much a camping skill is worth at the fire, by my habit (RULE in advise.ts): stress relieved by how many it reaches,
+/** How much a camping skill is worth at the fire, by my habit (RULE in caretaker/advise.ts): stress relieved by how many it reaches,
  *  health healed, a cure, a guard on the camp, a boon for the next fight. */
 export function campWorth(k: CampSkill, R: { campStress: number; campHealth: number; campCure: number; campGuard: number; campBoon: number }): number {
   const reach = (sel: string) => (sel === "party_other" ? 3 : sel === "party" ? 4 : 1)

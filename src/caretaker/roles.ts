@@ -1,7 +1,7 @@
 // The roster's balance (C85): what each hero does in a fight, read from the skills they carry, and the pairs too alike to keep
 // both. Soushi, 2026-10-11 07:15: "maybe it is worth looking for diversity and complementarity in our roster, so if we have 2
 // heroes too similar we can dismiss one and recruit a new one that could better complement the roster, even if lower level."
-import type { Skill } from "./game.ts"
+import type { Skill } from "../sources/game.ts"
 
 export type Role = "healer" | "stunner" | "stress" | "marker" | "front" | "back"
 export const ROLE_WORDS: Record<Role, string> = { healer: "heals", stunner: "stuns", stress: "relieves stress", marker: "marks a foe", front: "holds the front", back: "strikes from the back" }

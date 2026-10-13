@@ -2,30 +2,27 @@
 // compiled page. One fixed file name, so the picks a reader makes survive every rebuild of the board.
 // The board speaks only as the Caretaker, in the Hamlet's own words (C13): no file, field or save is named on it.
 // Where each figure comes from goes to sources.md beside it (C14).
-import { teachings } from "./teach.ts"
-import { campTell, campWorth } from "./camp.ts"
-import { ROLE_WORDS } from "./roles.ts"
-import { asPack, packRules, slotsOf, trims, type PackRules } from "./pack.ts"
-import { upkeep, upkeepWords, type UpItem } from "./upkeep.ts"
-import { checkTale } from "./talecheck.ts"
+import { teachings } from "../road/teach.ts"
+import { campTell, campWorth } from "../caretaker/camp.ts"
+import { ROLE_WORDS } from "../caretaker/roles.ts"
+import { asPack, packRules, slotsOf, trims, type PackRules } from "../caretaker/pack.ts"
+import { upkeep, upkeepWords, type UpItem } from "../caretaker/upkeep.ts"
+import { checkTale } from "../road/talecheck.ts"
 import { copyFileSync, existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { homedir } from "node:os"
-import { advise, bears, DOCTRINE, fills, learners, readiness, road, seatParty, RULE, RULE_FOOD, RULE_PROVISION, type Advice, type Party } from "./advise.ts"
-export { road, type RoadItem } from "./advise.ts"
-import { campingSkills, supplyPrices, type CampSkill, type Cost, nameOf } from "./game.ts"
-import { install, root } from "./paths.ts"
-import { DIFFICULTY, LENGTH, type HeroView, type Town, type Upgrade } from "./town.ts"
+import { advise, bears, DOCTRINE, fills, learners, readiness, road, seatParty, RULE, RULE_FOOD, RULE_PROVISION, type Advice, type Party } from "../caretaker/advise.ts"
+export { road, type RoadItem } from "../caretaker/advise.ts"
+import { campingSkills, supplyPrices, type CampSkill, type Cost, nameOf } from "../sources/game.ts"
+import { install, outDir, root } from "../sources/paths.ts"
+import { DIFFICULTY, LENGTH, type HeroView, type Town, type Upgrade } from "../world/town.ts"
 import { buildSkin } from "./skin.ts"
-import { loadPicks, reconcile, type Check } from "./reconcile.ts"
+import { loadPicks, reconcile, type Check } from "../world/reconcile.ts"
 import { contradictions } from "./coherence.ts"
-import { beats, chronicleFor, heirloomTrips, CHRONICLE_RULE, debrief, judge, loadLedger, remember, untried, type Beat, type Debrief, type Lesson } from "./chronicle.ts"
-import { dungeonMonsters, heroClass, specialFoes } from "./game.ts"
-import { meetings } from "./foes.ts"
+import { beats, chronicleFor, heirloomTrips, CHRONICLE_RULE, debrief, judge, loadLedger, remember, untried, type Beat, type Debrief, type Lesson } from "../road/chronicle.ts"
+import { dungeonMonsters, heroClass, specialFoes } from "../sources/game.ts"
+import { meetings } from "../road/foes.ts"
 
-// DD_TOWN_OUT lets the tests build elsewhere, so they never touch the live board or its picks. Read at call time: a test file
-// sets it after its imports, so a value fixed at import would send its builds into the live board's folder
-export const outDir = () => process.env.DD_TOWN_OUT ?? join(root, ".local", "town")
 const BOARD = process.env.NICEBOARD ?? join(homedir(), ".claude/skills/Niceboard/Tools/Board.ts")
 const y = (s: string) => JSON.stringify(s) // a JSON string is a valid YAML scalar, quotes and colons included
 const HABIT = "(my habit)" // how a RULE number is labelled on the board, in his voice (A2)

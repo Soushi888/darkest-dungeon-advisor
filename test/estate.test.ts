@@ -2,8 +2,8 @@
 import { describe, expect, test } from "bun:test"
 import { existsSync, rmSync } from "node:fs"
 import { join } from "node:path"
-import { estateIcons } from "../src/board.ts"
-import { root } from "../src/paths.ts"
+import { estateIcons } from "../src/voice/board.ts"
+import { root } from "../src/sources/paths.ts"
 
 describe("C57: the estate's holdings with their icons", () => {
   test("the heirlooms' line and the coffers' tally carry each currency's icon beside its count, copied beside the page", () => {

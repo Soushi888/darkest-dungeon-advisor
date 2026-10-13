@@ -3,16 +3,16 @@
 //   bun run say "<text>"        the agent's comment on the current page, appended to the expedition's thread
 //   (served by bun run watch)   the farewell board's first zone while the party is out; /road/feed its data, POST /road/message a line from Soushi
 // It only reads the chronicle and writes under .local/town/road/ (ISA A1).
-import { mapIcons, mapLegend, mapSvg, whereLine } from "./map.ts"
-import { isNotable } from "./notable.ts"
-import { buildRecap, type Recap } from "./recap.ts"
-import { questLine, questStatus } from "./quest.ts"
-import { effectWords } from "./words.ts"
-import { slainAt } from "./slain.ts"
+import { mapIcons, mapLegend, mapSvg, whereLine } from "./road/map.ts"
+import { isNotable } from "./road/notable.ts"
+import { buildRecap, type Recap } from "./road/recap.ts"
+import { questLine, questStatus } from "./world/quest.ts"
+import { effectWords } from "./voice/words.ts"
+import { slainAt } from "./road/slain.ts"
 import { appendFileSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import { outDir } from "./board.ts"
-import { monster } from "./game.ts"
+import { monster } from "./sources/game.ts"
+import { outDir } from "./sources/paths.ts"
 
 // read at call time (outDir() is), so a test that sets DD_TOWN_OUT after its imports never writes into the live thread
 const town = () => outDir()

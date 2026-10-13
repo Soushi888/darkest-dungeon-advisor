@@ -2,8 +2,8 @@
 import { describe, expect, test } from "bun:test"
 import { existsSync, mkdirSync, rmSync } from "node:fs"
 import { join } from "node:path"
-import { root } from "../src/paths.ts"
-import { buildRecap } from "../src/recap.ts"
+import { root } from "../src/sources/paths.ts"
+import { buildRecap } from "../src/road/recap.ts"
 import { feed, roadPanel } from "../src/road.ts"
 
 const hero = (name: string, guid: number, hp: number, stress: number, more: object = {}) => ({ guid, name, cls: "leper", hp, maxHp: 35, stress, affliction: "", virtue: "", deathsDoor: false, lastBlow: "", ...more })

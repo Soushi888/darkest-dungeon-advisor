@@ -1,7 +1,7 @@
 // The live stream in words (U2): an effect as a chronicle page keeps it ("speed_rating 1 (3)", "beast_blight_buff_1 0.2 (3)",
 // "blight 2 (3) from grave_robber") read back the way the game would say it, from the game's own buff list
 // (shared/buffs/base.buffs.json), and a long line cut into lines short enough for a notification to carry whole.
-import { nameOf, strings, text } from "./game.ts"
+import { nameOf, strings, text } from "../sources/game.ts"
 
 let lib: Map<string, any> | undefined
 const buffs = async () => (lib ??= new Map(JSON.parse(await text("shared/buffs/base.buffs.json")).buffs.map((b: any) => [b.id, b])))

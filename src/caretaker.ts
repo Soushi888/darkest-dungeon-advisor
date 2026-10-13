@@ -8,10 +8,10 @@ import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import { appendFileSync, statSync } from "node:fs"
 import { nowText } from "./now.ts"
-import { campBrief, camping } from "./camp.ts"
+import { campBrief, camping } from "./caretaker/camp.ts"
 import { current, feed, say, sayRecap, setCaretaker } from "./road.ts"
-import type { Snap } from "./chronicle.ts"
-import { outDir } from "./board.ts"
+import type { Snap } from "./road/chronicle.ts"
+import { outDir } from "./sources/paths.ts"
 
 // read at call time, so a test can point them at a stub (the same pattern as NICEBOARD)
 const inference = () => process.env.DD_INFERENCE ?? join(homedir(), ".claude/PAI/Tools/Inference.ts")

@@ -1,8 +1,8 @@
 // C55: the tale checks itself against the pages before it is told, and the six errors of the Cove trip of 2026-10-11 stay fixed.
 // Synthetic pages, so each rule is probed whatever the last trip was.
 import { describe, expect, test } from "bun:test"
-import { beats, debrief, type Beat, type Snap } from "../src/chronicle.ts"
-import { checkTale } from "../src/talecheck.ts"
+import { beats, debrief, type Beat, type Snap } from "../src/road/chronicle.ts"
+import { checkTale } from "../src/road/talecheck.ts"
 
 const hero = (name: string, cls: string, stress = 10, hp = 20, more: object = {}) => ({ guid: name.length * 100 + name.charCodeAt(0), name, cls, hp, maxHp: 20, stress, affliction: "", virtue: "", deathsDoor: false, lastBlow: "", ...more })
 function page(over: Partial<Snap> & { stress?: Record<string, number>; hp?: Record<string, number> } = {}): Snap {

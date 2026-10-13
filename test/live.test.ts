@@ -1,6 +1,6 @@
 // C52: the live stream speaks in words, and a page arrives whole however long it runs.
 import { describe, expect, test } from "bun:test"
-import { effectWords, wrap } from "../src/words.ts"
+import { effectWords, wrap } from "../src/voice/words.ts"
 
 // every form a chronicle page kept on the Cove trip of 2026-10-11, and what each reads as
 const SEEN: [string, string][] = [

@@ -4,7 +4,7 @@ import { cpSync, mkdirSync, readdirSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import { decode, type Dson } from "./dson.ts"
 import { names } from "./names.ts"
-import { profileDir, runtime } from "./paths.ts"
+import { profileDir, root, runtime } from "./paths.ts"
 
 export type Save = Record<string, Dson>
 
@@ -25,7 +25,7 @@ export async function readSave(profile = profileDir()): Promise<Save> {
 
 if (import.meta.main) {
   const save = await readSave()
-  const out = join(import.meta.dir, "..", "data", "state.json")
+  const out = join(root, "data", "state.json")
   await Bun.write(out, JSON.stringify(save, null, 1))
   console.log(`${out}: ${Object.keys(save).length} files decoded`)
 }

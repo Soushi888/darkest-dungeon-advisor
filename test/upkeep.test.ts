@@ -2,7 +2,7 @@
 // ... Exceptions: budget for provisions, heroes not worth it (could be dismissed), skills not used that often. This also
 // includes survivalism and campaign skills").
 import { describe, expect, test } from "bun:test"
-import { upkeep, upkeepWords, type UpItem } from "../src/upkeep.ts"
+import { upkeep, upkeepWords, type UpItem } from "../src/caretaker/upkeep.ts"
 
 const coin = (n: number) => `${n.toLocaleString("en-US")} gold`
 const item = (hero: string, what: string, kind: UpItem["kind"], gold: number, more: Partial<UpItem> = {}): UpItem => ({ hero, what, kind, gold, used: true, ...more })

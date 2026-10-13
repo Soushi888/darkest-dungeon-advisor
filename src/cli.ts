@@ -3,14 +3,14 @@
 // flags: --foresight (experimental, C7), --port=<n> for watch (default 4317)
 import { existsSync, statSync, watch as fsWatch } from "node:fs"
 import { join } from "node:path"
-import { buildBoard, buildFarewell, outDir } from "./board.ts"
-import { capture } from "./chronicle.ts"
-import { profileDir } from "./paths.ts"
-import { readSave } from "./read.ts"
-import { town, type Town } from "./town.ts"
-import { boardOptions, loadPicks, mergePicks, picksFile } from "./reconcile.ts"
+import { buildBoard, buildFarewell } from "./voice/board.ts"
+import { capture } from "./road/chronicle.ts"
+import { outDir, profileDir } from "./sources/paths.ts"
+import { readSave } from "./sources/read.ts"
+import { town, type Town } from "./world/town.ts"
+import { boardOptions, loadPicks, mergePicks, picksFile } from "./world/reconcile.ts"
 import { ask, feed, roadPanel } from "./road.ts"
-import { keepDrafts } from "./drafts.ts"
+import { keepDrafts } from "./voice/drafts.ts"
 
 const args = process.argv.slice(2)
 const cmd = args[0] ?? "town"

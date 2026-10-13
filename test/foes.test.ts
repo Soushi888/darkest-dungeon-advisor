@@ -3,9 +3,9 @@
 import { describe, expect, test } from "bun:test"
 import { mkdirSync, rmSync } from "node:fs"
 import { join } from "node:path"
-import { beats, CHRONICLE_RULE, debrief, snapshot, type Snap } from "../src/chronicle.ts"
-import { root } from "../src/paths.ts"
-import { checkTale } from "../src/talecheck.ts"
+import { beats, CHRONICLE_RULE, debrief, snapshot, type Snap } from "../src/road/chronicle.ts"
+import { root } from "../src/sources/paths.ts"
+import { checkTale } from "../src/road/talecheck.ts"
 
 const hero = (name: string, hp: number) => ({ guid: name.length * 7 + name.charCodeAt(0), name, cls: "crusader", hp, maxHp: 20, stress: 10, affliction: "", virtue: "", deathsDoor: false, lastBlow: "" })
 const page = (hp: number, tally: Record<string, number>, inBattle = false): Snap => ({ at: "", dungeon: "cove", difficulty: 1, length: 1, quest: "cleanse", key: "test:foes", torch: 80, inBattle, supplies: {}, tally, heroes: [hero("Reynauld", hp), hero("Dismas", 20)] } as Snap)

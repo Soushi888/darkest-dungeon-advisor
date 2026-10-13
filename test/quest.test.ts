@@ -1,12 +1,12 @@
 // C68: the quest's goal and progress, read from the save, on the road and in the page's snapshot; and a curio that laid an
 // effect on a hero is never told as giving nothing (pm#29), with the effect named after the curio that laid it.
 import { describe, expect, test } from "bun:test"
-import { carried, freshEffect, type Snap } from "../src/chronicle.ts"
+import { carried, freshEffect, type Snap } from "../src/road/chronicle.ts"
 import { nowText } from "../src/now.ts"
-import { questLine, questStatus } from "../src/quest.ts"
-import { checkTale } from "../src/talecheck.ts"
+import { questLine, questStatus } from "../src/world/quest.ts"
+import { checkTale } from "../src/road/talecheck.ts"
 import { feed, roadPanel } from "../src/road.ts"
-import { root } from "../src/paths.ts"
+import { root } from "../src/sources/paths.ts"
 import { mkdirSync, rmSync } from "node:fs"
 import { join } from "node:path"
 
@@ -78,7 +78,7 @@ describe("C68, U39: a gather quest counts what they carry, and its items are nev
     expect((await questStatus(raw(3)))!.complete).toBe(true)
   })
   test("a quest item is never on the list of what to leave behind", async () => {
-    const { dropFirst, packRules } = await import("../src/pack.ts")
+    const { dropFirst, packRules } = await import("../src/caretaker/pack.ts")
     expect(dropFirst({ medicines: 1, jade: 1, gold: 1300 }, await packRules()).map((d) => d.key)).toEqual(["jade", "gold"])
   })
 })

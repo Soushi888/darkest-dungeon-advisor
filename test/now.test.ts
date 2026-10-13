@@ -2,7 +2,7 @@
 import { describe, expect, test } from "bun:test"
 import { mkdirSync, rmSync } from "node:fs"
 import { join } from "node:path"
-import { root } from "../src/paths.ts"
+import { root } from "../src/sources/paths.ts"
 import { nowText } from "../src/now.ts"
 import { feed, say } from "../src/road.ts"
 const out = join(root, ".dd-runtime", "test-now")

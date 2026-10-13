@@ -12,8 +12,8 @@
 //   an area id is its name's four bytes, little-endian ("rooB" is 1114599282), and "none" marks a door that leads nowhere
 import { copyFileSync, existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
-import { install } from "./paths.ts"
-import type { Save } from "./read.ts"
+import { install } from "../sources/paths.ts"
+import type { Save } from "../sources/read.ts"
 
 export interface MapTile { x: number; y: number; known: number; what?: string; code?: number }
 export interface MapArea { id: string; room: boolean; name: string; ends: string[]; tiles: MapTile[] }

@@ -5,7 +5,7 @@ import { mkdirSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import { comment, COUNCIL, promptFor, SYSTEM, streamFlow } from "../src/caretaker.ts"
 import { feed } from "../src/road.ts"
-import { root } from "../src/paths.ts"
+import { root } from "../src/sources/paths.ts"
 
 const out = join(root, ".dd-runtime", "test-caretaker"), stub = (n: string) => join(root, "test", "stubs", `inference-${n}.ts`)
 const page = { at: "", dungeon: "cove", difficulty: 1, length: 1, quest: "cleanse", key: "k", torch: 70, inBattle: false, supplies: { food: 4 }, tally: {}, heroes: [{ guid: 1, name: "Reynauld", cls: "crusader", hp: 18, maxHp: 26, stress: 40, affliction: "", virtue: "", deathsDoor: false, lastBlow: "" }] }
@@ -191,7 +191,7 @@ describe("C74: in camp mode he speaks once, at the fire", () => {
   })
 
   test("a camp is read from the signs it must leave, and the skills they took are told in the game's words", async () => {
-    const { camping, campTell } = await import("../src/camp.ts")
+    const { camping, campTell } = await import("../src/caretaker/camp.ts")
     const snap = (firewood: number) => ({ supplies: { firewood } }) as any
     expect(camping(snap(2), snap(1), {})).toBe("a firewood burnt")
     expect(camping(snap(1), snap(1), { raid: { camp: { phase: 2, camping_skill_points: 12, skill_log: {} } } })).toBe("the camp's phase 2")

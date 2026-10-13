@@ -21,7 +21,7 @@ export function fights(snaps: Snap[]): { page: number; snap: Snap }[][] {
 }
 
 /** Every special foe met on a trip, one meeting per fight it stood in. `special` maps a foe variant to what it is
- *  (`specialFoes()` in game.ts), `usual` lists the variants the dungeon's halls and rooms field at that level. */
+ *  (`specialFoes()` in sources/game.ts), `usual` lists the variants the dungeon's halls and rooms field at that level. */
 export function meetings(snaps: Snap[], special: Map<string, "wanderer" | "boss">, usual: Set<string>): Meeting[] {
   const out: Meeting[] = []
   for (const fight of fights(snaps)) {
