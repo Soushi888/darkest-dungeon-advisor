@@ -59,7 +59,7 @@ src/sources/paths.ts     where the install, the profile and the board live (DD_I
 src/sources/game.ts      the game's own data: quirks, class skills (reach, moves, marks, bleed, blight, heals), upgrade trees, buildings, monsters, trinkets, effects, English names
 
 # src/world/: the Hamlet as a value, and the picks checked against it
-src/world/town.ts        the Hamlet as the save describes it, the knowledge boundary, the expedition just brought back
+src/world/town.ts        the Hamlet as the save describes it, the knowledge boundary, the expedition just brought back, and the lessons ledger read with it
 src/world/reconcile.ts   the week's picks against the next Hamlet save: done, not yet, not as chosen
 src/world/quest.ts       what the road's quest asks and how far along it is
 src/world/week.ts        the week as it began: the week-start record, the roster ledger, who was placed or joined since, the view the four are chosen on

@@ -57,7 +57,8 @@ function partyLine(p: Party): string {
 export interface Answers { expedition?: string; partyOwn?: boolean; partyNames?: string[]; preferred?: string[] }
 /** C18: answers.md carries the week it was sent in, as picks.json does, so a road or four picked last week never steers this one. */
 export const stampAnswers = (body: string, week: number) => `<!-- week: ${week} -->\n${body}`
-/** The week an answers file was sent in: its stamp, else the week its own heading names ("The Hamlet, week 25"). */
+/** The week an answers file was sent in: its stamp, else the week its own heading names ("The Hamlet, week 25"). The
+ *  heading fallback only serves files written before the stamp; one with neither is dropped, the safe way to fail. */
 export const answersWeek = (text: string): number | undefined => {
   const m = text.match(/^<!-- week: (\d+) -->/) ?? text.match(/^##[^\n]*\bweek (\d+)\b/m)
   return m ? Number(m[1]) : undefined

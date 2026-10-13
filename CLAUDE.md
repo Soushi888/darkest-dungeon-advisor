@@ -41,7 +41,7 @@ The road zone and live-session modules (`road.ts`, `now.ts`, `caretaker.ts`, `ro
 
 - `sources/game.ts` loads the game's own files. Every path it reads is declared in `P` so the board can cite it.
 
-- `world/town.ts` turns the save into a `Town`: pure derivation, no advice. It also computes the knowledge boundary.
+- `world/town.ts` turns the save into a `Town`: derivation, no advice. It also computes the knowledge boundary, and reads the lessons ledger (`lessons.json` in the advisor's output folder) so every computation on the Town sees it (C42, C91).
 
 - `caretaker/advise.ts` is the Caretaker's judgement: relief, parties seated by rank, dismissals, recruits, Guild and Blacksmith purchases, heirlooms, trinkets.
 
