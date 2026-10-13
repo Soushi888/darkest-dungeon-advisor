@@ -305,13 +305,14 @@ export function plan(t: Town, a: Advice, inp: PlanInputs): Plan {
     const there = (tr: Treat) => placed.get(tr.hero.guid) === tw.name
     for (const tr of a.treat.filter(there)) cards.push({ treat: tr, lean: 0, why: "paid", filedUnder: tw.buildingName, left })
     for (const tr of a.treat.filter((x) => !there(x))) {
-      // a card only for a seat that is free, and the card takes it; the rest wait in line (B9: so no card ever lacks a seat)
+      // a card only while a seat is free; the rest wait in line. Only a card that leans to the ward takes the seat: one leaned
+      // Not this week (one of the four, or short of gold) passes it to the next in line, in the line's order (C103: a thief
+      // first) (Soushi, 2026-10-13)
       if (seats <= 0) { waiting.push(tr); continue }
-      seats--
       const purse = tr.cost <= left, now = left
       // a hero in the ward cannot board the coach: never lean on treating one of the four I would send (Soushi, 2026-10-10)
       const lean = purse && !tr.inParty ? 0 : 1
-      if (lean === 0) spend("treatment", tr.cost, tr.hero.name)
+      if (lean === 0) { seats--; spend("treatment", tr.cost, tr.hero.name) }
       const why: TreatWhy = tr.inParty ? "inParty" : !purse ? "broke" : "worth"
       cards.push({ treat: tr, lean, why, filedUnder: lean === 0 ? tw.buildingName : "", left: now })
     }

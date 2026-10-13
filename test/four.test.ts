@@ -64,8 +64,28 @@ describe.skipIf(!has)("C112: one four drives the whole plan", () => {
     const { a } = await prepare(t, {})
     const p = plan(t, a, { answers: {}, prices: await supplyPrices() })
     if (!p.treatment) return
-    expect(p.treatment.cards.filter((c) => c.why !== "paid").length).toBeLessThanOrEqual(Math.max(0, p.treatment.freeSeats))
+    expect(p.treatment.cards.filter((c) => c.why !== "paid" && c.lean === 0).length).toBeLessThanOrEqual(Math.max(0, p.treatment.freeSeats))
     expect(p.treatment.cards.length + p.treatment.waiting.length).toBe(a.treat.length)
+  })
+
+  test("Review 3: a Treatment Ward seat goes only to a card that leans to the ward; Not this week passes it on, thief first still", async () => {
+    const t = await town(await readSave())
+    const prices = await supplyPrices()
+    for (const gold of [t.wallet.gold ?? 0, 0, 100000]) {
+      const tt = { ...t, wallet: { ...t.wallet, gold } }
+      const { a } = await prepare(tt, {})
+      const p = plan(tt, a, { answers: {}, prices })
+      if (!p.treatment) continue
+      const free = Math.max(0, p.treatment.freeSeats), to = p.treatment.cards.filter((c) => c.why !== "paid" && c.lean === 0)
+      expect(to.length).toBeLessThanOrEqual(free)
+      // nobody waits while a seat is still free: a card leaning Not this week did not hold it
+      if (p.treatment.waiting.length) expect(to.length).toBe(free)
+      // the seats go down the line in order (C103: a thief first), skipping only those leaned Not this week
+      const order = a.treat.filter((x) => p.treatment!.cards.some((c) => c.treat === x && c.why !== "paid"))
+      const firstTaken = order.findIndex((x) => to.some((c) => c.treat === x))
+      for (const x of order.slice(0, Math.max(0, firstTaken))) expect(p.treatment.cards.find((c) => c.treat === x)!.lean).toBe(1)
+      if (gold === 100000) for (const x of a.treat.filter((x) => x.quirk.thief && !x.inParty).slice(0, free)) expect(to.some((c) => c.treat === x)).toBe(true)
+    }
   })
 
   test("B10: the heirlooms improve the place of relief leaned this week by its building and activity, never by a name inside a label", async () => {
