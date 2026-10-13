@@ -358,7 +358,8 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   const ward = t.activities.find((x) => x.activity === "disease_treatment")
   let beds = ward ? ward.slots - ward.used : 0
   // the ward's free beds go to the most experienced first; the rest wait
-  for (const h of [...a.disease].sort((x, z) => z.level - x.level || z.xp - x.xp)) {
+  // C86: an ill true healer takes the Medical Ward's first bed
+  for (const h of [...a.disease].sort((x, z) => Number(a.trueHealer.has(z.guid)) - Number(a.trueHealer.has(x.guid)) || z.level - x.level || z.xp - x.xp)) {
     if (!ward) continue
     const at = cards.length
     const gets = beds > 0

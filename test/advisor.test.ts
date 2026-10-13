@@ -550,6 +550,22 @@ describe.skipIf(!has)("on the local save", () => {
     } finally { w.kill() }
   }, 30_000)
 
+  test("C86: a four leaves without a true healer only when none of the ready heroes is one", async () => {
+    const t = await town(await readSave(copyProfile()))
+    const a = await advise(t)
+    const ready = t.heroes.filter((h) => !h.busy && !h.affliction && h.stress < RULE.sendBelow && !h.quirks.some((q) => q.disease))
+    const healers: string[] = []
+    for (const h of ready) {
+      const sk = (await heroClass(h.cls)).skills
+      if ((h.learned ?? h.skills).some((s) => sk.get(s.id)?.heal && sk.get(s.id)!.targetsAllies && sk.get(s.id)!.healAvg >= RULE.realHeal)) healers.push(h.name)
+    }
+    expect(a.parties.length).toBeGreaterThan(0)
+    // relief and the Medical Ward reach a true healer before anyone else
+    const relief = a.relief.map((r) => a.trueHealer.has(r.hero.guid))
+    expect(relief).toEqual([...relief].sort((x, y) => Number(y) - Number(x)))
+    if (healers.length) for (const p of a.parties) expect({ quest: `${p.quest.dungeonName} ${p.quest.length}`, healer: p.healer }).toEqual({ quest: `${p.quest.dungeonName} ${p.quest.length}`, healer: true })
+  })
+
   test("C30: a healer is judged by how much the heal restores, cast from where they stand", async () => {
     const t = await town(await readSave(copyProfile()))
     // the class files: a Vestal's Divine Grace makes a healer, a Crusader's Battle Heal does not
