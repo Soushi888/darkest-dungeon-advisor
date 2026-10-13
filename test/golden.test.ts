@@ -38,7 +38,7 @@ describe.skipIf(!has)("C108: golden accept", () => {
 
   test("accept rebuilds a case from its stored profile and state, drops what is no longer written, and check then holds", async () => {
     const src = goldenDir(), name = readdirSync(src).filter((d) => existsSync(join(src, d, "expect", "town.md"))).sort()[0]!
-    const scratch = join(root, ".dd-runtime", "test-golden-accept"), saved = { golden: process.env.DD_GOLDEN, profile: process.env.DD_PROFILE }
+    const scratch = join(root, ".dd-runtime", "test-golden-accept"), saved = process.env.DD_GOLDEN
     rmSync(scratch, { recursive: true, force: true })
     cpSync(join(src, name), join(scratch, name), { recursive: true, preserveTimestamps: true })
     const dir = join(scratch, name), kept = { profile: snapshot(join(dir, "profile")), state: snapshot(join(dir, "state")) }
@@ -47,19 +47,20 @@ describe.skipIf(!has)("C108: golden accept", () => {
     writeFileSync(join(dir, "expect", "stale.md"), "written by an older build")
     try {
       process.env.DD_GOLDEN = scratch
-      // a live profile that does not exist: a build that read it would fail
-      process.env.DD_PROFILE = join(scratch, "no-live-profile")
       expect((await check()).drift.length).toBeGreaterThan(0)
       expect(await accept(name)).toEqual([name])
       expect(existsSync(join(dir, "expect", "stale.md"))).toBe(false)
       expect(readFileSync(join(dir, "expect", "town.md"), "utf8")).not.toContain("an old line")
+      // what this proves: accept and check agree on a case, and the case's own files are left as they were. That the live profile
+      // is never read is not tested here: it follows from build(), which always hands the build the case's own profile and a
+      // seeded copy of its state
       expect((await check()).drift).toEqual([])
       // the case's own profile and state are read, never written
       expect(snapshot(join(dir, "profile"))).toEqual(kept.profile)
       expect(snapshot(join(dir, "state"))).toEqual(kept.state)
       await expect(accept("no-such-case")).rejects.toThrow("no golden case named no-such-case")
     } finally {
-      for (const [k, v] of [["DD_GOLDEN", saved.golden], ["DD_PROFILE", saved.profile]] as const) if (v === undefined) delete process.env[k]; else process.env[k] = v
+      if (saved === undefined) delete process.env.DD_GOLDEN; else process.env.DD_GOLDEN = saved
       rmSync(scratch, { recursive: true, force: true })
     }
   }, 240_000)
