@@ -123,7 +123,7 @@ export function weekSoFar(t: Town, start: WeekStart | undefined): string[] {
 }
 
 export interface Tale { snaps: number; beats: Beat[]; well: string[]; wrong: string[]; lessons: Lesson[]; debrief?: Debrief; issues?: string[] }
-export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: Answers; own?: Party; checks?: Check[]; prices?: Map<string, number>; soFar?: string[]; tale?: Tale; camp?: Map<string, CampSkill>; sent?: Proposal; rates?: Record<string, { trips: number; got: number }>; pack?: PackRules }): { board: string; sources: string } {
+export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: Answers; own?: Party; checks?: Check[]; prices?: Map<string, number>; soFar?: string[]; newcomers?: Set<number>; tale?: Tale; camp?: Map<string, CampSkill>; sent?: Proposal; rates?: Record<string, { trips: number; got: number }>; pack?: PackRules }): { board: string; sources: string } {
   const L: string[] = []
   const picked = (opts.answers.expedition && a.parties.find((p) => questLabel(p) === opts.answers.expedition)) || a.best
   const chosen = opts.own ?? picked
@@ -546,17 +546,20 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   const named = new Set(a.dismiss.map((d) => d.hero.guid))
   // a hero this board sends to the Abbey, the Tavern or the Sanitarium is not one it lets go
   const tended = new Set([...a.relief.map((r) => r.hero.guid), ...a.treat.map((x) => x.hero.guid), ...a.disease.map((h) => h.guid)])
-  const weak = t.heroes.filter((h) => h.level === 0 && !h.busy && !sendingNow.has(h.guid) && !named.has(h.guid) && !tended.has(h.guid)).sort((x, z) => worth(x) - worth(z))
+  // C88: a hero who joined this week is never let go for another recruit the same week (Soushi, 2026-10-13: "you just made me recruit him to ask me to dismiss him")
+  const weak = t.heroes.filter((h) => h.level === 0 && !h.busy && !sendingNow.has(h.guid) && !named.has(h.guid) && !tended.has(h.guid) && !opts.newcomers?.has(h.guid)).sort((x, z) => worth(x) - worth(z))
+  // C88: a recruit of a class the roster already holds is never taken: C85 would set the two against each other
+  const held = (r: { hero: HeroView }) => t.heroes.find((h) => h.cls === r.hero.cls)
   let free = Math.max(0, t.rosterCap - t.rosterSize) + a.dismiss.length
   const dismiss = [...a.dismiss]
-  for (const r of ranked.filter((r) => fillOf(r) || worth(r.hero) > 0)) {
+  for (const r of ranked.filter((r) => !held(r) && (fillOf(r) || worth(r.hero) > 0))) {
     if (free > 0) { free--; continue }
     const w = weak.shift()
     if (!w || (!fillOf(r) && worth(r.hero) - worth(w) < 2)) break
     dismiss.push({ hero: w, why: `level 0 with ${w.quirks.filter((q) => !q.positive && !q.disease).length} bad quirks and ${w.quirks.filter((q) => q.positive).length} good; ${fillOf(r) ? `${r.hero.name} at the coach brings the ${fillOf(r)!.gap === "healer" ? "true healer" : "stun"} the four lack` : `${r.hero.name} at the coach would serve you better`}` })
   }
   const places = Math.max(0, t.rosterCap - t.rosterSize) + dismiss.length
-  const taken = ranked.filter((r) => fillOf(r) || worth(r.hero) >= 0).slice(0, places)
+  const taken = ranked.filter((r) => !held(r) && (fillOf(r) || worth(r.hero) >= 0)).slice(0, places)
   L.push(`${t.rosterSize} names on the roster, room for ${t.rosterCap} as the Stage Coach stands: ${t.rosterCap - t.rosterSize} place${t.rosterCap - t.rosterSize === 1 ? "" : "s"} free${dismiss.length ? `, ${places} if you let go of the ones I name` : ""}. My habit: a hero still at level 0 with ${RULE.dismissNegatives} or more bad quirks, outside the party, is worth letting go, and the coach's best take the places there are.`, "")
   const rcards: string[] = []
   for (const d of dismiss) {
@@ -568,7 +571,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     rcards.push(`- q: ${y(`Recruit ${r.hero.name}, ${r.hero.clsName}?`)}`, `  image: ${y(portrait(r.hero))}`, `  context: ${y(`${r.why}.`)}`, "  options:")
     rcards.push(`    - pick: "Recruit"`, `      effect: ${y(`Joins the roster at level ${r.hero.level}.`)}`, `    - pick: "Pass"`, `      effect: ${y(r.hero.from ? "Leave them at the coach." : "The coach brings others next week.")}`)
     const take = taken.includes(r)
-    const why = take && fillOf(r) ? `${fillOf(r)!.text}; there is a place for them` : take ? `${worth(r.hero) > 0 ? "more good quirks than bad" : "as many good quirks as bad"}, and there is a place for them` : worth(r.hero) < 0 ? "more bad quirks than good" : `no place left for them: ${places ? `the ${places === 1 ? "place goes" : `${places} places go`} to ${taken.map((x) => x.hero.name).join(" and ")}` : "the roster is full"}`
+    const why = held(r) ? `the roster already has ${/^[AEIOU]/i.test(r.hero.clsName) ? "an" : "a"} ${r.hero.clsName}, ${held(r)!.name}, and two of a class are what I would let go of` : take && fillOf(r) ? `${fillOf(r)!.text}; there is a place for them` : take ? `${worth(r.hero) > 0 ? "more good quirks than bad" : "as many good quirks as bad"}, and there is a place for them` : worth(r.hero) < 0 ? "more bad quirks than good" : `no place left for them: ${places ? `the ${places === 1 ? "place goes" : `${places} places go`} to ${taken.map((x) => x.hero.name).join(" and ")}` : "the roster is full"}`
     rcards.push(`  lean: ${take ? 0 : 1}`, `  lean_why: ${y(`${why}.`)}`)
   }
   if (rcards.length) L.push("```board-decisions", ...rcards, "```", "")
@@ -790,7 +793,7 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
   }
   // what each heirloom came home at, per recorded trip (U22)
   const rates = Object.fromEntries(await Promise.all(["crest", "bust", "portrait", "deed"].map(async (k) => [k, await heirloomTrips(k)] as const)))
-  const { board, sources } = source(t, a, { foresight: !!opts.foresight, answers, own, checks, prices: await supplyPrices(), soFar: weekSoFar(t, start), tale, camp: await campingSkills(), sent, rates, pack: await packRules() })
+  const { board, sources } = source(t, a, { foresight: !!opts.foresight, answers, own, checks, prices: await supplyPrices(), soFar: weekSoFar(t, start), newcomers: start && start.week === t.week ? new Set(t.heroes.filter((h) => !start!.heroes.some((x) => x.guid === h.guid)).map((h) => h.guid)) : undefined, tale, camp: await campingSkills(), sent, rates, pack: await packRules() })
   // C38: every build is read back for advice that contradicts itself; the live session is told through coherence.json
   const clash = [...contradictions(board), ...(tale?.issues ?? [])]
   await Bun.write(join(outDir(), "coherence.json"), JSON.stringify({ week: t.week, contradictions: clash }, null, 1))
