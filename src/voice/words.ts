@@ -2,9 +2,19 @@
 // "blight 2 (3) from grave_robber") read back the way the game would say it, from the game's own buff list
 // (shared/buffs/base.buffs.json), and a long line cut into lines short enough for a notification to carry whole.
 import { nameOf, strings, text } from "../sources/game.ts"
+import { LENGTH } from "../world/town.ts"
 
 /** Gold as the board writes it: "1,500 gold". */
 export const coin = (n: number) => `${n.toLocaleString("en-US")} gold`
+
+/** A road as the board names it, what it pays leading, so two roads to the same dungeon read apart at a glance (Soushi,
+ *  2026-10-10). The board's picks are kept by this label, so the plan finds the road picked by it too. */
+export function questLabel(p: { quest: { dungeonName: string; length: number; goal: string; rewards: string[] } }): string {
+  const q = p.quest
+  const gold = q.rewards.find((r) => / gold$/.test(r)), trinket = q.rewards[q.rewards.length - 1]
+  const pays = [trinket, ...q.rewards.filter((r) => r !== gold && r !== trinket), gold].filter(Boolean)
+  return `${q.dungeonName}, ${(LENGTH[q.length] ?? String(q.length)).toLowerCase()} (${q.goal}): ${pays.join(", ")}`
+}
 
 let lib: Map<string, any> | undefined
 const buffs = async () => (lib ??= new Map(JSON.parse(await text("shared/buffs/base.buffs.json")).buffs.map((b: any) => [b.id, b])))

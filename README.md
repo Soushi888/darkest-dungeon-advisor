@@ -69,10 +69,11 @@ src/caretaker/camp.ts    the campfire council: camping skills in the Hamlet's wo
 src/caretaker/pack.ts    the pack's slots and stacks, from the game's files
 src/caretaker/upkeep.ts  the upkeep plan for the four who leave: skills, weapon, armour, camping skill
 src/caretaker/roles.ts   the roster's balance: what each hero does, and pairs too alike
+src/caretaker/plan.ts    the week's plan: every decision the board shows (the road, the gold each lean spends in turn, who rests, who is treated, who stays), and the farewell's, as one value
 
 # src/voice/: the board and the words in his voice
 src/voice/coherence.ts   reads every built board back for advice that contradicts itself
-src/voice/board.ts       the board source in his voice (Hamlet, farewell, return), compiled with the Niceboard compiler and the skin; sources.md beside it
+src/voice/board.ts       the plan in his voice (Hamlet, farewell, return), compiled with the Niceboard compiler and the skin; sources.md beside it
 src/voice/skin.ts        the in-game panel theme, with art read from your install
 src/voice/words.ts       the live stream's effects in the game's own words
 src/voice/drafts.ts      a rebuild never reloads the page under his hands

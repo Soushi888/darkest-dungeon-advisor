@@ -31,7 +31,7 @@ Environment: `DD_INFERENCE` (the PAI Inference tool `bun run caretaker` calls, d
 
 ## Pipeline
 
-`sources/paths.ts` → `sources/read.ts` → `world/town.ts` → `caretaker/advise.ts` (+ `world/reconcile.ts`, `road/chronicle.ts`) → `voice/board.ts` (+ `voice/coherence.ts`) → `cli.ts`; `live.ts` streams events for a live session
+`sources/paths.ts` → `sources/read.ts` → `world/town.ts` → `caretaker/advise.ts` (+ `world/reconcile.ts`, `road/chronicle.ts`) → `caretaker/plan.ts` → `voice/board.ts` (+ `voice/coherence.ts`) → `cli.ts`; `live.ts` streams events for a live session
 
 The road zone and live-session modules (`road.ts`, `now.ts`, `caretaker.ts`, `road/recap.ts`, `road/map.ts`, `world/quest.ts`, `road/turns.ts` and the rest) are listed one line each in `README.md` § How it is put together, the canonical module list.
 
@@ -45,7 +45,9 @@ The road zone and live-session modules (`road.ts`, `now.ts`, `caretaker.ts`, `ro
 
 - `caretaker/advise.ts` is the Caretaker's judgement: relief, parties seated by rank, dismissals, recruits, Guild and Blacksmith purchases, heirlooms, trinkets.
 
-- `voice/board.ts` writes the niceboard markdown in his voice, copies portraits into `.local/town/img/`, and compiles with the external compiler plus the skin.
+- `caretaker/plan.ts` turns the advice into one `Plan` (C111): every lean the board shows, the gold each spends in the order it is spent, and the farewell's verdicts. A new decision goes here, never in `board.ts`.
+
+- `voice/board.ts` renders the Plan as the niceboard markdown in his voice, copies portraits into `.local/town/img/`, and compiles with the external compiler plus the skin.
 
 - `road/chronicle.ts` keeps a snapshot of the party at every dungeon save (`.local/town/chronicle/<expedition>/`, a summary plus the whole decoded record), turns it into the survivors' tale and the lessons on return, and keeps the ledger (`.local/town/lessons.json`).
 
