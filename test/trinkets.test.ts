@@ -44,8 +44,14 @@ describe("C69: one of a trinket per hero", () => {
   })
 
   test("the board warns when one hero is offered the same trinket twice", () => {
-    const sticky = '- title: "Stalwart Buckle to Dismas"\n  kind: idea\n  body: "A slot is free."\n'
-    expect(contradictions(sticky + sticky)).toContain("the same trinket is offered twice: Stalwart Buckle to Dismas")
-    expect(contradictions(sticky)).not.toContain("the same trinket is offered twice: Stalwart Buckle to Dismas")
+    const zone = "\n## Heirlooms and trinkets {wide}\n\n", sticky = '- title: "Stalwart Buckle to Dismas"\n  kind: idea\n  body: "A slot is free."\n'
+    expect(contradictions(zone + sticky + sticky)).toContain("the same trinket is offered twice: Stalwart Buckle to Dismas")
+    expect(contradictions(zone + sticky)).not.toContain("the same trinket is offered twice: Stalwart Buckle to Dismas")
+    // C109: a road lesson that says "to its side" is no trinket (week 26: the Collector "called ... to its side" set off a false warning)
+    const lesson = '\n## The coach is back {wide}\n\n- title: "The Collector, a wanderer: It called Collected Vestal to its side. Guernon was brought low."\n  kind: idea\n'
+    const four = '\n## The next expedition {wide}\n\n```board-decisions\n- q: "Take this party?"\n  context: "Front to back: 1. Herbert (Crusader, 0 stress)"\n  options:\n    - pick: "Yes"\n      effect: "x"\n    - pick: "No"\n      effect: "y"\n  lean: 0\n  lean_why: "z"\n```\n'
+    expect(contradictions(lesson + four).filter((c) => /not in the four|offered twice/.test(c))).toEqual([])
+    // and the check still bites inside the zone
+    expect(contradictions(four + zone + '- title: "Bleed Stone to Nobody"\n  kind: idea\n')).toContain("Bleed Stone goes to Nobody, who is not in the four")
   })
 })
