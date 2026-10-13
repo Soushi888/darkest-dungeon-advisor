@@ -20,25 +20,30 @@ export const HABIT_WORDS = {
 export interface PlanAnswers { expedition?: string; partyNames?: string[]; preferred?: string[] }
 
 /** The road the reader picked on the board, else the one I lean to (decision 1). */
-export function pickedRoad(a: Advice, answers: PlanAnswers): Party | undefined {
+type Ranked = Pick<Advice, "parties" | "best">
+export function pickedRoad(a: Ranked, answers: PlanAnswers): Party | undefined {
   return (answers.expedition && a.parties.find((p) => questLabel(p) === answers.expedition)) || a.best
 }
 /** Whether the reader's pick matched a road on offer this week. */
-export const roadWasPicked = (a: Advice, answers: PlanAnswers) => !!(answers.expedition && a.parties.some((p) => questLabel(p) === answers.expedition))
+export const roadWasPicked = (a: Ranked, answers: PlanAnswers) => !!(answers.expedition && a.parties.some((p) => questLabel(p) === answers.expedition))
 
 /** The four Soushi named in a note, seated for the road picked: four names that are all on the roster, or the note is not a party. */
-export async function ownParty(t: Town, a: Advice, answers: PlanAnswers): Promise<Party | undefined> {
+export async function ownParty(t: Town, a: Ranked, answers: PlanAnswers): Promise<Party | undefined> {
   const quest = pickedRoad(a, answers)?.quest
   if (!answers.partyNames?.length || !quest) return undefined
   const heroes = answers.partyNames.map((n) => t.heroes.find((h) => h.name.toLowerCase() === n.toLowerCase())).filter((h): h is HeroView => !!h)
   return heroes.length === 4 ? seatParty(heroes, quest) : undefined
 }
 
-/** The week's advice and the four it is built for: my reading of the Hamlet, the four Soushi named if he named four, and the road. */
+/** The week's advice and the four it is built for: my reading of the Hamlet, the four Soushi named if he named four, and the road.
+ *  C112: the advice is made for that one four, so every decision on the board follows the four the board sends. */
 export async function prepare(t: Town, answers: PlanAnswers): Promise<{ a: Advice; own?: Party; chosen?: Party; picked: boolean }> {
-  const a = await advise(t)
-  const own = await ownParty(t, a, answers)
-  return { a, own, chosen: own ?? pickedRoad(a, answers), picked: roadWasPicked(a, answers) }
+  let own: Party | undefined
+  const a = await advise(t, async (parties, best) => {
+    own = await ownParty(t, { parties, best }, answers)
+    return own ?? pickedRoad({ parties, best }, answers)
+  })
+  return { a, own, chosen: a.four, picked: roadWasPicked(a, answers) }
 }
 
 /** The heroes who joined within `weeks` (my habit, RULE.settleWeeks), never let go while they settle (decision 33). */
@@ -175,6 +180,9 @@ const HEAL = /medicine|reconstruction|grace|comfort|heal/i
 /** The week's plan: every decision the town board shows, in the order the gold is spent. */
 export function plan(t: Town, a: Advice, inp: PlanInputs): Plan {
   const chosen = inp.own ?? pickedRoad(a, inp.answers)
+  // C112: one four drives the whole plan; advice made for another four (my best beside a road or four the reader chose) would
+  // split the board between two parties, so it is refused: make it with prepare()
+  if (chosen !== a.four) throw new Error("the advice was made for another four than the plan's: make it with prepare()")
   const gold = t.wallet.gold ?? 0
   // C22: the road is paid for first; every spending lean below draws only on what is left after it
   const roadItems = road(t, chosen, inp.prices ?? new Map())

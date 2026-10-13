@@ -7,7 +7,7 @@ import { join } from "node:path"
 import { savingPlan, source } from "../src/voice/board.ts"
 import { coin } from "../src/voice/words.ts"
 import { questLabel } from "../src/world/town.ts"
-import { ownParty, plan } from "../src/caretaker/plan.ts"
+import { plan, prepare } from "../src/caretaker/plan.ts"
 import { advise } from "../src/caretaker/advise.ts"
 import { campingSkills, supplyPrices } from "../src/sources/game.ts"
 import { profileDir, root } from "../src/sources/paths.ts"
@@ -87,17 +87,18 @@ describe("C111: the board renders one plan", () => {
     let checked = 0, owned = 0, camped = 0, broke = 0
     for (const gold of [t0.wallet.gold ?? 0, 0, 600, 2500, 12000]) {
       const t = { ...t0, wallet: { ...t0.wallet, gold } }
-      const a = await advise(t)
+      const base = await advise(t)
       // a hero already placed this week (C90): the first relief card a dismissal does not claim, at its first place
-      const r0 = a.relief.find((r) => r.options.length && !a.dismiss.some((d) => d.hero.guid === r.hero.guid))
+      const r0 = base.relief.find((r) => r.options.length && !base.dismiss.some((d) => d.hero.guid === r.hero.guid))
       const placed = r0 ? new Map([[r0.hero.guid, r0.options[0]!.activity.name]]) : undefined
       // the reader's own four: the first four heroes on the roster, named in a note
       const names = t.heroes.slice(0, 4).map((h) => h.name)
       const newcomers = new Set(t.heroes.slice(-1).map((h) => h.guid))
-      const runs: { expedition?: string; own: boolean }[] = [{ own: false }, { own: true }, ...a.parties.map((p) => ({ expedition: questLabel(p), own: false }))]
+      const runs: { expedition?: string; own: boolean }[] = [{ own: false }, { own: true }, ...base.parties.map((p) => ({ expedition: questLabel(p), own: false }))]
       for (const { expedition, own: mine } of runs) {
         const answers = { ...(expedition ? { expedition } : {}), ...(mine ? { partyNames: names } : {}) }
-        const own = mine ? await ownParty(t, a, answers) : undefined
+        // C112: the advice is made for the four the board sends
+        const { a, own } = await prepare(t, answers)
         if (mine && !own) continue
         const p = plan(t, a, { answers, prices, camp, ...(own ? { own, placed, newcomers } : {}) })
         checked++
