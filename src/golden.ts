@@ -85,6 +85,12 @@ export async function pin(name: string, from = profileDir(), state = join(common
   return dir
 }
 
+/** Why accept must not run here: a worktree defaults to the main checkout's cases, which only the merge may rewrite, so outside the
+ *  main checkout accept asks for DD_GOLDEN to name the copy it writes. Undefined when it may run. */
+export function acceptRefusal(checkout: string, main: string, golden: string | undefined): string | undefined {
+  return checkout !== main && !golden ? `golden accept would rewrite the main checkout's cases from a worktree (${checkout}): set DD_GOLDEN to the copy to accept into` : undefined
+}
+
 /** The pinned cases, by name: a folder holding an expected board. */
 const caseNames = (base: string) => existsSync(base) ? readdirSync(base).filter((d) => existsSync(join(base, d, "expect", "town.md"))).sort() : []
 
@@ -92,6 +98,8 @@ const caseNames = (base: string) => existsSync(base) ? readdirSync(base).filter(
  *  what that build wrote: a file the build no longer writes leaves the expectation too. The live profile and the live state are
  *  never read; a case's profile and state are never written. */
 export async function accept(name?: string): Promise<string[]> {
+  const no = acceptRefusal(root, common(), process.env.DD_GOLDEN)
+  if (no) throw new Error(no)
   const base = goldenDir(), names = caseNames(base)
   if (name && !names.includes(name)) throw new Error(`no golden case named ${name} in ${base}`)
   const done: string[] = []
@@ -142,6 +150,8 @@ if (import.meta.main) {
     console.log(`${cases.length} case${cases.length > 1 ? "s" : ""}, ${drift.length ? `${drift.length} drifted` : "all identical"}`)
     process.exit(drift.length ? 1 : 0)
   } else if (cmd === "accept") {
+    const no = acceptRefusal(root, common(), process.env.DD_GOLDEN)
+    if (no) { console.error(no); process.exit(2) }
     const done = await accept(name)
     console.log(done.length ? `accepted ${done.join(", ")} in ${goldenDir()}` : "no golden case pinned: bun run golden pin <name>")
   } else console.log("bun run golden pin <name> [--upto=<page>] | bun run golden check | bun run golden accept [<name>]")

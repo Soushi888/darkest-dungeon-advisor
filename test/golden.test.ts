@@ -16,6 +16,21 @@ describe.skipIf(!has)("C108: the golden boards hold", () => {
   }, 120_000)
 })
 
+// a worktree that defaults to the main checkout's cases must never overwrite them: accept there asks for DD_GOLDEN
+describe("C108: golden accept stays out of the main checkout's cases from a worktree", () => {
+  test("accept is refused outside the main checkout unless DD_GOLDEN is set", async () => {
+    const { acceptRefusal } = await import("../src/golden.ts")
+    expect(acceptRefusal("/repo/.claude/worktrees/x", "/repo", undefined)).toContain("DD_GOLDEN")
+    expect(acceptRefusal("/repo/.claude/worktrees/x", "/repo", "/tmp/cases")).toBeUndefined()
+    expect(acceptRefusal("/repo", "/repo", undefined)).toBeUndefined()
+    // and the command itself, run from here: in a worktree with DD_GOLDEN unset it refuses before touching anything
+    const env = { ...process.env }; delete env.DD_GOLDEN
+    const r = Bun.spawnSync(["bun", "src/golden.ts", "accept"], { cwd: root, env })
+    const inWorktree = Bun.spawnSync(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], { cwd: root }).stdout.toString().trim() !== join(root, ".git")
+    if (inWorktree) { expect(r.exitCode).not.toBe(0); expect(r.stderr.toString() + r.stdout.toString()).toContain("DD_GOLDEN") }
+  })
+})
+
 // a step that changes the board on purpose takes its new expectation from each case's own profile and state, never the live ones
 describe.skipIf(!has)("C108: golden accept", () => {
   const files = (d: string, base = d): string[] => readdirSync(d).sort().flatMap((f) => statSync(join(d, f)).isDirectory() ? files(join(d, f), base) : [join(d, f).slice(base.length + 1)])
