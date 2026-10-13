@@ -22,4 +22,19 @@ describe("C79: the pack has room, or I say what to leave", () => {
     expect(trims({ food: 14, torch: 16, shovel: 3 }, r)).toEqual([{ key: "food", n: 2 }])
     expect(dropFirst({ food: 14, crest: 5, citrine: 3, ruby: 1, gold: 1750, "journal page 13": 1 }, r).map((d) => [d.key, d.perSlot])).toEqual([["citrine", 750], ["ruby", 1250], ["gold", 1750]])
   })
+
+  test("C95: once the quest is done, supplies go before loot, heirlooms never, and a purse gives only its last stack", async () => {
+    const r = await packRules()
+    const pack = { shovel: 2, holy_water: 1, crest: 16, jade: 4, gold: 2650 }
+    const before = dropFirst(pack, r).map((d) => d.key)
+    expect(before).not.toContain("shovel")
+    const after = dropFirst(pack, r, true)
+    const firstLoot = after.findIndex((d) => d.perSlot > 0)
+    expect(after[0]!.key).toBe("shovel")
+    expect(after.slice(firstLoot).every((d) => d.perSlot > 0)).toBe(true)
+    expect(after.map((d) => d.key)).not.toContain("crest")
+    const gold = after.find((d) => d.key === "gold")!
+    expect(gold.n).toBe(2650 % (r.stack.get("gold") ?? 1) || 2650)
+    expect(gold.n).toBeLessThan(2650)
+  })
 })

@@ -34,11 +34,19 @@ export function slotsOf(items: Record<string, number>, r: PackRules): number {
 // what keeps them alive and what the estate builds with; never offered to the floor for a gem
 const KEEP = new Set(["food", "torch", "shovel", "bandage", "antivenom", "medicinal_herbs", "holy_water", "laudanum", "skeleton_key", "dog_treats", "firewood", "crest", "bust", "portrait", "deed"])
 
-/** When the pack is full: the loot to leave behind first, the least gold per slot first, from the files' sell values. */
-export function dropFirst(items: Record<string, number>, r: PackRules): { key: string; n: number; worth: number; perSlot: number }[] {
+/** When the pack is full: what to leave behind first, one slot at a time, the least gold for the slot first, from the files' sell
+ *  values. The slot freed is a stack's last, so only what lies in it is named ("900 gold", never the whole purse). Once the quest
+ *  is done, the supplies that kept them alive on the way in go before any loot (C95, Soushi's pack on 2026-10-13: the board offered
+ *  1,325 gold a slot to the floor while two shovels and a holy water rode home), heirlooms always last. */
+export function dropFirst(items: Record<string, number>, r: PackRules, questDone = false): { key: string; n: number; worth: number; perSlot: number }[] {
+  const heir = new Set(["crest", "bust", "portrait", "deed"])
   // a quest item is what the road is for: never left behind (U39: the medicines of Stave off Sickness were offered at 0 gold)
-  return Object.entries(items).filter(([k, n]) => n > 0 && !KEEP.has(k) && !r.quest.has(k) && !/^journal/.test(k))
-    .map(([key, n]) => { const worth = key === "gold" ? n : n * (r.value.get(key) ?? 0), slots = Math.ceil(n / (r.stack.get(key) ?? 1)); return { key, n, worth, perSlot: Math.round(worth / slots) } })
+  return Object.entries(items).filter(([k, n]) => n > 0 && (!KEEP.has(k) || (questDone && !heir.has(k))) && !r.quest.has(k) && !/^journal/.test(k))
+    .map(([key, n]) => {
+      const stack = r.stack.get(key) ?? 1, last = n % stack || Math.min(n, stack), unit = key === "gold" ? 1 : r.value.get(key) ?? 0
+      const supply = KEEP.has(key)
+      return { key, n: last, worth: supply ? 0 : last * unit, perSlot: supply ? 0 : last * unit }
+    })
     .sort((a, b) => a.perSlot - b.perSlot)
 }
 

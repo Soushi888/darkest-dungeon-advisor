@@ -56,7 +56,7 @@ export async function nowText(p: Snap, raw: any, page: string, savedAt: number, 
   // C79: the pack's slots, and what to leave behind first when it fills, by the gold each slot is worth in the game's files
   const pk = await packRules()
   if (pk.slots) {
-    const used = slotsOf(p.supplies, pk), free = pk.slots - used, drop = dropFirst(p.supplies, pk)
+    const used = slotsOf(p.supplies, pk), free = pk.slots - used, drop = dropFirst(p.supplies, pk, !!q?.complete)
     out.push(`PACK ${used} of ${pk.slots} slots used, ${free} free${free <= 2 && drop.length ? `; if it fills, leave behind first: ${drop.slice(0, 4).map((d) => `${plain(d.key)} ${d.n} (${d.worth} gold, ${d.perSlot} a slot)`).join(", ")}` : ""}`)
   }
   // a journal page is a page of the story, with no price anywhere in the game's files: never loot, never counted in gold
