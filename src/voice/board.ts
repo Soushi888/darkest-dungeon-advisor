@@ -660,10 +660,12 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
   await Bun.write(ledgerFile, JSON.stringify(rl, null, 1))
   t.settling = settling(rl, t.week)
   const placed = placedThisWeek(t, start)
+  // what was done this week (the picks' checks, "This week so far") is read from the save itself, never from the planned view
+  const real = t
   t = planView(t, start)
   // my reading of the week, and a party Soushi named in a note, seated for the expedition he picked
   const { a, own, chosen, picked } = await prepare(t, answers)
-  const checks = reconcile(await loadPicks(outDir()), t)
+  const checks = reconcile(await loadPicks(outDir()), real)
   // what was proposed the week they left: kept per week, else the last proposal when it is that week's (#3)
   let sent: Proposal | undefined
   if (t.back) for (const f of [join(outDir(), "proposals", `week-${t.week - 1}.json`), join(outDir(), "proposal.json")]) {
@@ -672,7 +674,7 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
   }
   // what each heirloom came home at, per recorded trip (U22)
   const rates = Object.fromEntries(await Promise.all(["crest", "bust", "portrait", "deed"].map(async (k) => [k, await heirloomTrips(k)] as const)))
-  const { board, sources } = source(t, a, { foresight: !!opts.foresight, answers, own, checks, prices: await supplyPrices(), soFar: weekSoFar(t, start), placed, newcomers: newcomersThisWeek(t, start), tale, camp: await campingSkills(), sent, rates, pack: await packRules() })
+  const { board, sources } = source(t, a, { foresight: !!opts.foresight, answers, own, checks, prices: await supplyPrices(), soFar: weekSoFar(real, start), placed, newcomers: newcomersThisWeek(t, start), tale, camp: await campingSkills(), sent, rates, pack: await packRules() })
   // C38: every build is read back for advice that contradicts itself; the live session is told through coherence.json
   const clash = [...contradictions(board), ...(tale?.issues ?? [])]
   await Bun.write(join(outDir(), "coherence.json"), JSON.stringify({ week: t.week, contradictions: clash }, null, 1))
