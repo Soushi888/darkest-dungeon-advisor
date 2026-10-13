@@ -17,14 +17,20 @@ export const DOCTRINE = [
   "a true healer goes with the four",
   "the road is paid for from the coffers",
   "with no true healer, the shortest road",
+  "on a short road, up to two newcomers at level 0 ride along to learn",
   "then everything else I weigh: seats, skills, quirks, stress, the gold left",
 ] as const
 
+/** C98: the newcomers a four takes along to learn: level 0 heroes, at most RULE.learners, and only on a short road (Soushi, 2026-10-13:
+ *  "We should choose an expedition that will level up the level 0 of our roster"). */
+export const learners = (p: { quest: { length: number }; seats?: { hero: { level: number } }[] }) => p.quest.length === 1 ? Math.min(RULE.learners, (p.seats ?? []).filter((s) => s.hero.level === 0).length) : 0
+
 /** C91: compare two roads by DOCTRINE, rung by rung. */
-export function byDoctrine(a: Pick<Party, "healer" | "left" | "score" | "quest">, b: Pick<Party, "healer" | "left" | "score" | "quest">): number {
+export function byDoctrine(a: Pick<Party, "healer" | "left" | "score" | "quest"> & Partial<Pick<Party, "seats">>, b: Pick<Party, "healer" | "left" | "score" | "quest"> & Partial<Pick<Party, "seats">>): number {
   return Number(b.healer) - Number(a.healer)
     || Number((b.left ?? 0) >= 0) - Number((a.left ?? 0) >= 0)
     || (!a.healer && !b.healer ? a.quest.length - b.quest.length : 0)
+    || learners(b) - learners(a)
     || b.score - a.score
 }
 
@@ -71,6 +77,7 @@ export const RULE = {
   frontHp: 1.5, // RULE: per hit point above the four's average, at the front; rank 1 counts twice, rank 4 twice against (Soushi, 2026-10-11: "an occultist on front line? he is not really resistant")
   lessonHeal: 4, // RULE: a true healer's extra weight on a road where healing failed before (C42)
   learnHealMin: 2, // RULE: a heal worth a new lesson restores at least this much a cast; less is the useless kind (C93)
+  learners: 2, // RULE: newcomers at level 0 a short road takes along to learn (C98)
   settleWeeks: 3, // RULE: a hero who joined within this many weeks is never named for dismissal or as the one of a pair to let go (C92)
   noHealerPerStep: 50, // RULE: a four without a true healer takes the shortest road; this much against each step longer (C87, Soushi, 2026-10-13)
   youngRoster: 0.6, // RULE: when this share of the roster is level 1 or lower, the heirlooms go to the Stage Coach's seasoned recruits first (Soushi, 2026-10-11)
@@ -224,7 +231,10 @@ async function bestParty(pool: HeroView[], q: Quest): Promise<Party | undefined>
       if (new Set(order.map((h) => h.cls)).size < 4) score -= RULE.sameClass
       // C86: a four with a true healer always beats a four without, whatever else either is worth (Soushi, 2026-10-13, from the
       // road with Furnival at 4 health: "we need heal, our recruiting and seating strategy should not overlook that")
-      if (!best || (healer && !best.healer) || (healer === best.healer && score > best.score)) {
+      // C98: among fours alike in healing, the one that takes newcomers along on a short road
+      const learn = q.length === 1 ? Math.min(RULE.learners, order.filter((h) => h.level === 0).length) : 0
+      const bestLearn = best ? learners(best) : 0
+      if (!best || (healer && !best.healer) || (healer === best.healer && (learn > bestLearn || (learn === bestLearn && score > best.score)))) {
         best = {
           quest: q, score, healer, heal, stunner, notes: [], reach: [...reach].sort(), pair,
           seats: order.map((h, i) => ({ hero: h, rank: i + 1, skills: usable(h, i + 1), notes: fit.get(h.guid)!.notes, carry: kit(h, i + 1).map((s) => s.name) })),

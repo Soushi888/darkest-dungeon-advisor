@@ -131,3 +131,16 @@ describe("C97: the heirlooms aim at what they can build now", () => {
     else expect(card).toContain("seasoned recruits come first")
   })
 })
+
+describe("C98: newcomers learn on short roads", () => {
+  test("among roads alike in healing and purse, the short one taking level 0 heroes along comes first; never on a long road", async () => {
+    const { byDoctrine, learners } = await import("../src/advise.ts")
+    const seat = (level: number) => ({ hero: { level } })
+    const road = (length: number, levels: number[], score: number) => ({ healer: true, left: 10, score, quest: { length } as any, seats: levels.map(seat) as any })
+    expect([road(1, [1, 1, 1, 1], 99), road(1, [1, 1, 0, 0], 1)].sort(byDoctrine)[0]!.score).toBe(1)
+    expect(learners(road(2, [0, 0, 1, 1], 1))).toBe(0)
+    expect(learners(road(1, [0, 0, 0, 1], 1))).toBe(2)
+    // a healer still outranks newcomers
+    expect([{ ...road(1, [0, 0, 1, 1], 1), healer: false }, road(1, [1, 1, 1, 1], 1)].sort(byDoctrine)[0]!.healer).toBe(true)
+  })
+})
