@@ -62,6 +62,7 @@ src/sources/game.ts      the game's own data: quirks, class skills (reach, moves
 src/world/town.ts        the Hamlet as the save describes it, the knowledge boundary, the expedition just brought back
 src/world/reconcile.ts   the week's picks against the next Hamlet save: done, not yet, not as chosen
 src/world/quest.ts       what the road's quest asks and how far along it is
+src/world/week.ts        the week as it began: the week-start record, the roster ledger, who was placed or joined since, the view the four are chosen on
 
 # src/caretaker/: the Caretaker's judgement
 src/caretaker/advise.ts  the Caretaker's reading: relief, wards, party and its fighting shape, roster, purchases, trinkets, readiness, the road's provisions

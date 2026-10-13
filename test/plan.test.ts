@@ -47,7 +47,7 @@ describe("C111: the board renders one plan", () => {
   // readiness, road, campWorth...) taken from caretaker/ directly fails here; types are always allowed
   const ALLOWED: Record<string, string[]> = {
     "advise.ts": ["DOCTRINE"], // the words of my order
-    "plan.ts": ["plan", "farewellPlan", "prepare", "saving", "settling", "placedThisWeek", "newcomersThisWeek", "taleHealers"],
+    "plan.ts": ["plan", "farewellPlan", "prepare", "saving", "theWeek", "taleHealers"],
     "camp.ts": ["campTell"], // a camping skill in words
     "roles.ts": ["ROLE_WORDS"],
     "upkeep.ts": ["upkeepWords"],

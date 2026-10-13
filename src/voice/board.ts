@@ -13,7 +13,8 @@ import { copyFileSync, existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { homedir } from "node:os"
 import { DOCTRINE, type Advice, type Party } from "../caretaker/advise.ts"
-import { farewellPlan, newcomersThisWeek, placedThisWeek, plan, prepare, saving, settling, taleHealers, type Mix, type RosterLedger, type Saving } from "../caretaker/plan.ts"
+import { farewellPlan, plan, prepare, saving, taleHealers, theWeek, type Mix, type Saving } from "../caretaker/plan.ts"
+import { weekStartOf, type RosterLedger, type WeekStart } from "../world/week.ts"
 import { campingSkills, supplyPrices, type CampSkill, nameOf } from "../sources/game.ts"
 import { install, outDir, root } from "../sources/paths.ts"
 import { DIFFICULTY, LENGTH, questLabel, type HeroView, type Town, type Upgrade } from "../world/town.ts"
@@ -83,33 +84,6 @@ export async function readAnswers(): Promise<Answers> {
   return a
 }
 
-/** The Hamlet as the week found it, kept on the first board of each week, so later boards can say what was done since (C26). */
-export interface WeekStart { week: number; heroes: { guid: number; name: string; busy?: string }[]; bought: string[]; gold: number | null; purchases?: string[] }
-
-/** C92: the roster ledger, the week each hero joined, kept across weeks so a recruit is not let go while they settle. A hero first
- *  seen this week who was not on the roster when the week began joined this week; anyone else first seen counts as long settled. */
-export function rosterLedger(prev: RosterLedger | undefined, t: Town, start: WeekStart | undefined): RosterLedger {
-  const joined = { ...(prev?.joined ?? {}) }
-  const atStart = start && start.week === t.week ? new Set(start.heroes.map((h) => h.guid)) : undefined
-  for (const h of t.heroes) if (!(String(h.guid) in joined)) joined[String(h.guid)] = atStart && !atStart.has(h.guid) ? t.week : 0
-  return { joined }
-}
-
-/** The Hamlet as the week found it (C90): heroes placed in a building since the week began are free again, and their seats open.
- *  A week-start record without places (written before C90) counts nobody as placed when the week began. */
-export function planView(t: Town, start: WeekStart | undefined): Town {
-  if (!start || start.week !== t.week) return t
-  const atStart = new Map(start.heroes.map((h) => [h.guid, h.busy ?? ""]))
-  const placed = t.heroes.filter((h) => h.busy && atStart.has(h.guid) && !atStart.get(h.guid))
-  if (!placed.length) return t
-  const freed = new Set(placed.map((h) => h.guid))
-  return {
-    ...t,
-    heroes: t.heroes.map((h) => (freed.has(h.guid) ? { ...h, busy: "" } : h)),
-    activities: t.activities.map((x) => ({ ...x, used: x.used - placed.filter((h) => h.busy === x.name).length })),
-  }
-}
-
 /** What the saves show was done this week, whether or not it was ever sent from the board (C26). */
 export function weekSoFar(t: Town, start: WeekStart | undefined): string[] {
   const out: string[] = []
@@ -139,7 +113,7 @@ export function weekSoFar(t: Town, start: WeekStart | undefined): string[] {
 }
 
 export interface Tale { snaps: number; beats: Beat[]; well: string[]; wrong: string[]; lessons: Lesson[]; debrief?: Debrief; issues?: string[]; taught?: string[] }
-export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: Answers; own?: Party; checks?: Check[]; prices?: Map<string, number>; soFar?: string[]; newcomers?: Set<number>; placed?: Map<number, string>; tale?: Tale; camp?: Map<string, CampSkill>; sent?: Proposal; rates?: Record<string, { trips: number; got: number }>; pack?: PackRules }): { board: string; sources: string } {
+export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: Answers; own?: Party; checks?: Check[]; prices?: Map<string, number>; soFar?: string[]; real?: Town; newcomers?: Set<number>; placed?: Map<number, string>; tale?: Tale; camp?: Map<string, CampSkill>; sent?: Proposal; rates?: Record<string, { trips: number; got: number }>; pack?: PackRules }): { board: string; sources: string } {
   const L: string[] = []
   // C111: every decision below is the plan's; this function only words it
   const P = plan(t, a, opts)
@@ -375,7 +349,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     }
   }
   if (waiting.length && tw) {
-    const inWard = t.heroes.filter((h) => h.busy === tw.name).map((h) => h.name)
+    const inWard = P.treatment!.inWard
     L.push("```board-stickies")
     L.push(`- title: ${y(`The ${tw.name} is full this week${inWard.length ? ` (${inWard.join(", ")})` : ""}`)}`, "  kind: model", `  body: ${y(`Next in line, by my habit: ${waiting.map((w) => `${w.hero.name}'s ${w.quirk.name} (${w.why}${w.quirk.locked ? "; it has set in" : ""})`).join("; ")}.`)}`)
     L.push("```", "")
@@ -649,20 +623,17 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
   const wsFile = Bun.file(join(outDir(), "week-start.json"))
   let start = (await wsFile.exists()) ? ((await wsFile.json()) as WeekStart) : undefined
   if (!start || start.week !== t.week) {
-    start = { week: t.week, heroes: t.heroes.map((h) => ({ guid: h.guid, name: h.name, busy: h.busy })), bought: [...t.bought], gold: t.wallet.gold ?? 0, purchases: t.purchases.map((p) => `${p.guid}|${p.key}`) }
+    start = weekStartOf(t)
     await Bun.write(wsFile, JSON.stringify(start, null, 1))
   }
-  // C90: the week is advised from the Hamlet as the week found it, so following a pick never moves the others. A hero placed in a
-  // building since the week began still counts as free to the plan, and their seat as open (Soushi, 2026-10-13: "ensure the
-  // proposed strategies are coherent and while I apply it it doesn't break the recommendations")
+  // C90: the week is advised from the Hamlet as the week found it, so following a pick never moves the others; the seats, the
+  // beds and the gold handed out, and what was done (the picks' checks, "This week so far"), are the save's (Soushi, 2026-10-13:
+  // "ensure the proposed strategies are coherent and while I apply it it doesn't break the recommendations")
   const ledgerFile = Bun.file(join(outDir(), "roster-ledger.json"))
-  const rl = rosterLedger((await ledgerFile.exists()) ? ((await ledgerFile.json()) as RosterLedger) : undefined, t, start)
-  await Bun.write(ledgerFile, JSON.stringify(rl, null, 1))
-  t.settling = settling(rl, t.week)
-  const placed = placedThisWeek(t, start)
-  // what was done this week (the picks' checks, "This week so far") is read from the save itself, never from the planned view
-  const real = t
-  t = planView(t, start)
+  const week = theWeek(t, start, (await ledgerFile.exists()) ? ((await ledgerFile.json()) as RosterLedger) : undefined)
+  await Bun.write(ledgerFile, JSON.stringify(week.ledger, null, 1))
+  const { real, placed, newcomers } = week
+  t = week.planned
   // my reading of the week, and a party Soushi named in a note, seated for the expedition he picked
   const { a, own, chosen, picked } = await prepare(t, answers)
   const checks = reconcile(await loadPicks(outDir()), real)
@@ -674,7 +645,7 @@ export async function buildBoard(t: Town, opts: { foresight?: boolean } = {}): P
   }
   // what each heirloom came home at, per recorded trip (U22)
   const rates = Object.fromEntries(await Promise.all(["crest", "bust", "portrait", "deed"].map(async (k) => [k, await heirloomTrips(k)] as const)))
-  const { board, sources } = source(t, a, { foresight: !!opts.foresight, answers, own, checks, prices: await supplyPrices(), soFar: weekSoFar(real, start), placed, newcomers: newcomersThisWeek(t, start), tale, camp: await campingSkills(), sent, rates, pack: await packRules() })
+  const { board, sources } = source(t, a, { foresight: !!opts.foresight, answers, own, checks, prices: await supplyPrices(), soFar: weekSoFar(real, start), real, placed, newcomers, tale, camp: await campingSkills(), sent, rates, pack: await packRules() })
   // C38: every build is read back for advice that contradicts itself; the live session is told through coherence.json
   const clash = [...contradictions(board), ...(tale?.issues ?? [])]
   await Bun.write(join(outDir(), "coherence.json"), JSON.stringify({ week: t.week, contradictions: clash }, null, 1))

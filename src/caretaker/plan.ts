@@ -9,6 +9,7 @@ import { upkeep, type UpItem, type UpLine } from "./upkeep.ts"
 import { untried } from "../road/chronicle.ts"
 import { heroClass, type CampSkill, type Cost } from "../sources/game.ts"
 import { questLabel, type Activity, type HeroView, type Town, type Upgrade } from "../world/town.ts"
+import { newcomersThisWeek, placedThisWeek, planView, rosterLedger, type RosterLedger, type WeekStart } from "../world/week.ts"
 
 /** The habit figures the board's words quote ("anyone at 45 stress or more rests"); the decisions that use them are made here. */
 export const HABIT_WORDS = {
@@ -40,19 +41,17 @@ export async function prepare(t: Town, answers: PlanAnswers): Promise<{ a: Advic
   return { a, own, chosen: own ?? pickedRoad(a, answers), picked: roadWasPicked(a, answers) }
 }
 
-/** C92: the roster ledger, the week each hero joined. */
-export interface RosterLedger { joined: Record<string, number> }
 /** The heroes who joined within `weeks` (my habit, RULE.settleWeeks), never let go while they settle (decision 33). */
 export const settling = (l: RosterLedger, week: number, weeks: number = RULE.settleWeeks) => new Set(Object.entries(l.joined).filter(([, w]) => w > 0 && week - w < weeks).map(([g]) => Number(g)))
 
-type Start = { week: number; heroes: { guid: number; busy?: string }[] } | undefined
-/** C90: the heroes placed in a building since the week began, and where (decision 34). */
-export function placedThisWeek(t: Town, start: Start): Map<number, string> {
-  return new Map(t.heroes.filter((h) => h.busy && start?.week === t.week && start.heroes.some((x) => x.guid === h.guid && !x.busy)).map((h) => [h.guid, h.busy] as const))
-}
-/** The heroes who joined the roster since the week began (decision 35). */
-export function newcomersThisWeek(t: Town, start: Start): Set<number> | undefined {
-  return start && start.week === t.week ? new Set(t.heroes.filter((h) => !start.heroes.some((x) => x.guid === h.guid)).map((h) => h.guid)) : undefined
+/** The week the plan is made for (C90, C92): the save as it stands (`real`, for what was done and for the seats, the beds and the
+ *  gold), the Hamlet as the week found it (`planned`, for choosing the four, so following one pick never moves the others), the
+ *  heroes placed since the week began (their seats already paid), the newcomers, and the roster ledger with who still settles. */
+export interface Week { real: Town; planned: Town; placed: Map<number, string>; newcomers?: Set<number>; ledger: RosterLedger }
+export function theWeek(t: Town, start: WeekStart | undefined, prevLedger: RosterLedger | undefined): Week {
+  const ledger = rosterLedger(prevLedger, t, start)
+  const real: Town = { ...t, settling: settling(ledger, t.week) }
+  return { real, planned: planView(real, start), placed: placedThisWeek(real, start), newcomers: newcomersThisWeek(real, start), ledger }
 }
 
 /** The heroes of the road just walked whose learned skills hold a true heal, by my habit (RULE.realHeal). */
@@ -76,7 +75,7 @@ export interface WardPlan { ward: Activity; freeBeds: number; cards: WardCard[] 
 
 export type TreatWhy = "paid" | "inParty" | "seat" | "broke" | "worth"
 export interface TreatCard { treat: Treat; lean: number; why: TreatWhy; filedUnder: string }
-export interface TreatmentPlan { ward: Activity; freeSeats: number; cards: TreatCard[]; waiting: Treat[] }
+export interface TreatmentPlan { ward: Activity; freeSeats: number; cards: TreatCard[]; waiting: Treat[]; inWard: string[] }
 
 export type HealerWhy = { kind: "busy"; where: string } | { kind: "afflicted" } | { kind: "ill" } | { kind: "worn"; stress: number } | undefined
 export interface BackPlan {
@@ -163,6 +162,8 @@ export interface Plan {
 }
 
 export interface PlanInputs {
+  /** the save as it stands, when the plan is made on the Hamlet as the week found it (C90): its seats and beds are the ones handed out */
+  real?: Town
   answers: PlanAnswers; own?: Party; prices?: Map<string, number>; placed?: Map<number, string>; newcomers?: Set<number>
   camp?: Map<string, CampSkill>; pack?: PackRules; rates?: Record<string, { trips: number; got: number }>
 }
@@ -221,67 +222,82 @@ export function plan(t: Town, a: Advice, inp: PlanInputs): Plan {
     learnPrice: new Map((chosen?.seats ?? []).filter((s) => s.learn).map((s) => [s.hero.name, Math.round(s.learn!.gold * (1 - t.skillDiscount))])),
   }
 
+  // C90: the four are chosen on the Hamlet as the week found it, but the seats and the beds handed out are the save's. A hero
+  // placed since the week began holds the seat they took (the save counts it as used), paid for already, before anyone else is
+  // leaned anywhere; nobody else is leaned into it, and they are never charged again
+  const live = inp.real ?? t, placed = inp.placed ?? new Map<number, string>()
+
   // relief: each lean takes its seat, so no two cards lean to the same last seat (U11)
-  const seatsLeft = new Map(t.activities.map((x) => [x.activity, x.slots - x.used]))
+  const seatsLeft = new Map(live.activities.map((x) => [x.activity, x.slots - x.used]))
   const reliefUsed: string[] = [] // C97: the relief activities leaned this week, for the heirlooms to improve
   const relief: ReliefCard[] = []
   for (const r of a.relief) {
     if (!r.options.length) continue
     if (a.dismiss.some((d) => d.hero.guid === r.hero.guid)) { relief.push({ relief: r, lean: r.options.length, why: { kind: "dismiss" }, filedUnder: "" }); continue }
-    // C90: a hero already placed this week has been paid for out of the coffers: lean where they are, and charge nothing again
-    const paid = inp.placed?.get(r.hero.guid)
-    const best = (paid ? r.options.find((o) => o.activity.name === paid) : undefined) ?? r.options.find((o) => o.activity.cost <= left && (seatsLeft.get(o.activity.activity) ?? 0) > 0)
+    // a hero already placed this week has been paid for out of the coffers: lean where they are (or to staying there, when it is
+    // not a place of relief), and charge nothing again
+    const paid = placed.get(r.hero.guid)
+    if (paid) {
+      const at = r.options.findIndex((o) => o.activity.name === paid)
+      if (at >= 0) reliefUsed.push(paid)
+      relief.push({ relief: r, lean: at >= 0 ? at : r.options.length, why: { kind: "paid", place: paid }, filedUnder: at >= 0 ? r.options[at]!.activity.buildingName : "" })
+      continue
+    }
+    const best = r.options.find((o) => o.activity.cost <= left && (seatsLeft.get(o.activity.activity) ?? 0) > 0)
     const taken = r.options.filter((o) => o.activity.cost <= left && !((seatsLeft.get(o.activity.activity) ?? 0) > 0))
     if (best) {
-      if (best.activity.name !== paid) spend("relief", best.activity.cost, r.hero.name)
+      spend("relief", best.activity.cost, r.hero.name)
       reliefUsed.push(best.activity.name)
       seatsLeft.set(best.activity.activity, (seatsLeft.get(best.activity.activity) ?? 1) - 1)
-      relief.push({ relief: r, lean: r.options.indexOf(best), why: best.activity.name === paid ? { kind: "paid", place: paid } : { kind: "cheapest", note: best.note }, filedUnder: best.activity.buildingName })
+      relief.push({ relief: r, lean: r.options.indexOf(best), why: { kind: "cheapest", note: best.note }, filedUnder: best.activity.buildingName })
     } else if (taken.length) relief.push({ relief: r, lean: r.options.length, why: { kind: "taken", places: taken.map((o) => o.activity.name) }, filedUnder: "" })
     else relief.push({ relief: r, lean: r.options.length, why: { kind: "broke" }, filedUnder: "" })
   }
 
   // the Medical Ward: the free beds go to the most experienced first; C86: an ill true healer takes the first bed
-  const wardAct = t.activities.find((x) => x.activity === "disease_treatment")
+  const wardAct = live.activities.find((x) => x.activity === "disease_treatment")
   let ward: WardPlan | undefined
   if (wardAct) {
     let beds = wardAct.slots - wardAct.used
     const cards: WardCard[] = []
     for (const h of [...a.disease].sort((x, z) => Number(a.trueHealer.has(z.guid)) - Number(a.trueHealer.has(x.guid)) || z.level - x.level || z.xp - x.xp)) {
+      // C90: placed in the ward since the week began, in a bed the save already counts: kept there, at no further charge
+      if (placed.get(h.guid) === wardAct.name) { cards.push({ hero: h, lean: 0, why: "paid", filedUnder: wardAct.buildingName }); continue }
       // C89: a hero I seat in this week's four goes on the road, not to the ward
       const going = !!chosen?.seats.some((x) => x.hero.guid === h.guid)
       const gets = !going && beds > 0
       if (gets) beds--
-      const there = inp.placed?.get(h.guid) === wardAct.name
-      const purse = wardAct.cost <= left || there
+      const purse = wardAct.cost <= left
       const lean = !going && gets && h.level >= 1 && purse ? 0 : 1
-      if (lean === 0 && !there) spend("ward", wardAct.cost, h.name)
-      const why: WardWhy = there ? "paid" : going ? "going" : !gets ? "bed" : h.level < 1 ? "green" : !purse ? "broke" : "worth"
+      if (lean === 0) spend("ward", wardAct.cost, h.name)
+      const why: WardWhy = going ? "going" : !gets ? "bed" : h.level < 1 ? "green" : !purse ? "broke" : "worth"
       cards.push({ hero: h, lean, why, filedUnder: lean === 0 ? wardAct.buildingName : "" })
     }
     ward = { ward: wardAct, freeBeds: wardAct.slots - wardAct.used, cards }
   }
 
   // the Treatment Ward (C25): one quirk per hero, by my habit; seats to the party first, then the most experienced
-  const tw = t.activities.find((x) => x.activity === "treatment")
+  const tw = live.activities.find((x) => x.activity === "treatment")
   let treatment: TreatmentPlan | undefined
   if (tw) {
     let seats = tw.slots - tw.used
     const cards: TreatCard[] = [], waiting: Treat[] = []
-    for (const tr of a.treat) {
+    // C90: a hero placed in the ward since the week began keeps the seat the save counts, paid for, ahead of the line
+    const there = (tr: Treat) => placed.get(tr.hero.guid) === tw.name
+    for (const tr of a.treat.filter(there)) cards.push({ treat: tr, lean: 0, why: "paid", filedUnder: tw.buildingName })
+    for (const tr of a.treat.filter((x) => !there(x))) {
       // a card only for a seat that is free; the rest wait in line
       if (seats <= 0) { waiting.push(tr); continue }
       const gets = seats > 0
       if (gets) seats--
-      const there = inp.placed?.get(tr.hero.guid) === tw.name
-      const purse = tr.cost <= left || there
+      const purse = tr.cost <= left
       // a hero in the ward cannot board the coach: never lean on treating one of the four I would send (Soushi, 2026-10-10)
       const lean = gets && purse && !tr.inParty ? 0 : 1
-      if (lean === 0 && !there) spend("treatment", tr.cost, tr.hero.name)
-      const why: TreatWhy = there ? "paid" : tr.inParty ? "inParty" : !gets ? "seat" : !purse ? "broke" : "worth"
+      if (lean === 0) spend("treatment", tr.cost, tr.hero.name)
+      const why: TreatWhy = tr.inParty ? "inParty" : !gets ? "seat" : !purse ? "broke" : "worth"
       cards.push({ treat: tr, lean, why, filedUnder: lean === 0 ? tw.buildingName : "" })
     }
-    treatment = { ward: tw, freeSeats: tw.slots - tw.used, cards, waiting }
+    treatment = { ward: tw, freeSeats: tw.slots - tw.used, cards, waiting, inWard: live.heroes.filter((h) => h.busy === tw.name).map((h) => h.name) }
   }
 
   // provisions: firewood for a road with a camp; C79: the pack's slots against what stays free

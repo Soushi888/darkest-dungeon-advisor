@@ -45,3 +45,64 @@ describe.skipIf(!has)("B1: what was done is read from the save, not from the pla
     expect(md).toMatch(new RegExp(`In the buildings: [^"]*${hero.name} at the ${act.name}`))
   }, 60_000)
 })
+
+/** A card of the built board by its question: its options in order, the option it leans to, and why. */
+function card(md: string, q: string): { options: string[]; lean: string | undefined; why: string } | undefined {
+  const c = md.split(/\n- q: /).find((x) => x.startsWith(JSON.stringify(q)))
+  if (!c) return undefined
+  const options = [...c.matchAll(/^\s+- pick: (".*")$/gm)].map((m) => JSON.parse(m[1]!) as string)
+  const lean = Number(c.match(/^\s+lean: (\d+)$/m)?.[1])
+  return { options, lean: options[lean] ?? (lean === options.length ? "(none)" : undefined), why: JSON.parse(c.match(/^\s+lean_why: (".*")$/m)?.[1] ?? '""') }
+}
+
+describe.skipIf(!has)("B4: a hero placed this week keeps their seat, and the four are chosen as the week began", () => {
+  test("C90: placed heroes hold their seat and bed at no charge; nobody else is leaned to it, and the four do not move", async () => {
+    const { advise } = await import("../src/caretaker/advise.ts")
+    const t = await town(await readSave())
+    const a = await advise(t)
+    // two heroes the Hamlet would relieve in the same place, the later one placed there since the week began
+    const rs = a.relief.filter((r) => r.options.length && !a.dismiss.some((d) => d.hero.guid === r.hero.guid))
+    const pair = rs.flatMap((r1, i) => rs.slice(i + 1).flatMap((r2) => r1.options.filter((o) => r2.options.some((x) => x.activity.name === o.activity.name)).map((o) => ({ r1, r2, act: o.activity }))))[0]
+    const tw = t.activities.find((x) => x.activity === "treatment"), mw = t.activities.find((x) => x.activity === "disease_treatment")
+    // a hero of the four placed in the Treatment Ward, an ill hero placed in the Medical Ward
+    const treated = a.treat.find((x) => x.inParty) ?? a.treat.at(-1), ill = a.disease.at(-1)
+    expect(pair ?? treated ?? ill).toBeDefined()
+    const place = new Map<number, string>()
+    if (pair) place.set(pair.r2.hero.guid, pair.act.name)
+    if (treated && tw && tw.slots > tw.used && !place.has(treated.hero.guid)) place.set(treated.hero.guid, tw.name)
+    if (ill && mw && mw.slots > mw.used && !place.has(ill.guid)) place.set(ill.guid, mw.name)
+    // the save once they are placed: each place they took is now full
+    const real: Town = {
+      ...t,
+      heroes: t.heroes.map((h) => (place.has(h.guid) ? { ...h, busy: place.get(h.guid)! } : h)),
+      activities: t.activities.map((x) => { const n = [...place.values()].filter((p) => p === x.name).length; return n ? { ...x, used: x.used + n, slots: x.used + n } : x }),
+    }
+    const start = { week: t.week, heroes: t.heroes.map((h) => ({ guid: h.guid, name: h.name, busy: h.busy })), bought: [...t.bought], gold: t.wallet.gold ?? 0 }
+    const md = await buildIn(join(root, ".dd-runtime", "test-week-b4"), real, start)
+    const four = (await Bun.file(join(root, ".dd-runtime", "test-week-b4", "proposal.json")).json()).party
+    const paid = (p: string) => `already there this week, and paid for: the ${p} keeps them.`
+    if (pair) {
+      const mine = card(md, `Where does ${pair.r2.hero.name} go?`)!, theirs = card(md, `Where does ${pair.r1.hero.name} go?`)!
+      expect(mine.lean).toBe(pair.act.name)
+      expect(mine.why).toBe(paid(pair.act.name))
+      // the seat is the placed hero's: the earlier hero is never leaned into it
+      expect(theirs.lean).not.toBe(pair.act.name)
+    }
+    if (treated && place.get(treated.hero.guid) === tw?.name) {
+      const c = card(md, `Treat ${treated.hero.name}'s ${treated.quirk.name}?`)!
+      expect(c.lean).toBe(tw!.name)
+      expect(c.why).toBe(paid(tw!.name))
+      // the ward has no seat left: no other card leans to it
+      const others = md.split(/\n- q: /).filter((x) => x.startsWith('"Treat ') && !x.startsWith(`"Treat ${treated.hero.name}'s `))
+      for (const o of others) expect(o).not.toMatch(new RegExp(`- pick: "${tw!.name}"[\\s\\S]*\\n  lean: 0\\n`))
+    }
+    if (ill && place.get(ill.guid) === mw?.name) {
+      const c = card(md, `Treat ${ill.name}'s ${ill.quirks.filter((q) => q.disease).map((q) => q.name).join(", ")}?`)!
+      expect(c.lean).toBe("Medical Ward")
+      expect(c.why).toBe(paid(mw!.name))
+    }
+    // C90: the four are the ones the week began with
+    await buildIn(join(root, ".dd-runtime", "test-week-b4-start"), t, start)
+    expect(four).toEqual((await Bun.file(join(root, ".dd-runtime", "test-week-b4-start", "proposal.json")).json()).party)
+  }, 60_000)
+})
