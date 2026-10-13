@@ -8,8 +8,7 @@ import { asPack, slotsOf, trims, type PackRules } from "./pack.ts"
 import { upkeep, type UpItem, type UpLine } from "./upkeep.ts"
 import { untried } from "../road/chronicle.ts"
 import { heroClass, type CampSkill, type Cost } from "../sources/game.ts"
-import type { Activity, HeroView, Town, Upgrade } from "../world/town.ts"
-import { questLabel } from "../voice/words.ts"
+import { questLabel, type Activity, type HeroView, type Town, type Upgrade } from "../world/town.ts"
 
 /** The habit figures the board's words quote ("anyone at 45 stress or more rests"); the decisions that use them are made here. */
 export const HABIT_WORDS = {

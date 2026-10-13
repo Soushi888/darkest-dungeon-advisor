@@ -2,7 +2,7 @@
 // compiled page. One fixed file name, so the picks a reader makes survive every rebuild of the board.
 // The board speaks only as the Caretaker, in the Hamlet's own words (C13): no file, field or save is named on it.
 // Where each figure comes from goes to sources.md beside it (C14).
-import { coin, questLabel } from "./words.ts"
+import { coin } from "./words.ts"
 import { teachings } from "../road/teach.ts"
 import { campTell } from "../caretaker/camp.ts"
 import { ROLE_WORDS } from "../caretaker/roles.ts"
@@ -13,13 +13,10 @@ import { copyFileSync, existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { homedir } from "node:os"
 import { DOCTRINE, type Advice, type Party } from "../caretaker/advise.ts"
-export type { RoadItem } from "../caretaker/advise.ts"
 import { farewellPlan, newcomersThisWeek, placedThisWeek, plan, prepare, saving, settling, taleHealers, type Mix, type RosterLedger, type Saving } from "../caretaker/plan.ts"
-export { questLabel } from "./words.ts"
-export { settling, type RosterLedger } from "../caretaker/plan.ts"
 import { campingSkills, supplyPrices, type CampSkill, nameOf } from "../sources/game.ts"
 import { install, outDir, root } from "../sources/paths.ts"
-import { DIFFICULTY, LENGTH, type HeroView, type Town, type Upgrade } from "../world/town.ts"
+import { DIFFICULTY, LENGTH, questLabel, type HeroView, type Town, type Upgrade } from "../world/town.ts"
 import { buildSkin } from "./skin.ts"
 import { loadPicks, reconcile, type Check } from "../world/reconcile.ts"
 import { contradictions } from "./coherence.ts"
@@ -343,9 +340,9 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
     // each card is filed under the building the plan leans it to (decision 15)
     filed.push({ at, place: filedUnder })
   }
-  const ward = P.ward?.ward
+  // a card exists only where the plan found the ward, so each card carries it
   for (const { hero: h, lean, why, filedUnder } of P.ward?.cards ?? []) {
-    if (!ward) continue
+    const ward = P.ward!.ward
     const at = cards.length
     const ill = h.quirks.filter((q) => q.disease).map((q) => q.name).join(", ")
     cards.push(`- q: ${y(`Treat ${h.name}'s ${ill}?`)}`, `  image: ${y(portrait(h))}`)
@@ -359,7 +356,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
   const tw = P.treatment?.ward
   const waiting = P.treatment?.waiting ?? []
   for (const { treat: tr, lean, why, filedUnder } of P.treatment?.cards ?? []) {
-    if (!tw) break
+    const tw = P.treatment!.ward
     filed.push({ at: cards.length, place: filedUnder })
     cards.push(`- q: ${y(`Treat ${tr.hero.name}'s ${tr.quirk.name}?`)}`, `  image: ${y(portrait(tr.hero))}`)
     cards.push(`  context: ${y(`${tr.hero.name}, ${tr.hero.clsName} level ${tr.hero.level}${tr.inParty ? ", in the party I would send" : ""}. ${tr.quirk.name}${tr.quirk.description ? `: ${tr.quirk.description}` : "."}${tr.quirk.locked ? " It has set in, and the ward asks more for it." : ""} The ${tw.name} has ${tw.slots} seat${tw.slots === 1 ? "" : "s"}, ${P.treatment!.freeSeats} free this week.`)}`, "  options:")

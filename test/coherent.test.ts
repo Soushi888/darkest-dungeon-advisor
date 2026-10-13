@@ -85,7 +85,8 @@ describe("C91, C92: an order of priorities, and a roster that remembers who join
   })
 
   test("C92: a hero who joined within the settling weeks is kept from every dismissal", async () => {
-    const { rosterLedger, settling } = await import("../src/voice/board.ts")
+    const { rosterLedger } = await import("../src/voice/board.ts")
+    const { settling } = await import("../src/caretaker/plan.ts")
     const t = await town(await readSave())
     const [a, b] = t.heroes
     const start = { week: t.week, heroes: t.heroes.filter((h) => h.guid !== b!.guid).map((h) => ({ guid: h.guid, name: h.name })), bought: [], gold: 0 }
