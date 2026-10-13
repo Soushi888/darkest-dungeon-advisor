@@ -53,6 +53,8 @@ export function contradictions(md: string): string[] {
     const pick = leaned(c)
     if (!who || !pick || !going(who)) continue
     if (/^(Leave them be|Not this week|Keep)$/.test(pick)) continue
+    // a hero of the four already in that building this week, which the party card names as it leans away from this four
+    if (party && leaned(party) !== party.picks[0]?.pick && party.why.includes(`${who} is in the ${pick} this week`)) continue
     found.push(`${who} is in the four, and also leaned to "${pick}"`)
   }
 

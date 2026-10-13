@@ -148,6 +148,15 @@ describe.skipIf(!has)("B4: a hero placed this week keeps their seat, and the fou
       expect(c.lean).toBe("Medical Ward")
       expect(c.why).toBe(paid(mw!.name))
     }
+    // review 1: a hero of the four who is in a building this week is named on "Take this party?", which then leans No, and the
+    // board agrees with itself
+    const busyFour = real.heroes.filter((h) => place.has(h.guid) && four.includes(h.guid))
+    expect(busyFour.length).toBeGreaterThan(0)
+    const party = card(md, md.split(/\n- q: /).find((x) => x.startsWith('"Take this party'))!.match(/^"(.*?)"/)![1]!)!
+    expect(party.lean).toBe("No, I choose my own")
+    for (const h of busyFour) expect(party.why).toContain(`${h.name} is in the ${h.busy} this week`)
+    const { contradictions } = await import("../src/voice/coherence.ts")
+    expect(contradictions(md)).toEqual([])
     // C90: the four are the ones the week began with
     await buildIn(join(root, ".dd-runtime", "test-week-b4-start"), t, start)
     expect(four).toEqual((await Bun.file(join(root, ".dd-runtime", "test-week-b4-start", "proposal.json")).json()).party)

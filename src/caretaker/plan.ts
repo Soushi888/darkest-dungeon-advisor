@@ -100,7 +100,7 @@ export interface ExpeditionPlan {
   greenKeptShort: boolean
   /** B6: card 2 leans to the four only when the coffers pay for the road and the four can bear it (doctrine rungs 2 and 3) */
   partyLean: number
-  partyWhy: { unpaid: boolean; beyond: boolean; meanLevel: number; danger: number }
+  partyWhy: { unpaid: boolean; beyond: boolean; meanLevel: number; danger: number; busy: { name: string; where: string }[] }
   mix: Mix
   learnPrice: Map<string, number>
 }
@@ -222,6 +222,10 @@ export function plan(t: Town, a: Advice, inp: PlanInputs): Plan {
   // C28: how ready the party is, with the board's reserve
   const ready = chosen ? readiness(t, chosen, reserve) : undefined
 
+  // review 1: a hero of the four who is in a building this week in the save (the four are chosen as the week began, C90) cannot
+  // board the coach until they are out
+  const busyFour = (chosen?.seats ?? []).map((s) => ({ name: s.hero.name, where: (inp.real ?? t).heroes.find((h) => h.guid === s.hero.guid)?.busy ?? "" })).filter((x) => x.where)
+
   // the expedition
   const leanIdx = chosen ? a.parties.indexOf(chosen) : 0
   const expedition: ExpeditionPlan = {
@@ -231,8 +235,8 @@ export function plan(t: Town, a: Advice, inp: PlanInputs): Plan {
     learners: chosen && learners(chosen) ? chosen.seats.filter((x) => x.hero.level === 0).slice(0, RULE.learners).map((x) => x.hero.name) : [],
     // only said of a short road chosen over longer ones that a green party would have taken
     greenKeptShort: (chosen?.quest.length === 1 ? a.parties.filter((p) => p !== chosen && p.quest.length > 1 && p.green).length : 0) > 0,
-    partyLean: chosen && (gold < reserve || !bears(chosen)) ? 1 : 0,
-    partyWhy: { unpaid: !!chosen && gold < reserve, beyond: !!chosen && !bears(chosen), meanLevel: chosen ? chosen.seats.reduce((x, s) => x + s.hero.level, 0) / chosen.seats.length : 0, danger: chosen?.quest.difficulty ?? 0 },
+    partyLean: chosen && (gold < reserve || !bears(chosen) || busyFour.length) ? 1 : 0,
+    partyWhy: { unpaid: !!chosen && gold < reserve, beyond: !!chosen && !bears(chosen), meanLevel: chosen ? chosen.seats.reduce((x, s) => x + s.hero.level, 0) / chosen.seats.length : 0, danger: chosen?.quest.difficulty ?? 0, busy: busyFour },
     mix: chosen ? mix(chosen, t) : undefined,
     learnPrice: new Map((chosen?.seats ?? []).filter((s) => s.learn).map((s) => [s.hero.name, Math.round(s.learn!.gold * (1 - t.skillDiscount))])),
   }

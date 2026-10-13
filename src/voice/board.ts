@@ -288,7 +288,7 @@ export function source(t: Town, a: Advice, opts: { foresight: boolean; answers: 
       L.push(`    - pick: "Yes, this four"`, `      effect: ${y("Embark with them in this order; each one's equipped skills reach from their rank.")}`)
       L.push(`    - pick: "No, I choose my own"`, `      effect: ${y("Write your four in the note below, front to back, and send them to me; I will look them over before the coach leaves.")}`)
       const pw = P.expedition.partyWhy
-      const not = [pw.unpaid ? `the coffers cannot pay for the road: ${coin(P.short)} short` : "", pw.beyond ? `the road is beyond what they can bear: their mean level is ${pw.meanLevel.toFixed(1)}, against its danger level ${pw.danger} (my habit)` : ""].filter(Boolean)
+      const not = [pw.unpaid ? `the coffers cannot pay for the road: ${coin(P.short)} short` : "", pw.beyond ? `the road is beyond what they can bear: their mean level is ${pw.meanLevel.toFixed(1)}, against its danger level ${pw.danger} (my habit)` : "", ...pw.busy.map((b) => `${b.name} is in the ${b.where} this week`)].filter(Boolean)
       L.push(`  lean: ${P.expedition.partyLean}`, `  lean_why: ${y(not.length ? `I would not send them like this: ${not.join("; and ")}.` : "of those fit to go, they stand best where I would place them, by my reckoning of what each can do from there.")}`)
     }
     L.push("```", "")
