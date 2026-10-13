@@ -329,8 +329,11 @@ export function untried(all: Lesson[], road: { difficulty: number }, done: { dif
 // what each curio searched gave or took, the quirks caught, and what came home. Read from the pages and their whole
 // records; attacks are named only among those the party has witnessed (C5), from each foe's own damage ranges.
 
-const PROVISIONS = new Set(["food", "torch", "bandage", "antivenom", "shovel", "medicinal_herbs", "skeleton_key", "holy_water", "laudanum", "dog_treats"])
-export interface FoeRecord { name: string; blows: number; hp: number; crits: number; attacks: Record<string, number>; victims: Record<string, number>; blight: number; bleed: number }
+export const PROVISIONS = new Set(["food", "torch", "bandage", "antivenom", "shovel", "medicinal_herbs", "skeleton_key", "holy_water", "laudanum", "dog_treats"])
+export interface FoeRecord { name: string; blows: number; hp: number; crits: number; attacks: Record<string, number>; victims: Record<string, number>; blight: number; bleed: number
+  // C113: the same, hero by hero, and the foe's variant when a page named it, for the knowledge graph (memory/graph.ts)
+  cls?: string; by?: Record<string, FoeHit> }
+export interface FoeHit { hp: number; blows: number; crits: number; bleed: number; blight: number; attacks: Record<string, number>; attackHp: Record<string, number> }
 export interface Debrief { foes: FoeRecord[]; beats: Beat[]; loot: Record<string, number>; costs: { by: string; to: string; hp: number; kind: string }[] }
 
 const word = (id: string) => (/^\d+$/.test(id) ? "journal page" : id.replace(/_/g, " "))
@@ -339,16 +342,18 @@ const an = (w: string) => `${/^[aeiou]/i.test(w) ? "an" : "a"} ${w}`
 async function rawPage(s: Snap, i: number): Promise<any> { try { return await Bun.file(join(chronicleDir(s.key), `${String(i).padStart(4, "0")}.raw.json`)).json() } catch { return undefined } }
 const quirksOf = (r: any) => new Map<number, { name: string; q: string[] }>(Object.entries<any>(r?.heroes ?? {}).map(([g, h]) => { const d = h?.hero_file_data?.raw_data ?? h; return [Number(g), { name: d?.actor?.name ?? g, q: Object.keys(d?.quirks ?? {}) }] }))
 
-export async function debrief(snaps: Snap[]): Promise<Debrief> {
+/** `from` is the trip page the first of `snaps` stands on, so a run of a trip's pages (one fight) reads its own raw records. */
+export async function debrief(snaps: Snap[], from = 0): Promise<Debrief> {
   const str = await strings(), foes = new Map<string, FoeRecord>(), out: Beat[] = [], costs: Debrief["costs"] = [], slain: string[] = []
-  const foe = (n: string) => { if (!foes.has(n)) foes.set(n, { name: n, blows: 0, hp: 0, crits: 0, attacks: {}, victims: {}, blight: 0, bleed: 0 }); return foes.get(n)! }
+  const foe = (n: string, cls = "") => { if (!foes.has(n)) foes.set(n, { name: n, blows: 0, hp: 0, crits: 0, attacks: {}, victims: {}, blight: 0, bleed: 0, by: {} }); const f = foes.get(n)!; if (cls && !f.cls) f.cls = cls; return f }
+  const on = (f: FoeRecord, who: string) => (f.by![who] ??= { hp: 0, blows: 0, crits: 0, bleed: 0, blight: 0, attacks: {}, attackHp: {} })
   const hit = (f: FoeRecord, who: string, n: number) => { f.victims[who] = (f.victims[who] ?? 0) + n }
   const stale = new Map((snaps[0]?.heroes ?? []).map((h) => [h.guid, h.lastBlow]))
   // health and stress each hero lost from one page to the next
   const harmOf = (a: Snap, b: Snap) => b.heroes.flatMap((h) => { const w = a.heroes.find((x) => x.guid === h.guid); return w ? [{ name: h.name, blow: h.lastBlow, hp: Math.round(w.hp) - Math.round(h.hp), st: h.stress - w.stress }] : [] })
-  let before = quirksOf(await rawPage(snaps[0]!, 0))
+  let before = quirksOf(await rawPage(snaps[0]!, from))
   for (let i = 1; i < snaps.length; i++) {
-    const a = snaps[i - 1]!, b = snaps[i]!, known = new Set(b.known ?? []), r = await rawPage(b, i)
+    const a = snaps[i - 1]!, b = snaps[i]!, known = new Set(b.known ?? []), r = await rawPage(b, i + from)
     const harm = harmOf(a, b), next = snaps[i + 1] ? harmOf(b, snaps[i + 1]!) : []
     const said = a.narrated && b.narrated ? b.narrated.slice(a.narrated.length) : []
     if (!a.narrated && b.narrated) placeEarlier(snaps, i, b.narrated, out)
@@ -368,23 +373,23 @@ export async function debrief(snaps: Snap[]): Promise<Debrief> {
           if (m[3] && /^(the|a) /.test(m[3])) continue
           // a hero's own skill that wounds as it heals (the Occultist's) is its cost, never a foe's blow (U7)
           if (ally) { const c = costs.find((x) => x.by === ally.name && x.to === h.name && x.kind === kind); if (c) c.hp += Number(m[2]); else costs.push({ by: ally.name, to: h.name, hp: Number(m[2]), kind }); continue }
-          const f = foe(m[3] ? await nameOf("monster", m[3]) : "an unknown foe"); f[kind] += Number(m[2]); hit(f, h.name, Number(m[2]))
+          const f = foe(m[3] ? await nameOf("monster", m[3]) : "an unknown foe", m[3] ?? ""); f[kind] += Number(m[2]); hit(f, h.name, Number(m[2])); on(f, h.name)[kind] += Number(m[2])
         }
         continue
       }
       // a blow lands only in a fight, from a foe that is in it; a loss outside one (a trap, a bare-handed obstacle, hunger) is no foe's
       const inFight = [...(a.battle?.foes ?? []), ...(b.battle?.foes ?? [])].map((x) => x.name)
       if (!h.lastBlow || !(a.inBattle || b.inBattle) || (inFight.length && !inFight.includes(h.lastBlow)) || (!h.blowCls && stale.get(h.guid) === h.lastBlow)) continue
-      const f = foe(h.lastBlow), m = h.blowCls ? await monster(h.blowCls) : undefined
+      const f = foe(h.lastBlow, h.blowCls ?? ""), m = h.blowCls ? await monster(h.blowCls) : undefined, mine = on(f, h.name)
       // the same foe striking two of them on one page points to an attack that strikes several ranks
       const struck = b.heroes.filter((x) => { const y = a.heroes.find((z) => z.guid === x.guid); return y && x.lastBlow === h.lastBlow && Math.round(y.hp) > Math.round(x.hp) }).length
-      f.blows++; f.hp += loss; hit(f, h.name, loss)
+      f.blows++; f.hp += loss; hit(f, h.name, loss); mine.blows++; mine.hp += loss
       if (!m) continue
       let fits = [...m.dmg].filter(([id]) => !b.known || known.has(id)).filter(([, [lo, hi]]) => loss >= lo && loss <= Math.ceil(hi * 1.5))
       const wide = fits.filter(([id]) => m.multi.has(id) === struck > 1)
       if (wide.length) fits = wide
-      if (fits.length) { const label = fits.map(([id]) => str.get(`str_monster_skill_${id}`) ?? word(id)).join(" or "); f.attacks[label] = (f.attacks[label] ?? 0) + 1 }
-      if (!b.narrated && fits.length && fits.every(([, [, hi]]) => loss > hi)) f.crits++
+      if (fits.length) { const label = fits.map(([id]) => str.get(`str_monster_skill_${id}`) ?? word(id)).join(" or "); f.attacks[label] = (f.attacks[label] ?? 0) + 1; mine.attacks[label] = (mine.attacks[label] ?? 0) + 1; mine.attackHp[label] = (mine.attackHp[label] ?? 0) + loss }
+      if (!b.narrated && fits.length && fits.every(([, [, hi]]) => loss > hi)) { f.crits++; mine.crits++ }
     }
     // what the narrator spoke over; it often speaks a save before the harm shows, so the harm is looked for on this page and the next
     for (const e of said) {
@@ -398,7 +403,7 @@ export async function debrief(snaps: Snap[]): Promise<Debrief> {
       }
       else if (e === "crit_hero") {
         const v = [...harm, ...next].filter((x) => x.hp > 0).sort((x, y) => y.hp - x.hp)[0]
-        if (v?.blow) foe(v.blow).crits++
+        if (v?.blow) { foe(v.blow).crits++; on(foe(v.blow), v.name).crits++ }
         out.push({ i, kind: "crit", who: v?.name, text: v ? `${v.blow ? an(v.blow) : "a foe"} landed a critical blow on ${v.name} for ${v.hp}` : "a critical blow landed on one of them", bad: true })
       } else if (e === "hunger_starve") out.push({ i, kind: "hunger", text: "they went hungry with nothing to eat", bad: true })
     }

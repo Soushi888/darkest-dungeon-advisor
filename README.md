@@ -50,6 +50,7 @@ src/now.ts               bun run now: the latest chronicle page, read whole
 src/road.ts              the road zone: the conversation with the Caretaker while the party is out (bun run say)
 src/caretaker.ts         bun run caretaker: he comments the road and answers ASKs by himself
 src/ship.ts              bun run ship: a PR merges only through a green suite
+src/graph.ts             bun run graph: build, query and export the expeditions' knowledge graph
 
 # src/sources/: the save and the game's files, read
 src/sources/dson.ts      the DSON save decoder (ported from robojumper's spec, MIT)
@@ -87,7 +88,34 @@ src/road/map.ts          the dungeon's map as the party knows it
 src/road/turns.ts        what a turn did: a hit, a dodge, a move, a buff or a heal
 src/road/slain.ts        the foes slain in the fight under way
 src/road/talecheck.ts    the tale checked against the pages before it is told
+
+# src/memory/: what every expedition taught, as one graph
+src/memory/graph.ts      the knowledge graph (bun:sqlite, <town>/graph.db), derived from the chronicle, the ledger and the campaign log; its queries and its export
 ```
+
+## The knowledge graph
+
+`bun run graph build` reads every trip the chronicle kept (and the campaign log, from a copy of the save, for the week, the outcome and the fallen) and writes `graph.db` beside the board: nodes (trips, heroes, foes, dungeons at a level, fights, curios, quirks, items, lessons, special-foe encounters, foe lineups) and edges, each with the trip and page it was seen on. It is derived: delete it and build again, the answers are the same. Only what the pages witnessed enters it: a foe never seen in a fight page is never a node, an attack is named only once suffered (C5).
+
+- `bun run graph build [--no-log]`: rebuild, and print node and edge counts by kind.
+- `bun run graph stats`: the counts of the graph as it stands.
+- `bun run graph foe "The Collector"`: what a foe did, whom it fights beside, its encounters.
+- `bun run graph hero Guernon`: one hero's road: trips, kills, health lost, Death's Door, afflictions, quirks.
+- `bun run graph dungeon warrens 1`: a dungeon at a level: its foes, lineups, parties, supplies and special foes.
+- `bun run graph dossier "The Collector"`: every meeting with a special foe, and a tally across them.
+- `bun run graph groups [dungeon] [level]`: the lineups seen most often, and those that hurt most.
+- `bun run graph export [file]`: the whole graph as one JSON document, for a viewer.
+
+The queries in `src/memory/graph.ts` are `foeThreat`, `heroRecord`, `partyOutcomes`, `supplyUse`, `specialFoes`, `encounterDossier`, `foeGroups` and `companions`, each plain SQL returning plain objects.
+
+**The export** is one deterministic document (the same graph always gives the same bytes) for a viewer that replays the graph trip by trip. It holds four lists:
+
+- `trips`: `{ id, ordinal, label, dungeon, level, length, outcome? }`, the ordinal counting the trips in the order they set out, from 1.
+- `nodes`: `{ id, kind, label, firstTrip }`, `firstTrip` the ordinal of the trip it was first seen on (null for a ledger lesson of a trip the chronicle never kept).
+- `edges`: `{ from, to, kind, firstTrip, trips, weight }`, `trips` every trip that saw the link and `weight` how many times it was seen; who fights beside whom is the `FOUGHT_BESIDE` edges.
+- `groups`: each foe lineup with what it did: `{ group, label, foes, met, outcomes, orders, dungeons, health, bleed, blight, perHero, stress, stressPerHero, effects, ambushed, rounds, firstTrip, trips }`.
+
+Labels are the Hamlet's own names (the game's titles for classes, foes, curios, quirks, items and dungeons, "Warrens, week 25" for a trip); ids are keys for a viewer to join on, not text to show.
 
 ## References
 

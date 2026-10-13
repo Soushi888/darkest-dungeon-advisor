@@ -20,6 +20,15 @@ export function fights(snaps: Snap[]): { page: number; snap: Snap }[][] {
   return out
 }
 
+/** How a fight ended, read from the page after its last: a retreat, a win, or still on when the pages stop. */
+export function fightEnd(snaps: Snap[], fight: { page: number; snap: Snap }[]): Meeting["outcome"] {
+  const last = fight.at(-1)!, after = snaps[last.page + 1]
+  // what the game narrated after the fight's last page: a retreat is "battle_retreat", a win "victory"
+  const said = after?.narrated?.slice(last.snap.narrated?.length ?? 0) ?? []
+  const won = said.includes("victory") || (after && (after.tally.BATTLE_COMPLETED ?? 0) > (last.snap.tally.BATTLE_COMPLETED ?? 0))
+  return said.includes("battle_retreat") ? "fled" : won ? "won" : after ? "fled" : "unfinished"
+}
+
 /** Every special foe met on a trip, one meeting per fight it stood in. `special` maps a foe variant to what it is
  *  (`specialFoes()` in sources/game.ts), `usual` lists the variants the dungeon's halls and rooms field at that level. */
 export function meetings(snaps: Snap[], special: Map<string, "wanderer" | "boss">, usual: Set<string>): Meeting[] {
@@ -29,11 +38,7 @@ export function meetings(snaps: Snap[], special: Map<string, "wanderer" | "boss"
     const named = new Map<string, string>()
     for (const f of foes) if (f.cls && special.has(f.cls) && !named.has(f.cls)) named.set(f.cls, f.name)
     if (!named.size) continue
-    const last = fight.at(-1)!, after = snaps[last.page + 1]
-    // what the game narrated after the fight's last page: a retreat is "battle_retreat", a win "victory"
-    const said = after?.narrated?.slice(last.snap.narrated?.length ?? 0) ?? []
-    const won = said.includes("victory") || (after && (after.tally.BATTLE_COMPLETED ?? 0) > (last.snap.tally.BATTLE_COMPLETED ?? 0))
-    const outcome: Meeting["outcome"] = said.includes("battle_retreat") ? "fled" : won ? "won" : after ? "fled" : "unfinished"
+    const outcome = fightEnd(snaps, fight)
     // what it called to its side: foes of this fight that neither the usual halls field nor are special themselves, by name
     const brought = [...new Set(foes.filter((f) => f.cls && !usual.has(f.cls) && !special.has(f.cls) && !/^corpse/.test(f.cls)).map((f) => f.name))]
     // brought to Death's Door here: at the door in the fight and not on the page before it began

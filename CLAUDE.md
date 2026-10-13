@@ -23,6 +23,7 @@ bun test                     # all claim probes
 bun test -t "C6"             # one test, by its claim id
 bun run typecheck            # tsc --noEmit
 bun run ship <pr>            # typecheck, the suite twice on the PR's head, then ready and squash-merge only on 0 fail (C72)
+bun run graph build          # rebuild the expeditions' knowledge graph at <town>/graph.db (C113); then stats, foe <name>, hero <name>, dungeon <id> [level], dossier <foe>, groups, export [file]
 ```
 
 Tests run against a copy of the local profile in `.dd-runtime/test-profile` and are skipped entirely when no profile is found, because a save is personal and never committed. A skipped suite is not a passing one.
