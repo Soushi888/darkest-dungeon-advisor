@@ -34,6 +34,8 @@ export function alikePairs(roster: Member[], going: Set<number>): Alike[] {
     // the same roles count only with a speciality among them: front and back alone are what most heroes do
     const same = a.cls === b.cls, sameRoles = a.roles.some((r) => SPECIAL.has(r)) && a.roles.join() === b.roles.join()
     if (!same && !sameRoles) continue
+    // C86: two true healers are never too alike; a party leaves short of a heal far more often than it carries two
+    if (a.roles.includes("healer") && b.roles.includes("healer")) continue
     const [drop, keep] = weaker(a, b) <= 0 ? [a, b] : [b, a]
     if (going.has(drop.guid) || gone.has(drop.guid) || gone.has(keep.guid)) continue
     gone.add(drop.guid)
